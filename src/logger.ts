@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { OPENCODE_CONFIG_DIR } from "./constants.js";
+import { PATHS } from "./constants.js";
 
 /**
  * Check if debug logging is enabled via environment variable
@@ -14,7 +14,7 @@ export class Logger {
   private logDir: string;
 
   constructor(logDirOverride?: string) {
-    this.logDir = logDirOverride ?? join(OPENCODE_CONFIG_DIR, "logs", "snippets");
+    this.logDir = logDirOverride ?? join(PATHS.CONFIG_DIR, "logs", "snippets");
   }
 
   get enabled(): boolean {

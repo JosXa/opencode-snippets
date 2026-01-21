@@ -13,19 +13,14 @@ export const PATTERNS = {
 } as const;
 
 /**
- * OpenCode configuration directory
- */
-export const OPENCODE_CONFIG_DIR = join(homedir(), ".config", "opencode");
-
-/**
  * File system paths
  */
 export const PATHS = {
   /** OpenCode configuration directory */
-  CONFIG_DIR: OPENCODE_CONFIG_DIR,
+  CONFIG_DIR: join(homedir(), ".config", "opencode"),
 
   /** Snippets directory */
-  SNIPPETS_DIR: join(OPENCODE_CONFIG_DIR, "snippet"),
+  SNIPPETS_DIR: join(join(homedir(), ".config", "opencode"), "snippet"),
 } as const;
 
 /**
