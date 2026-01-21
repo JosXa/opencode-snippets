@@ -128,16 +128,6 @@ Define multiple triggers for the same snippet:
 
 ```markdown
 ---
-aliases: ["cp", "pick"]
-description: "Git cherry-pick helper"
----
-Always pick parent 1 for merge commits.
-```
-
-Or use YAML list style:
-
-```markdown
----
 aliases:
   - cp
   - pick
@@ -147,6 +137,15 @@ Always pick parent 1 for merge commits.
 ```
 
 Now `#cherry-pick`, `#cp`, and `#pick` all expand to the same content.
+
+Single alias doesn't need array syntax:
+```markdown
+---
+aliases: safe
+---
+```
+
+You can also use JSON array style: `aliases: ["cp", "pick"]`
 
 ### Shell Command Substitution
 
@@ -186,7 +185,9 @@ Recent changes: !`git diff --stat HEAD~3 | tail -5`
 ### `~/.config/opencode/snippet/review.md`
 ```markdown
 ---
-aliases: ["pr", "check"]
+aliases:
+  - pr
+  - check
 ---
 Review this code for:
 - Security vulnerabilities
@@ -199,7 +200,9 @@ Review this code for:
 ### `~/.config/opencode/snippet/minimal.md`
 ```markdown
 ---
-aliases: ["min", "terse"]
+aliases:
+  - min
+  - terse
 ---
 Be extremely concise. No explanations unless asked.
 ```
