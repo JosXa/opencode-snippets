@@ -48,8 +48,6 @@ Here are the staged changes:
 #project-context
 ```
 
-The slash command provides workflow logic (git status, diffs, push) while reusing shared snippets for commit conventions and project context.
-
 **Example: Snippets composing snippets**
 
 `~/.config/opencode/snippet/code-standards.md`:

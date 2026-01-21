@@ -9,13 +9,18 @@ import type { SnippetFrontmatter, SnippetRegistry } from "./types.js";
  * Loads all snippets from global and project directories
  *
  * @param projectDir - Optional project directory path (from ctx.directory)
+ * @param globalDir - Optional global snippets directory (for testing)
  * @returns A map of snippet keys (lowercase) to their content
  */
-export async function loadSnippets(projectDir?: string): Promise<SnippetRegistry> {
+export async function loadSnippets(
+  projectDir?: string,
+  globalDir?: string,
+): Promise<SnippetRegistry> {
   const snippets: SnippetRegistry = new Map();
 
-  // Load from global directory first
-  await loadFromDirectory(PATHS.SNIPPETS_DIR, snippets, "global");
+  // Load from global directory first (use provided or default)
+  const globalSnippetsDir = globalDir ?? PATHS.SNIPPETS_DIR;
+  await loadFromDirectory(globalSnippetsDir, snippets, "global");
 
   // Load from project directory if provided (overrides global)
   if (projectDir) {

@@ -9,7 +9,7 @@ import { logger } from "./logger.js";
  * @returns The text with shell commands replaced by their output
  */
 type ShellContext = {
-  $: (template: TemplateStringsArray) => {
+  $: (template: TemplateStringsArray, ...args: unknown[]) => {
     quiet: () => { nothrow: () => { text: () => Promise<string> } };
   };
 };
@@ -26,12 +26,13 @@ export async function executeShellCommands(text: string, ctx: ShellContext): Pro
   // Execute each command and replace in text
   for (const match of matches) {
     const cmd = match[1];
-    const placeholder = match[0];
+    const _placeholder = match[0];
 
     try {
       const output = await ctx.$`${{ raw: cmd }}`.quiet().nothrow().text();
       // Format like slash commands: print command first, then output
-      const replacement = `$ ${cmd}\n--> ${output.trim()}`;hel
+      const replacement = `$ ${cmd}\n--> ${output.trim()}`;
+      result = result.replace(_placeholder, replacement);
     } catch (error) {
       // If shell command fails, leave it as-is
       // This preserves the original syntax for debugging

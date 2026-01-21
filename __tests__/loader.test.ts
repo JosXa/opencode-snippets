@@ -1,1 +1,304 @@
-[{"bun:test": "import { mkdir", "node:fs/promises": "import { join"}, {"../src/loader.js\";\n\ndescribe(\"loadSnippets - Dual Path Support": {"tempDir": "string;\n  let globalSnippetDir: string;\n  let projectSnippetDir: string;\n\n  beforeEach(async () => {\n    // Create temporary directories for testing\n    tempDir = join(process.cwd()", ".test-temp\");\n    globalSnippetDir = join(tempDir, \"global-snippet\");\n    projectSnippetDir = join(tempDir, \"project\", \".opencode\", \"snippet": "await mkdir(globalSnippetDir", "recursive": true}, "recursive": true}, {"recursive": true, "force": true}, {"careful.md": "--", "aliases": "safe\n---\nThink step by step. Double-check your work.`", "Think step by step. Double-check your work.\",\n      );\n      expect(snippets.get(\"safe\")).toBe(\n        \"Think step by step. Double-check your work.": ""}, {"snippet1.md\"),\n        \"Content of snippet 1\",\n      );\n      await writeFile(\n        join(globalSnippetDir, \"snippet2.md\"),\n        \"Content of snippet 2\",\n      );\n\n      const snippets = await loadSnippets();\n\n      expect(snippets.size).toBe(2);\n      expect(snippets.get(\"snippet1\")).toBe(\"Content of snippet 1\");\n      expect(snippets.get(\"snippet2\")).toBe(\"Content of snippet 2": ""}, {"project-specific.md\"),\n        \"This is a project-specific snippet\",\n      );\n\n      // Load with project directory\n      const projectDir = join(tempDir, \"project\");\n      const snippets = await loadSnippets(projectDir);\n\n      expect(snippets.size).toBe(1);\n      expect(snippets.get(\"project-specific\")).toBe(\n        \"This is a project-specific snippet": ""}, {"team-rule.md\"),\n        \"Team rule 1\",\n      );\n      await writeFile(\n        join(projectSnippetDir, \"domain-knowledge.md\"),\n        \"Domain knowledge\",\n      );\n\n      const projectDir = join(tempDir, \"project\");\n      const snippets = await loadSnippets(projectDir);\n\n      expect(snippets.size).toBe(2);\n      expect(snippets.get(\"team-rule\")).toBe(\"Team rule 1\");\n      expect(snippets.get(\"domain-knowledge\")).toBe(\"Domain knowledge": ""}, {"loadSnippets(\"/nonexistent/path": "expect(snippets.size).toBe(0);"}, {"empty-project": "await mkdir(projectDir", "recursive": true}, {"global.md\"),\n        \"Global snippet content\",\n      );\n\n      // Create project snippet\n      await writeFile(\n        join(projectSnippetDir, \"project.md\"),\n        \"Project snippet content\",\n      );\n\n      const projectDir = join(tempDir, \"project\");\n      const snippets = await loadSnippets(projectDir);\n\n      expect(snippets.size).toBe(2);\n      expect(snippets.get(\"global\")).toBe(\"Global snippet content\");\n      expect(snippets.get(\"project\")).toBe(\"Project snippet content": ""}, {"careful.md\"),\n        \"Global careful content\",\n      );\n\n      // Create project snippet with same name\n      await writeFile(\n        join(projectSnippetDir, \"careful.md\"),\n        \"Project-specific careful content\",\n      );\n\n      const projectDir = join(tempDir, \"project\");\n      const snippets = await loadSnippets(projectDir);\n\n      // Project snippet should override global\n      expect(snippets.get(\"careful\")).toBe(\n        \"Project-specific careful content": "expect(snippets.size).toBe(1);"}, {"review.md": "--", "aliases": "tdd\n  - testing\n---\nProject test guidelines`", "test.md": "--", "project\");\n      const snippets = await loadSnippets(projectDir);\n\n      expect(snippets.size).toBe(5); // review, pr, check, test, tdd, testing\n      expect(snippets.get(\"review\")).toBe(\"Global review guidelines\");\n      expect(snippets.get(\"pr\")).toBe(\"Global review guidelines\");\n      expect(snippets.get(\"check\")).toBe(\"Global review guidelines\");\n      expect(snippets.get(\"test\")).toBe(\"Project test guidelines\");\n      expect(snippets.get(\"tdd\")).toBe(\"Project test guidelines\");\n      expect(snippets.get(\"testing\")).toBe(\"Project test guidelines": ""}, {"careful.md": "--", "aliases": "safe\n  - cautious\n---\nProject careful`", "project\");\n      const snippets = await loadSnippets(projectDir);\n\n      // Project should override with its aliases\n      expect(snippets.get(\"careful\")).toBe(\"Project careful\");\n      expect(snippets.get(\"safe\")).toBe(\"Project careful\");\n      expect(snippets.get(\"cautious\")).toBe(\"Project careful": "expect(snippets.size).toBe(3);"}, {"empty.md\"), \"": "const snippets = await loadSnippets();\n      expect(snippets.size).toBe(1);\n      expect(snippets.get(", "empty\")).toBe(\"": ""}, {"metadata-only.md": "--", "description": "A snippet with only metadata\"\naliases: meta\n---\n`,\n      );\n\n      const snippets = await loadSnippets();\n      expect(snippets.size).toBe(2);\n      expect(snippets.get(\"metadata-only\")).toBe(\"", "expect(snippets.get(\"meta\")).toBe(\"": ""}, {"multiline.md\"),\n        `Line 1\nLine 2\nLine 3`,\n      );\n\n      const snippets = await loadSnippets();\n      expect(snippets.get(\"multiline\")).toBe(\n        \"Line 1\nLine 2\nLine 3": ""}, {"not-a-snippet.txt\"),\n        \"This should be ignored\",\n      );\n      await writeFile(\n        join(globalSnippetDir, \"valid.md\"),\n        \"This should be loaded\",\n      );\n\n      const snippets = await loadSnippets();\n      expect(snippets.size).toBe(1);\n      expect(snippets.get(\"valid\")).toBe(\"This should be loaded\");\n      expect(snippets.has(\"not-a-snippet": ".", "bad-frontmatter.md": "--", "special-chars.md\"),\n        \"Special content\",\n      );\n\n      const snippets = await loadSnippets();\n      expect(snippets.get(\"special-chars\")).toBe(\"Special content": ""}, {"exists": "async () => {\n      // This is a smoke test - just verify it doesn't crash\n      const snippets = await loadSnippets();\n\n      // We don't assert specific content since we don't control the user's global snippets\n      // Just verify it returns a Map\n      expect(snippets).toBeInstanceOf(Map);\n      expect(Array.isArray(snippets.keys())).toBe(true);"}]
+import { mkdir, writeFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { loadSnippets } from "../src/loader.js";
+
+describe("loadSnippets - Dual Path Support", () => {
+  let tempDir: string;
+  let globalSnippetDir: string;
+  let projectSnippetDir: string;
+
+  beforeEach(async () => {
+    // Create temporary directories for testing
+    tempDir = join(process.cwd(), ".test-temp");
+    globalSnippetDir = join(tempDir, "global-snippet");
+    projectSnippetDir = join(tempDir, "project", ".opencode", "snippet");
+
+    await mkdir(globalSnippetDir, { recursive: true });
+    await mkdir(projectSnippetDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    // Clean up temporary directories
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  describe("Global snippets only", () => {
+    it("should load snippets with aliases", async () => {
+      await writeFile(
+        join(globalSnippetDir, "careful.md"),
+        `---
+aliases: safe
+---
+Think step by step. Double-check your work.`,
+      );
+
+      const snippets = await loadSnippets();
+
+      expect(snippets.size).toBe(2);
+      expect(snippets.get("careful")).toBe(
+        "Think step by step. Double-check your work.",
+      );
+      expect(snippets.get("safe")).toBe(
+        "Think step by step. Double-check your work.",
+      );
+    });
+
+    it("should load multiple snippets from global directory", async () => {
+      await writeFile(
+        join(globalSnippetDir, "snippet1.md"),
+        "Content of snippet 1",
+      );
+      await writeFile(
+        join(globalSnippetDir, "snippet2.md"),
+        "Content of snippet 2",
+      );
+
+      const snippets = await loadSnippets();
+
+      expect(snippets.size).toBe(2);
+      expect(snippets.get("snippet1")).toBe("Content of snippet 1");
+      expect(snippets.get("snippet2")).toBe("Content of snippet 2");
+    });
+  });
+
+  describe("Project snippets only", () => {
+    it("should load snippets from project directory", async () => {
+      await writeFile(
+        join(projectSnippetDir, "project-specific.md"),
+        "This is a project-specific snippet",
+      );
+
+      // Load with project directory
+      const projectDir = join(tempDir, "project");
+      const snippets = await loadSnippets(projectDir);
+
+      expect(snippets.size).toBe(1);
+      expect(snippets.get("project-specific")).toBe(
+        "This is a project-specific snippet",
+      );
+    });
+
+    it("should handle missing global directory when project exists", async () => {
+      await writeFile(
+        join(projectSnippetDir, "team-rule.md"),
+        "Team rule 1",
+      );
+      await writeFile(
+        join(projectSnippetDir, "domain-knowledge.md"),
+        "Domain knowledge",
+      );
+
+      const projectDir = join(tempDir, "project");
+      const snippets = await loadSnippets(projectDir);
+
+      expect(snippets.size).toBe(2);
+      expect(snippets.get("team-rule")).toBe("Team rule 1");
+      expect(snippets.get("domain-knowledge")).toBe("Domain knowledge");
+    });
+  });
+
+  describe("Both global and project snippets", () => {
+    it("should merge global and project snippets", async () => {
+      // Create global snippet
+      await writeFile(
+        join(globalSnippetDir, "global.md"),
+        "Global snippet content",
+      );
+
+      // Create project snippet
+      await writeFile(
+        join(projectSnippetDir, "project.md"),
+        "Project snippet content",
+      );
+
+      const projectDir = join(tempDir, "project");
+      const snippets = await loadSnippets(projectDir);
+
+      expect(snippets.size).toBe(2);
+      expect(snippets.get("global")).toBe("Global snippet content");
+      expect(snippets.get("project")).toBe("Project snippet content");
+    });
+
+    it("should allow project snippets to override global snippets", async () => {
+      // Create global snippet
+      await writeFile(
+        join(globalSnippetDir, "careful.md"),
+        "Global careful content",
+      );
+
+      // Create project snippet with same name
+      await writeFile(
+        join(projectSnippetDir, "careful.md"),
+        "Project-specific careful content",
+      );
+
+      const projectDir = join(tempDir, "project");
+      const snippets = await loadSnippets(projectDir);
+
+      // Project snippet should override global
+      expect(snippets.get("careful")).toBe(
+        "Project-specific careful content",
+      );
+      expect(snippets.size).toBe(1);
+    });
+  });
+
+  describe("Alias handling", () => {
+    it("should handle multiple aliases from different sources", async () => {
+      // Global snippet with aliases
+      await writeFile(
+        join(globalSnippetDir, "review.md"),
+        `---
+aliases:
+  - pr
+  - check
+---
+Global review guidelines`,
+      );
+
+      // Project snippet with aliases
+      await writeFile(
+        join(projectSnippetDir, "test.md"),
+        `---
+aliases:
+  - tdd
+  - testing
+---
+Project test guidelines`,
+      );
+
+      const projectDir = join(tempDir, "project");
+      const snippets = await loadSnippets(projectDir);
+
+      expect(snippets.size).toBe(5); // review, pr, check, test, tdd, testing
+      expect(snippets.get("review")).toBe("Global review guidelines");
+      expect(snippets.get("pr")).toBe("Global review guidelines");
+      expect(snippets.get("check")).toBe("Global review guidelines");
+      expect(snippets.get("test")).toBe("Project test guidelines");
+      expect(snippets.get("tdd")).toBe("Project test guidelines");
+      expect(snippets.get("testing")).toBe("Project test guidelines");
+    });
+
+    it("should allow project to override global aliases", async () => {
+      // Global snippet with aliases
+      await writeFile(
+        join(globalSnippetDir, "careful.md"),
+        `---
+aliases:
+  - safe
+  - cautious
+---
+Global careful`,
+      );
+
+      // Project snippet with same name but different aliases
+      await writeFile(
+        join(projectSnippetDir, "careful.md"),
+        `---
+aliases: safe
+---
+Project careful`,
+      );
+
+      const projectDir = join(tempDir, "project");
+      const snippets = await loadSnippets(projectDir);
+
+      // Project should override with its aliases
+      expect(snippets.get("careful")).toBe("Project careful");
+      expect(snippets.get("safe")).toBe("Project careful");
+      expect(snippets.get("cautious")).toBeUndefined();
+      expect(snippets.size).toBe(2);
+    });
+  });
+
+  describe("Edge cases", () => {
+    it("should handle empty snippet content", async () => {
+      await writeFile(join(globalSnippetDir, "empty.md"), "");
+
+      const snippets = await loadSnippets();
+      expect(snippets.size).toBe(1);
+      expect(snippets.get("empty")).toBe("");
+    });
+
+    it("should handle snippet with only metadata", async () => {
+      await writeFile(
+        join(globalSnippetDir, "metadata-only.md"),
+        `---
+description: "A snippet with only metadata"
+aliases: meta
+---`,
+      );
+
+      const snippets = await loadSnippets();
+      expect(snippets.size).toBe(2);
+      expect(snippets.get("metadata-only")).toBe("");
+      expect(snippets.get("meta")).toBe("");
+    });
+
+    it("should handle multiline content", async () => {
+      await writeFile(
+        join(globalSnippetDir, "multiline.md"),
+        `Line 1
+Line 2
+Line 3`,
+      );
+
+      const snippets = await loadSnippets();
+      expect(snippets.get("multiline")).toBe(
+        "Line 1\nLine 2\nLine 3",
+      );
+    });
+
+    it("should ignore non-.md files", async () => {
+      await writeFile(
+        join(globalSnippetDir, "not-a-snippet.txt"),
+        "This should be ignored",
+      );
+      await writeFile(
+        join(globalSnippetDir, "valid.md"),
+        "This should be loaded",
+      );
+
+      const snippets = await loadSnippets();
+      expect(snippets.size).toBe(1);
+      expect(snippets.get("valid")).toBe("This should be loaded");
+      expect(snippets.has("not-a-snippet")).toBe(false);
+    });
+
+    it("should handle invalid frontmatter gracefully", async () => {
+      await writeFile(
+        join(globalSnippetDir, "bad-frontmatter.md"),
+        `---
+invalid yaml
+---
+Content`,
+      );
+
+      await writeFile(
+        join(globalSnippetDir, "special-chars.md"),
+        "Special content",
+      );
+
+      const snippets = await loadSnippets();
+      // Should load valid snippet, skip invalid one
+      expect(snippets.get("special-chars")).toBe("Special content");
+    });
+
+    it("should handle non-existent directories gracefully", async () => {
+      const snippets = await loadSnippets("/nonexistent/path");
+      expect(snippets.size).toBe(0);
+    });
+  });
+
+  describe("Smoke test - real global snippets", () => {
+    it("should load real global snippets without crashing", async () => {
+      // This is a smoke test - just verify it doesn't crash
+      const snippets = await loadSnippets();
+
+      // We don't assert specific content since we don't control user's global snippets
+      // Just verify it returns a Map
+      expect(snippets).toBeInstanceOf(Map);
+      expect(Array.isArray(Array.from(snippets.keys()))).toBe(true);
+    });
+  });
+});
