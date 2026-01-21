@@ -9,7 +9,10 @@ import { logger } from "./logger.js";
  * @returns The text with shell commands replaced by their output
  */
 export type ShellContext = {
-  $: (template: TemplateStringsArray, ...args: unknown[]) => {
+  $: (
+    template: TemplateStringsArray,
+    ...args: unknown[]
+  ) => {
     quiet: () => { nothrow: () => { text: () => Promise<string> } };
   };
 };

@@ -84,7 +84,7 @@ async function loadSnippetFile(dir: string, filename: string) {
 
     const content = parsed.content.trim();
     const frontmatter = parsed.data as SnippetFrontmatter;
-    
+
     // Handle aliases as string or array
     let aliases: string[] = [];
     if (frontmatter.aliases) {
@@ -94,7 +94,7 @@ async function loadSnippetFile(dir: string, filename: string) {
         aliases = [frontmatter.aliases];
       }
     }
-    
+
     return { name, content, aliases };
   } catch (error) {
     // Failed to read or parse this snippet - skip it
@@ -120,8 +120,20 @@ function registerSnippet(
   content: string,
   aliases: string[],
 ) {
+  const key = name.toLowerCase();
+
+  // If snippet already exists, remove all entries with the old content
+  const oldContent = registry.get(key);
+  if (oldContent !== undefined) {
+    for (const [k, v] of registry.entries()) {
+      if (v === oldContent) {
+        registry.delete(k);
+      }
+    }
+  }
+
   // Register with primary name (lowercase)
-  registry.set(name.toLowerCase(), content);
+  registry.set(key, content);
 
   // Register all aliases (lowercase)
   for (const alias of aliases) {

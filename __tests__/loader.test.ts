@@ -1,4 +1,4 @@
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadSnippets } from "../src/loader.js";
 
@@ -35,23 +35,13 @@ Think step by step. Double-check your work.`,
       const snippets = await loadSnippets(undefined, globalSnippetDir);
 
       expect(snippets.size).toBe(2);
-      expect(snippets.get("careful")).toBe(
-        "Think step by step. Double-check your work.",
-      );
-      expect(snippets.get("safe")).toBe(
-        "Think step by step. Double-check your work.",
-      );
+      expect(snippets.get("careful")).toBe("Think step by step. Double-check your work.");
+      expect(snippets.get("safe")).toBe("Think step by step. Double-check your work.");
     });
 
     it("should load multiple snippets from global directory", async () => {
-      await writeFile(
-        join(globalSnippetDir, "snippet1.md"),
-        "Content of snippet 1",
-      );
-      await writeFile(
-        join(globalSnippetDir, "snippet2.md"),
-        "Content of snippet 2",
-      );
+      await writeFile(join(globalSnippetDir, "snippet1.md"), "Content of snippet 1");
+      await writeFile(join(globalSnippetDir, "snippet2.md"), "Content of snippet 2");
 
       const snippets = await loadSnippets(undefined, globalSnippetDir);
 
@@ -73,20 +63,12 @@ Think step by step. Double-check your work.`,
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       expect(snippets.size).toBe(1);
-      expect(snippets.get("project-specific")).toBe(
-        "This is a project-specific snippet",
-      );
+      expect(snippets.get("project-specific")).toBe("This is a project-specific snippet");
     });
 
     it("should handle missing global directory when project exists", async () => {
-      await writeFile(
-        join(projectSnippetDir, "team-rule.md"),
-        "Team rule 1",
-      );
-      await writeFile(
-        join(projectSnippetDir, "domain-knowledge.md"),
-        "Domain knowledge",
-      );
+      await writeFile(join(projectSnippetDir, "team-rule.md"), "Team rule 1");
+      await writeFile(join(projectSnippetDir, "domain-knowledge.md"), "Domain knowledge");
 
       const projectDir = join(tempDir, "project");
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
@@ -100,16 +82,10 @@ Think step by step. Double-check your work.`,
   describe("Both global and project snippets", () => {
     it("should merge global and project snippets", async () => {
       // Create global snippet
-      await writeFile(
-        join(globalSnippetDir, "global.md"),
-        "Global snippet content",
-      );
+      await writeFile(join(globalSnippetDir, "global.md"), "Global snippet content");
 
       // Create project snippet
-      await writeFile(
-        join(projectSnippetDir, "project.md"),
-        "Project snippet content",
-      );
+      await writeFile(join(projectSnippetDir, "project.md"), "Project snippet content");
 
       const projectDir = join(tempDir, "project");
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
@@ -121,24 +97,16 @@ Think step by step. Double-check your work.`,
 
     it("should allow project snippets to override global snippets", async () => {
       // Create global snippet
-      await writeFile(
-        join(globalSnippetDir, "careful.md"),
-        "Global careful content",
-      );
+      await writeFile(join(globalSnippetDir, "careful.md"), "Global careful content");
 
       // Create project snippet with same name
-      await writeFile(
-        join(projectSnippetDir, "careful.md"),
-        "Project-specific careful content",
-      );
+      await writeFile(join(projectSnippetDir, "careful.md"), "Project-specific careful content");
 
       const projectDir = join(tempDir, "project");
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       // Project snippet should override global
-      expect(snippets.get("careful")).toBe(
-        "Project-specific careful content",
-      );
+      expect(snippets.get("careful")).toBe("Project-specific careful content");
       expect(snippets.size).toBe(1);
     });
   });
@@ -170,7 +138,7 @@ Project test guidelines`,
       const projectDir = join(tempDir, "project");
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
-      expect(snippets.size).toBe(5); // review, pr, check, test, tdd, testing
+      expect(snippets.size).toBe(6); // review, pr, check, test, tdd, testing
       expect(snippets.get("review")).toBe("Global review guidelines");
       expect(snippets.get("pr")).toBe("Global review guidelines");
       expect(snippets.get("check")).toBe("Global review guidelines");
@@ -244,20 +212,12 @@ Line 3`,
       );
 
       const snippets = await loadSnippets(undefined, globalSnippetDir);
-      expect(snippets.get("multiline")).toBe(
-        "Line 1\nLine 2\nLine 3",
-      );
+      expect(snippets.get("multiline")).toBe("Line 1\nLine 2\nLine 3");
     });
 
     it("should ignore non-.md files", async () => {
-      await writeFile(
-        join(globalSnippetDir, "not-a-snippet.txt"),
-        "This should be ignored",
-      );
-      await writeFile(
-        join(globalSnippetDir, "valid.md"),
-        "This should be loaded",
-      );
+      await writeFile(join(globalSnippetDir, "not-a-snippet.txt"), "This should be ignored");
+      await writeFile(join(globalSnippetDir, "valid.md"), "This should be loaded");
 
       const snippets = await loadSnippets(undefined, globalSnippetDir);
       expect(snippets.size).toBe(1);
@@ -274,10 +234,7 @@ invalid yaml
 Content`,
       );
 
-      await writeFile(
-        join(globalSnippetDir, "special-chars.md"),
-        "Special content",
-      );
+      await writeFile(join(globalSnippetDir, "special-chars.md"), "Special content");
 
       const snippets = await loadSnippets(undefined, globalSnippetDir);
       // Should load valid snippet, skip invalid one
@@ -285,7 +242,7 @@ Content`,
     });
 
     it("should handle non-existent directories gracefully", async () => {
-      const snippets = await loadSnippets("/nonexistent/path");
+      const snippets = await loadSnippets(undefined, "/nonexistent/path");
       expect(snippets.size).toBe(0);
     });
   });

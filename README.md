@@ -112,14 +112,6 @@ Snippets can be global (`~/.config/opencode/snippet/*.md`) or project-specific (
 
 ## Features
 
-### Hashtag Expansion
-
-Any `#snippet-name` is replaced with the contents of `~/.config/opencode/snippet/snippet-name.md`:
-
-```
-#review-checklist Please check my PR
-```
-
 ### Aliases
 
 Define multiple triggers for the same snippet:
@@ -205,13 +197,7 @@ Be extremely concise. No explanations unless asked.
 /commit #conventional-commits #project-context
 ```
 
-## Configuration
-
-### Snippet Directory
-
-All snippets live in `~/.config/opencode/snippet/` as `.md` files.
-
-### Debug Logging
+## Configuration### Debug Logging
 
 Enable debug logs by setting an environment variable:
 
