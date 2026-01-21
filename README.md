@@ -242,7 +242,7 @@ Logs are written to `~/.config/opencode/logs/snippets/daily/`.
 - Snippets are loaded once at plugin startup
 - Hashtag matching is **case-insensitive** (`#Hello` = `#hello`)
 - Unknown hashtags are left unchanged
-- Failed shell commands preserve the `!\`cmd\`` syntax
+- Failed shell commands preserve the original syntax in output
 - Frontmatter is stripped from expanded content
 - Only user messages are processed (not assistant responses)
 
