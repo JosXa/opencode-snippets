@@ -16,14 +16,69 @@ Please review my changes #git-status and suggest improvements #code-style
 
 **Snippets work like `@file` mentions** - natural, inline, composable. Build complex prompts from reusable pieces without breaking your flow.
 
+### Composable by Design
+
+Snippets compose with each other and with slash commands. Reference `#snippets` anywhere - in your messages, in slash commands, even inside other snippets:
+
+**Example: Slash commands as snippet proxies**
+
+`~/.config/opencode/command/ralph.md`:
+```markdown
+---
+description: "Initiates a Ralph loop"
+---
+#ralph
+
+$ARGUMENTS
+```
+
+The `/ralph` slash command simply expands the `#ralph` snippet and passes through arguments. Minimal boilerplate, maximum reuse.
+
+**Example: Extending snippets with logic**
+
+`~/.config/opencode/command/commit-and-push.md`:
+```markdown
+---
+description: Create a git commit and push to remote
+agent: fast
+---
+Please create a git commit with the current changes and push to the remote repository.
+
+Here is the current git status:
+!`git status`
+
+Here are the staged changes:
+!`git diff --cached`
+
+#conventional-commits
+#project-context
+```
+
+The slash command provides workflow logic (git status, diffs, push) while reusing shared snippets for commit conventions and project context.
+
+**Example: Snippets composing snippets**
+
+`~/.config/opencode/snippet/jira.md`:
+```markdown
+#jira-custom-fields
+
+When querying Jira, please use a @general subagent to make reads, lookups, and analyses.
+```
+
+Base snippets can pull in specialized context (`#jira-custom-fields` maps 30+ custom field IDs), keeping them DRY and maintainable.
+
+**The power:** Mix and match. Type `#tdd #careful` for test-driven development with extra caution. Build `/commit #conventional-commits #project-context` for context-aware commits. Create layered prompts from small, reusable pieces.
+
 ## Installation
 
-```bash
-# Add to your opencode.json plugins array:
-"plugins": ["opencode-snippets"]
+Add to your `opencode.json` plugins array:
 
-# Then install:
-bun install
+```json
+{
+  "plugins": [
+    "opencode-snippets"
+  ]
+}
 ```
 
 ## Quick Start
