@@ -29,34 +29,12 @@ Snippets work like `@file` mentions - natural, inline, composable.
 
 Snippets compose with each other and with slash commands. Reference `#snippets` anywhere - in your messages, in slash commands, even inside other snippets:
 
-**Example: Slash commands as snippet proxies**
-
-**Example: Slash commands as snippet proxies**
-
-`~/.config/opencode/snippet/todoadd.md`:
-```markdown
-Add this todo item via todowrite
-```
-
-`~/.config/opencode/command/todo-add.md`:
-```markdown
----
-description: Add a todo item
----
-#todoadd
-
-$ARGUMENTS
-```
-
-The `/todo-add` slash command is just a thin wrapper around `#todoadd`. The snippet holds the actual logic, the command is the interface. Minimal boilerplate, maximum reuse.
-
 **Example: Extending snippets with logic**
 
 `~/.config/opencode/command/commit-and-push.md`:
 ```markdown
 ---
 description: Create a git commit and push to remote
-agent: fast
 ---
 Please create a git commit with the current changes and push to the remote repository.
 
@@ -106,7 +84,7 @@ Add to your `opencode.json` plugins array:
 
 ## Quick Start
 
-**1. Create a snippet file:**
+**1. Create your global snippets directory:**
 
 ```bash
 mkdir -p ~/.config/opencode/snippet
@@ -126,36 +104,13 @@ Ask clarifying questions if anything is ambiguous.
 **3. Use it anywhere:**
 
 ```
-Refactor this function #careful
-```
-
-The LLM receives:
-```
-Refactor this function Think step by step. Double-check your work before making changes.
+Refactor this function. Think step by step. Double-check your work before making changes.
 Ask clarifying questions if anything is ambiguous.
 ```
 
-## 📁 Where to Store Snippets
+## Where to Store Snippets
 
-Snippets can be stored in two locations:
-
-### Global Snippets
-`~/.config/opencode/snippet/*.md` - Available in all projects
-
-Perfect for:
-- Team standards and conventions
-- Personal preferences and workflows
-- Reusable patterns across projects
-
-### Project-Specific Snippets
-`.opencode/snippet/*.md` - Only available in this project
-
-Perfect for:
-- Project-specific context and conventions
-- Team-specific workflows
-- Domain knowledge and terminology
-
-**Both directories are loaded automatically.** Project snippets override global snippets with the same name, just like OpenCode's slash commands.
+Snippets can be global (`~/.config/opencode/snippet/*.md`) or project-specific (`.opencode/snippet/*.md`). Both directories are loaded automatically. Project snippets override global ones with the same name, just like OpenCode's slash commands.
 
 ## Features
 
@@ -201,6 +156,15 @@ Current branch: !`git branch --show-current`
 Last commit: !`git log -1 --oneline`
 Working directory: !`pwd`
 ```
+
+> **Note:** Snippets deviate slightly from the regular slash command behavior. Instead of just passing the command output to the LLM, snippets prepend the command itself:
+> ```
+> $ ls
+> --> <output>
+> ```
+> This tells the LLM which command was actually run and makes failures visible (empty output would otherwise be indistinguishable from success).
+>
+> **TODO:** This behavior should either be PR'd upstream to OpenCode or made configurable in opencode-snippets.
 
 ### Recursive Includes
 
