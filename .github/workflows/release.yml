@@ -1,0 +1,103 @@
+name: Release and Publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Generate Release Notes
+        id: release_notes
+        run: |
+          echo "Generating release notes..."
+          
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s (%h)" ${{ github.ref_name }})
+          else
+            COMMITS=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..${{ github.ref_name }})
+          fi
+          
+          # Categorize commits
+          FEATURES=$(echo "$COMMITS" | grep -E "^- feat" || true)
+          FIXES=$(echo "$COMMITS" | grep -E "^- fix" || true)
+          DOCS=$(echo "$COMMITS" | grep -E "^- docs" || true)
+          CHORES=$(echo "$COMMITS" | grep -E "^- chore" || true)
+          OTHERS=$(echo "$COMMITS" | grep -Ev "^- (feat|fix|docs|chore)" || true)
+          
+          # Build changelog
+          CHANGELOG="## What's Changed"$'\n'
+          
+          if [ -n "$FEATURES" ]; then
+            CHANGELOG+=$'\n'"### ✨ Features"$'\n'"$FEATURES"$'\n'
+          fi
+          
+          if [ -n "$FIXES" ]; then
+            CHANGELOG+=$'\n'"### 🐛 Bug Fixes"$'\n'"$FIXES"$'\n'
+          fi
+          
+          if [ -n "$DOCS" ]; then
+            CHANGELOG+=$'\n'"### 📚 Documentation"$'\n'"$DOCS"$'\n'
+          fi
+          
+          if [ -n "$CHORES" ]; then
+            CHANGELOG+=$'\n'"### 🔧 Chores"$'\n'"$CHORES"$'\n'
+          fi
+          
+          if [ -n "$OTHERS" ]; then
+            CHANGELOG+=$'\n'"### Other Changes"$'\n'"$OTHERS"$'\n'
+          fi
+          
+          # Add installation instructions
+          CHANGELOG+=$'\n'"## Installation"$'\n'
+          CHANGELOG+='```bash'$'\n'
+          CHANGELOG+="npm install opencode-snippets@${{ github.ref_name }}"$'\n'
+          CHANGELOG+='```'$'\n'
+          
+          # Add full changelog link if there's a previous tag
+          if [ -n "$PREV_TAG" ]; then
+            CHANGELOG+=$'\n'"**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${{ github.ref_name }}"
+          fi
+          
+          # Save to file for the release
+          echo "$CHANGELOG" > release_notes.md
+          
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js for npm publishing
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
