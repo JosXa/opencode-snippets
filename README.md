@@ -101,10 +101,7 @@ Ask clarifying questions if anything is ambiguous.
 
 **3. Use it anywhere:**
 
-```
-Refactor this function. Think step by step. Double-check your work before making changes.
-Ask clarifying questions if anything is ambiguous.
-```
+https://github.com/user-attachments/assets/d31b69b5-cc7a-4208-9f6e-71c1a278536a
 
 ## Where to Store Snippets
 
