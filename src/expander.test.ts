@@ -325,9 +325,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle multiline content", () => {
-      const registry: SnippetRegistry = new Map([
-        ["multiline", "Line 1\nLine 2\nLine 3"],
-      ]);
+      const registry: SnippetRegistry = new Map([["multiline", "Line 1\nLine 2\nLine 3"]]);
 
       const result = expandHashtags("Start\n#multiline\nEnd", registry);
 

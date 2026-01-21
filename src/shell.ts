@@ -33,7 +33,7 @@ export async function executeShellCommands(text: string, ctx: ShellContext): Pro
 
     try {
       const output = await ctx.$`${{ raw: cmd }}`.quiet().nothrow().text();
-      // Format like slash commands: print command first, then output
+      // Deviate from slash commands' substitution mechanism: print command first, then output
       const replacement = `$ ${cmd}\n--> ${output.trim()}`;
       result = result.replace(_placeholder, replacement);
     } catch (error) {

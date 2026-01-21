@@ -19,7 +19,7 @@ export function expandHashtags(
 
   // Keep expanding until no more hashtags are found
   while (hasChanges) {
-    hasChanges = false;
+    const previous = expanded;
 
     // Reset regex state (global flag requires this)
     PATTERNS.HASHTAG.lastIndex = 0;
@@ -41,7 +41,6 @@ export function expandHashtags(
 
       // Mark this snippet as visited and expand it
       visited.add(key);
-      hasChanges = true;
 
       // Recursively expand any hashtags in the snippet content
       const result = expandHashtags(content, registry, new Set(visited));
@@ -51,6 +50,9 @@ export function expandHashtags(
 
       return result;
     });
+
+    // Only continue if the text actually changed
+    hasChanges = expanded !== previous;
   }
 
   return expanded;
