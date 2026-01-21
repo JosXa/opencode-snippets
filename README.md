@@ -150,22 +150,12 @@ Now `#cherry-pick`, `#cp`, and `#pick` all expand to the same content.
 
 ### Shell Command Substitution
 
-Inject live system data with `!`backtick\`` syntax:
+Snippets support the same `!`backtick\`` syntax as [OpenCode slash commands](https://opencode.ai/docs/commands/#shell-output) for injecting live command output:
 
 ```markdown
 Current branch: !`git branch --show-current`
 Last commit: !`git log -1 --oneline`
 Working directory: !`pwd`
-```
-
-Output:
-```
-Current branch: $ git branch --show-current
---> main
-Last commit: $ git log -1 --oneline  
---> abc123f feat: add new feature
-Working directory: $ pwd
---> /home/user/project
 ```
 
 ### Recursive Includes
