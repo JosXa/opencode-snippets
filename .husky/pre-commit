@@ -1,5 +1,8 @@
-# Run formatting and linting
+# Run formatting and linting (fixes issues automatically)
 bun run ai:check
+
+# Re-stage any files that were auto-fixed
+git add -u
 
 # Run tests
 bun test

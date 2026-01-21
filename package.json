@@ -48,8 +48,5 @@
     "ai:check": "bun run format:fix",
     "prepare": "husky"
   },
-  "files": [
-    "index.ts",
-    "src/**/*.ts"
-  ]
+  "files": ["index.ts", "src/**/*.ts"]
 }
