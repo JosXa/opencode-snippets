@@ -38,13 +38,18 @@
     "@types/bun": "latest",
     "@types/node": "^22",
     "@typescript/native-preview": "^7.0.0-dev.20260120.1",
+    "husky": "^9.1.7",
     "typescript": "^5"
   },
   "scripts": {
     "build": "tsgo --noEmit",
     "format:check": "biome check .",
     "format:fix": "biome check --write .",
-    "ai:check": "bun run format:fix"
+    "ai:check": "bun run format:fix",
+    "prepare": "husky"
   },
-  "files": ["index.ts", "src/**/*.ts"]
+  "files": [
+    "index.ts",
+    "src/**/*.ts"
+  ]
 }

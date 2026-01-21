@@ -1,0 +1,8 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Run formatting and linting
+bun run ai:check
+
+# Run tests
+bun test
