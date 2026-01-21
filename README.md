@@ -65,14 +65,21 @@ The slash command provides workflow logic (git status, diffs, push) while reusin
 
 **Example: Snippets composing snippets**
 
-`~/.config/opencode/snippet/jira.md`:
+`~/.config/opencode/snippet/code-standards.md`:
 ```markdown
-#jira-custom-fields
-
-When querying Jira, please use a @general subagent to make reads, lookups, and analyses.
+#style-guide
+#error-handling
+#testing-requirements
 ```
 
-Base snippets can pull in specialized context (`#jira-custom-fields` maps 30+ custom field IDs), keeping them DRY and maintainable.
+`~/.config/opencode/snippet/full-review.md`:
+```markdown
+#code-standards
+#security-checklist
+#performance-tips
+```
+
+Compose base snippets into higher-level ones. Type `#full-review` to inject all standards at once, keeping each concern in its own maintainable file.
 
 **The power:** Mix and match. Type `#tdd #careful` for test-driven development with extra caution. Build `/commit #conventional-commits #project-context` for context-aware commits. Create layered prompts from small, reusable pieces.
 
