@@ -211,9 +211,9 @@ Be extremely concise. No explanations unless asked.
 
 | Feature | `/commands` | `#snippets` |
 |---------|-------------|-------------|
-| Position | Must be first | Anywhere |
+| Position | Must come first | Anywhere |
 | Multiple per message | No | Yes |
-| Live shell data | Via implementation | Built-in `!\`cmd\`` |
+| Live shell data | Yes | Yes |
 | Best for | Actions & workflows | Context injection |
 
 **Use both together:**
