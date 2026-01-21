@@ -114,7 +114,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       const result = expandHashtags("#self", registry);
 
       // Loop detected after 15 expansions, #self left as-is
-      const expected = "I reference ".repeat(15) + "#self";
+      const expected = `${"I reference ".repeat(15)}#self`;
       expect(result).toBe(expected);
     });
 
@@ -127,7 +127,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       const result = expandHashtags("#a", registry);
 
       // Should expand alternating A and B 15 times then stop
-      const expected = "A references B references ".repeat(15) + "#a";
+      const expected = `${"A references B references ".repeat(15)}#a`;
       expect(result).toBe(expected);
     });
 
@@ -141,7 +141,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       const result = expandHashtags("#a", registry);
 
       // Should expand cycling through A, B, C 15 times then stop
-      const expected = "A -> B -> C -> ".repeat(15) + "#a";
+      const expected = `${"A -> B -> C -> ".repeat(15)}#a`;
       expect(result).toBe(expected);
     });
 
@@ -186,7 +186,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       const result = expandHashtags("#main", registry);
 
       // Valid expands once, loop expands 15 times
-      const expected = "Valid content and " + "Loop ".repeat(15) + "#loop";
+      const expected = `Valid content and ${"Loop ".repeat(15)}#loop`;
       expect(result).toBe(expected);
     });
 
@@ -200,7 +200,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       const result = expandHashtags("#main", registry);
 
       // Each loop expands 15 times independently
-      const expected = "L1 ".repeat(15) + "#loop1 and " + "L2 ".repeat(15) + "#loop2";
+      const expected = `${"L1 ".repeat(15)}#loop1 and ${"L2 ".repeat(15)}#loop2`;
       expect(result).toBe(expected);
     });
 

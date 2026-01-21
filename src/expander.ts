@@ -44,7 +44,9 @@ export function expandHashtags(
       const count = (expansionCounts.get(key) || 0) + 1;
       if (count > MAX_EXPANSION_COUNT) {
         // Loop detected! Leave the hashtag as-is and stop expanding
-        logger.warn(`Loop detected: snippet '#${key}' expanded ${count} times (max: ${MAX_EXPANSION_COUNT})`);
+        logger.warn(
+          `Loop detected: snippet '#${key}' expanded ${count} times (max: ${MAX_EXPANSION_COUNT})`,
+        );
         loopDetected = true;
         return match; // Leave as-is instead of error message
       }
