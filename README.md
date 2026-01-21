@@ -4,6 +4,16 @@
 
 ## Why Snippets?
 
+As developers, we DRY our code. We extract functions, create libraries, compose modules. **Why should our prompts be any different?**
+
+Copy-pasting the same instructions into every message? Finding yourself retyping "be careful" or "follow our style guide" over and over? **Stop treating prompts like throwaway scripts.**
+
+Snippets bring software engineering principles to prompt engineering:
+- **DRY** - Write once, reuse everywhere
+- **Composability** - Build complex prompts from simple pieces  
+- **Maintainability** - Update once, apply everywhere
+- **Discoverability** - Your team's best practices, always a `#hashtag` away
+
 OpenCode has powerful `/slash` commands, but they must come first in your message. What if you want to inject context *mid-thought*?
 
 ```
