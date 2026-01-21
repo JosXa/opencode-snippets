@@ -34,12 +34,15 @@
     "@opencode-ai/plugin": ">=1.0.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.3.11",
     "@types/bun": "latest",
     "@types/node": "^22",
     "typescript": "^5"
   },
-  "files": [
-    "index.ts",
-    "src/**/*.ts"
-  ]
+  "scripts": {
+    "format:check": "biome check .",
+    "format:fix": "biome check --write .",
+    "ai:check": "bun run format:fix"
+  },
+  "files": ["index.ts", "src/**/*.ts"]
 }
