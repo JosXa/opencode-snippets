@@ -159,7 +159,32 @@ Working directory: !`pwd`
 
 ### Recursive Includes
 
-Snippets can include other snippets with `#snippet-name`. Loop detection prevents infinite recursion.
+Snippets can include other snippets using `#snippet-name` syntax. This allows building complex, composable snippets from smaller pieces:
+
+```markdown
+# In base-style.md:
+Use TypeScript strict mode. Always add JSDoc comments.
+
+# In python-style.md:
+Use type hints. Follow PEP 8.
+
+# In review.md:
+Review this code carefully:
+#base-style
+#python-style
+#security-checklist
+```
+
+**Loop Protection:** Snippets are expanded up to 15 times per message to support deep nesting. If a circular reference is detected (e.g., `#a` includes `#b` which includes `#a`), expansion stops after 15 iterations and the remaining hashtag is left as-is. A warning is logged to help debug the issue.
+
+**Example of loop protection:**
+```markdown
+# self.md contains: "I reference #self"
+# Expanding #self produces:
+I reference I reference I reference ... (15 times) ... I reference #self
+```
+
+This generous limit supports complex snippet hierarchies while preventing infinite loops.
 
 ## Example Snippets
 

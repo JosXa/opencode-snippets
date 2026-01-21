@@ -1,18 +1,24 @@
 import { PATTERNS } from "./constants.js";
+import { logger } from "./logger.js";
 import type { SnippetRegistry } from "./types.js";
+
+/**
+ * Maximum number of times a snippet can be expanded to prevent infinite loops
+ */
+const MAX_EXPANSION_COUNT = 15;
 
 /**
  * Expands hashtags in text recursively with loop detection
  *
  * @param text - The text containing hashtags to expand
  * @param registry - The snippet registry to look up hashtags
- * @param visited - Set of already-visited snippet keys (for loop detection)
+ * @param expansionCounts - Map tracking how many times each snippet has been expanded
  * @returns The text with all hashtags expanded
  */
 export function expandHashtags(
   text: string,
   registry: SnippetRegistry,
-  visited = new Set<string>(),
+  expansionCounts = new Map<string, number>(),
 ): string {
   let expanded = text;
   let hasChanges = true;
@@ -20,6 +26,7 @@ export function expandHashtags(
   // Keep expanding until no more hashtags are found
   while (hasChanges) {
     const previous = expanded;
+    let loopDetected = false;
 
     // Reset regex state (global flag requires this)
     PATTERNS.HASHTAG.lastIndex = 0;
@@ -27,32 +34,31 @@ export function expandHashtags(
     expanded = expanded.replace(PATTERNS.HASHTAG, (match, name) => {
       const key = name.toLowerCase();
 
-      // Check if we've already expanded this snippet in the current chain
-      if (visited.has(key)) {
-        // Loop detected! Leave the hashtag unchanged to prevent infinite recursion
-        return match;
-      }
-
       const content = registry.get(key);
-      if (!content) {
+      if (content === undefined) {
         // Unknown snippet - leave as-is
         return match;
       }
 
-      // Mark this snippet as visited and expand it
-      visited.add(key);
+      // Track expansion count to prevent infinite loops
+      const count = (expansionCounts.get(key) || 0) + 1;
+      if (count > MAX_EXPANSION_COUNT) {
+        // Loop detected! Leave the hashtag as-is and stop expanding
+        logger.warn(`Loop detected: snippet '#${key}' expanded ${count} times (max: ${MAX_EXPANSION_COUNT})`);
+        loopDetected = true;
+        return match; // Leave as-is instead of error message
+      }
+
+      expansionCounts.set(key, count);
 
       // Recursively expand any hashtags in the snippet content
-      const result = expandHashtags(content, registry, new Set(visited));
-
-      // Remove from visited set after expansion (allows reuse in different branches)
-      visited.delete(key);
+      const result = expandHashtags(content, registry, expansionCounts);
 
       return result;
     });
 
-    // Only continue if the text actually changed
-    hasChanges = expanded !== previous;
+    // Only continue if the text actually changed AND no loop was detected
+    hasChanges = expanded !== previous && !loopDetected;
   }
 
   return expanded;
