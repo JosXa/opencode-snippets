@@ -29,7 +29,7 @@ Snippets work like `@file` mentions - natural, inline, composable.
 
 Snippets compose with each other and with slash commands. Reference `#snippets` anywhere - in your messages, in slash commands, even inside other snippets:
 
-**Example: Extending snippets with logic**
+**Example: Extending commands with snippets**
 
 `~/.config/opencode/command/commit-and-push.md`:
 ```markdown
