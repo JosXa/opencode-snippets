@@ -134,6 +134,18 @@ description: "Git cherry-pick helper"
 Always pick parent 1 for merge commits.
 ```
 
+Or use YAML list style:
+
+```markdown
+---
+aliases:
+  - cp
+  - pick
+description: "Git cherry-pick helper"
+---
+Always pick parent 1 for merge commits.
+```
+
 Now `#cherry-pick`, `#cp`, and `#pick` all expand to the same content.
 
 ### Shell Command Substitution
