@@ -1,0 +1,10 @@
+# Development files
+node_modules/
+*.log
+.DS_Store
+bun.lock
+tsconfig.json
+.gitignore
+.github/
+
+# Only publish source files (see "files" in package.json)

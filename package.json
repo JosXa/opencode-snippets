@@ -1,0 +1,45 @@
+{
+  "name": "opencode-snippets",
+  "version": "1.0.0",
+  "description": "Hashtag-based snippet expansion plugin for OpenCode - instant inline text shortcuts",
+  "main": "index.ts",
+  "type": "module",
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "plugin",
+    "snippets",
+    "templates",
+    "shortcuts",
+    "ai",
+    "coding-assistant"
+  ],
+  "author": "JosXa <info@josxa.dev>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JosXa/opencode-snippets.git"
+  },
+  "bugs": {
+    "url": "https://github.com/JosXa/opencode-snippets/issues"
+  },
+  "homepage": "https://github.com/JosXa/opencode-snippets#readme",
+  "dependencies": {
+    "gray-matter": "^4.0.3"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^22",
+    "typescript": "^5"
+  },
+  "files": [
+    "index.ts",
+    "src/**/*.ts"
+  ]
+}
