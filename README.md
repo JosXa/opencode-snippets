@@ -94,7 +94,7 @@ mkdir -p ~/.config/opencode/snippet
 `~/.config/opencode/snippet/careful.md`:
 ```markdown
 ---
-aliases: ["safe", "cautious"]
+aliases: safe
 ---
 Think step by step. Double-check your work before making changes.
 Ask clarifying questions if anything is ambiguous.
@@ -176,7 +176,7 @@ Loop detection prevents infinite recursion.
 ### `~/.config/opencode/snippet/context.md`
 ```markdown
 ---
-aliases: ["ctx"]
+aliases: ctx
 ---
 Project: !`basename $(pwd)`
 Branch: !`git branch --show-current`
