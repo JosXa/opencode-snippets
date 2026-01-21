@@ -156,6 +156,7 @@ Working directory: !`pwd`
 ```
 
 > **Note:** Snippets deviate slightly from the regular slash command behavior. Instead of just passing the command output to the LLM, snippets prepend the command itself:
+> ``!`ls` `` → 
 > ```
 > $ ls
 > --> <output>
