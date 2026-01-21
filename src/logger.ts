@@ -17,7 +17,7 @@ export class Logger {
     this.logDir = logDirOverride ?? join(OPENCODE_CONFIG_DIR, "logs", "snippets");
   }
 
-  private get enabled(): boolean {
+  get enabled(): boolean {
     return isDebugEnabled();
   }
 
@@ -87,11 +87,11 @@ export class Logger {
         mkdirSync(dailyLogDir, { recursive: true });
       }
 
-      const logLine = `${timestamp} ${level.padEnd(5)} ${component}: ${message}${dataStr ? " | " + dataStr : ""}\n`;
+      const logLine = `${timestamp} ${level.padEnd(5)} ${component}: ${message}${dataStr ? ` | ${dataStr}` : ""}\n`;
 
       const logFile = join(dailyLogDir, `${new Date().toISOString().split("T")[0]}.log`);
       writeFileSync(logFile, logLine, { flag: "a" });
-    } catch (error) {
+    } catch {
       // Silent fail
     }
   }
@@ -111,7 +111,7 @@ export class Logger {
     this.write("WARN", component, message, data);
   }
 
-  error(message: string, data?: any) {
+  error(message: string, data?: Record<string, unknown>) {
     const component = this.getCallerFile();
     this.write("ERROR", component, message, data);
   }

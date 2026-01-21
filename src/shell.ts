@@ -8,7 +8,11 @@ import { logger } from "./logger.js";
  * @param ctx - The plugin context (with Bun shell)
  * @returns The text with shell commands replaced by their output
  */
-type ShellContext = { $: (template: TemplateStringsArray) => { quiet: () => { nothrow: () => { text: () => Promise<string> } } } };
+type ShellContext = {
+  $: (template: TemplateStringsArray) => {
+    quiet: () => { nothrow: () => { text: () => Promise<string> } };
+  };
+};
 
 export async function executeShellCommands(text: string, ctx: ShellContext): Promise<string> {
   let result = text;
@@ -27,8 +31,7 @@ export async function executeShellCommands(text: string, ctx: ShellContext): Pro
     try {
       const output = await ctx.$`${{ raw: cmd }}`.quiet().nothrow().text();
       // Format like slash commands: print command first, then output
-      const replacement = `$ ${cmd}\n--> ${output.trim()}`;
-      result = result.replace(placeholder, replacement);
+      const replacement = `$ ${cmd}\n--> ${output.trim()}`;hel
     } catch (error) {
       // If shell command fails, leave it as-is
       // This preserves the original syntax for debugging

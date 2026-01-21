@@ -27,25 +27,25 @@ describe("Logger", () => {
     it("should return false when DEBUG_SNIPPETS is not set", () => {
       delete process.env.DEBUG_SNIPPETS;
       const testLogger = new Logger(join(tempDir, "logs"));
-      expect((testLogger as any).enabled).toBe(false);
+      expect(testLogger.enabled).toBe(false);
     });
 
     it("should return true when DEBUG_SNIPPETS=1", () => {
       process.env.DEBUG_SNIPPETS = "1";
       const testLogger = new Logger(join(tempDir, "logs"));
-      expect((testLogger as any).enabled).toBe(true);
+      expect(testLogger.enabled).toBe(true);
     });
 
     it("should return true when DEBUG_SNIPPETS=true", () => {
       process.env.DEBUG_SNIPPETS = "true";
       const testLogger = new Logger(join(tempDir, "logs"));
-      expect((testLogger as any).enabled).toBe(true);
+      expect(testLogger.enabled).toBe(true);
     });
 
     it("should return false for other values", () => {
       process.env.DEBUG_SNIPPETS = "yes";
       const testLogger = new Logger(join(tempDir, "logs"));
-      expect((testLogger as any).enabled).toBe(false);
+      expect(testLogger.enabled).toBe(false);
     });
   });
 

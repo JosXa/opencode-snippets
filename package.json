@@ -37,9 +37,11 @@
     "@biomejs/biome": "^2.3.11",
     "@types/bun": "latest",
     "@types/node": "^22",
+    "@typescript/native-preview": "^7.0.0-dev.20260120.1",
     "typescript": "^5"
   },
   "scripts": {
+    "build": "tsgo --noEmit",
     "format:check": "biome check .",
     "format:fix": "biome check --write .",
     "ai:check": "bun run format:fix"
