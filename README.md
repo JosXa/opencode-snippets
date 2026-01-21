@@ -214,7 +214,7 @@ Be extremely concise. No explanations unless asked.
 | Position | Must come first | Anywhere |
 | Multiple per message | No | Yes |
 | Live shell data | Yes | Yes |
-| Best for | Actions & workflows | Context injection |
+| Best for | Triggering actions & workflows | Context injection |
 
 **Use both together:**
 ```
