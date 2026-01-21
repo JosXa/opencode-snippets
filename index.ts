@@ -2,7 +2,7 @@ import type { Plugin } from "@opencode-ai/plugin";
 import { expandHashtags } from "./src/expander.js";
 import { loadSnippets } from "./src/loader.js";
 import { logger } from "./src/logger.js";
-import { executeShellCommands } from "./src/shell.js";
+import { executeShellCommands, type ShellContext } from "./src/shell.js";
 
 /**
  * Snippets Plugin for OpenCode
@@ -42,7 +42,10 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
 
           // 2. Execute shell commands: !`command`
           const shellStart = performance.now();
-          part.text = await executeShellCommands(part.text, ctx);
+          part.text = await executeShellCommands(
+            part.text,
+            ctx as unknown as ShellContext,
+          );
           const shellTime = performance.now() - shellStart;
           shellTimeTotal += shellTime;
           processedParts += 1;

@@ -167,16 +167,7 @@ Working directory: !`pwd`
 
 ### Recursive Includes
 
-Snippets can include other snippets:
-
-```markdown
-# In base-context.md:
-#project-info
-#coding-standards
-#git-conventions
-```
-
-Loop detection prevents infinite recursion.
+Snippets can include other snippets with `#snippet-name`. Loop detection prevents infinite recursion.
 
 ## Example Snippets
 
@@ -188,21 +179,6 @@ aliases: ctx
 Project: !`basename $(pwd)`
 Branch: !`git branch --show-current`
 Recent changes: !`git diff --stat HEAD~3 | tail -5`
-```
-
-### `~/.config/opencode/snippet/review.md`
-```markdown
----
-aliases:
-  - pr
-  - check
----
-Review this code for:
-- Security vulnerabilities
-- Performance issues  
-- Code style consistency
-- Missing error handling
-- Test coverage gaps
 ```
 
 ### `~/.config/opencode/snippet/minimal.md`
@@ -219,10 +195,10 @@ Be extremely concise. No explanations unless asked.
 
 | Feature | `/commands` | `#snippets` |
 |---------|-------------|-------------|
-| Position | Must come first | Anywhere |
-| Multiple per message | No | Yes |
-| Live shell data | Yes | Yes |
-| Best for | Triggering actions & workflows | Context injection |
+| Position | Must come first 🏁 | Anywhere 📍 |
+| Multiple per message | No ❌ | Yes ✅ |
+| Live shell data | Yes 💻 | Yes 💻 |
+| Best for | Triggering actions & workflows ⚡ | Context injection 📝 |
 
 **Use both together:**
 ```

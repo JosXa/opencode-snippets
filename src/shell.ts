@@ -8,7 +8,7 @@ import { logger } from "./logger.js";
  * @param ctx - The plugin context (with Bun shell)
  * @returns The text with shell commands replaced by their output
  */
-type ShellContext = {
+export type ShellContext = {
   $: (template: TemplateStringsArray, ...args: unknown[]) => {
     quiet: () => { nothrow: () => { text: () => Promise<string> } };
   };

@@ -32,7 +32,7 @@ aliases: safe
 Think step by step. Double-check your work.`,
       );
 
-      const snippets = await loadSnippets();
+      const snippets = await loadSnippets(undefined, globalSnippetDir);
 
       expect(snippets.size).toBe(2);
       expect(snippets.get("careful")).toBe(
@@ -53,7 +53,7 @@ Think step by step. Double-check your work.`,
         "Content of snippet 2",
       );
 
-      const snippets = await loadSnippets();
+      const snippets = await loadSnippets(undefined, globalSnippetDir);
 
       expect(snippets.size).toBe(2);
       expect(snippets.get("snippet1")).toBe("Content of snippet 1");
@@ -70,7 +70,7 @@ Think step by step. Double-check your work.`,
 
       // Load with project directory
       const projectDir = join(tempDir, "project");
-      const snippets = await loadSnippets(projectDir);
+      const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       expect(snippets.size).toBe(1);
       expect(snippets.get("project-specific")).toBe(
@@ -89,7 +89,7 @@ Think step by step. Double-check your work.`,
       );
 
       const projectDir = join(tempDir, "project");
-      const snippets = await loadSnippets(projectDir);
+      const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       expect(snippets.size).toBe(2);
       expect(snippets.get("team-rule")).toBe("Team rule 1");
@@ -112,7 +112,7 @@ Think step by step. Double-check your work.`,
       );
 
       const projectDir = join(tempDir, "project");
-      const snippets = await loadSnippets(projectDir);
+      const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       expect(snippets.size).toBe(2);
       expect(snippets.get("global")).toBe("Global snippet content");
@@ -133,7 +133,7 @@ Think step by step. Double-check your work.`,
       );
 
       const projectDir = join(tempDir, "project");
-      const snippets = await loadSnippets(projectDir);
+      const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       // Project snippet should override global
       expect(snippets.get("careful")).toBe(
@@ -168,7 +168,7 @@ Project test guidelines`,
       );
 
       const projectDir = join(tempDir, "project");
-      const snippets = await loadSnippets(projectDir);
+      const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       expect(snippets.size).toBe(5); // review, pr, check, test, tdd, testing
       expect(snippets.get("review")).toBe("Global review guidelines");
@@ -201,7 +201,7 @@ Project careful`,
       );
 
       const projectDir = join(tempDir, "project");
-      const snippets = await loadSnippets(projectDir);
+      const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       // Project should override with its aliases
       expect(snippets.get("careful")).toBe("Project careful");
@@ -215,7 +215,7 @@ Project careful`,
     it("should handle empty snippet content", async () => {
       await writeFile(join(globalSnippetDir, "empty.md"), "");
 
-      const snippets = await loadSnippets();
+      const snippets = await loadSnippets(undefined, globalSnippetDir);
       expect(snippets.size).toBe(1);
       expect(snippets.get("empty")).toBe("");
     });
@@ -229,7 +229,7 @@ aliases: meta
 ---`,
       );
 
-      const snippets = await loadSnippets();
+      const snippets = await loadSnippets(undefined, globalSnippetDir);
       expect(snippets.size).toBe(2);
       expect(snippets.get("metadata-only")).toBe("");
       expect(snippets.get("meta")).toBe("");
@@ -243,7 +243,7 @@ Line 2
 Line 3`,
       );
 
-      const snippets = await loadSnippets();
+      const snippets = await loadSnippets(undefined, globalSnippetDir);
       expect(snippets.get("multiline")).toBe(
         "Line 1\nLine 2\nLine 3",
       );
@@ -259,13 +259,13 @@ Line 3`,
         "This should be loaded",
       );
 
-      const snippets = await loadSnippets();
+      const snippets = await loadSnippets(undefined, globalSnippetDir);
       expect(snippets.size).toBe(1);
       expect(snippets.get("valid")).toBe("This should be loaded");
       expect(snippets.has("not-a-snippet")).toBe(false);
     });
 
-    it("should handle invalid frontmatter gracefully", async () => {
+    it("should handle invalid frontmatter", async () => {
       await writeFile(
         join(globalSnippetDir, "bad-frontmatter.md"),
         `---
@@ -279,7 +279,7 @@ Content`,
         "Special content",
       );
 
-      const snippets = await loadSnippets();
+      const snippets = await loadSnippets(undefined, globalSnippetDir);
       // Should load valid snippet, skip invalid one
       expect(snippets.get("special-chars")).toBe("Special content");
     });

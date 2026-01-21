@@ -84,8 +84,17 @@ async function loadSnippetFile(dir: string, filename: string) {
 
     const content = parsed.content.trim();
     const frontmatter = parsed.data as SnippetFrontmatter;
-    const aliases = Array.isArray(frontmatter.aliases) ? frontmatter.aliases : [];
-
+    
+    // Handle aliases as string or array
+    let aliases: string[] = [];
+    if (frontmatter.aliases) {
+      if (Array.isArray(frontmatter.aliases)) {
+        aliases = frontmatter.aliases;
+      } else {
+        aliases = [frontmatter.aliases];
+      }
+    }
+    
     return { name, content, aliases };
   } catch (error) {
     // Failed to read or parse this snippet - skip it
