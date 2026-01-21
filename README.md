@@ -219,7 +219,9 @@ Be extremely concise. No explanations unless asked.
 /commit #conventional-commits #project-context
 ```
 
-## Configuration### Debug Logging
+## Configuration
+
+### Debug Logging
 
 Enable debug logs by setting an environment variable:
 
