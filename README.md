@@ -1,32 +1,31 @@
 # opencode-snippets
 
-**Instant inline text expansion for OpenCode** - Type `#snippet` anywhere in your message and watch it transform.
+✨ **Instant inline text expansion for OpenCode** - Type `#snippet` anywhere in your message and watch it transform.
 
 ## Why Snippets?
 
-As developers, we DRY (Don't Repeat Yourself) our code. We extract functions, create libraries, compose modules. **Why should our prompts be any different?**
+As developers, we DRY (Don't Repeat Yourself) our code. We extract functions, create libraries, compose modules. Why should our prompts be any different?
 
-Copy-pasting the same instructions into every message? Finding yourself retyping "be careful" or "follow our style guide" over and over? **Stop treating prompts like throwaway scripts.**
+Stop copy-pasting the same instructions into every message. Snippets bring software engineering principles to prompt engineering:
 
-Snippets bring software engineering principles to prompt engineering:
-- **DRY** - Write once, reuse everywhere
-- **Composability** - Build complex prompts from simple pieces  
-- **Maintainability** - Update once, apply everywhere
-- **Discoverability** - Your team's best practices, always a `#hashtag` away
+- 🔄 **DRY** - Write once, reuse everywhere
+- 🧩 **Composability** - Build complex prompts from simple pieces  
+- 🔧 **Maintainability** - Update once, apply everywhere
+- 🔍 **Discoverability** - Your team's best practices, always a `#hashtag` away
 
-OpenCode has powerful `/slash` commands, but they must come first in your message. What if you want to inject context *mid-thought*?
+OpenCode's `/slash` commands must come first. Snippets work anywhere:
 
 ```
-# With slash commands (must be first):
+# Slash commands (must be first):
 /git-status Please review my changes
 
-# With snippets (anywhere!):
+# Snippets (anywhere!):
 Please review my changes #git-status and suggest improvements #code-style
 ```
 
-**Snippets work like `@file` mentions** - natural, inline, composable. Build complex prompts from reusable pieces without breaking your flow.
+Snippets work like `@file` mentions - natural, inline, composable.
 
-### Composable by Design
+### 🎯 Composable by Design
 
 Snippets compose with each other and with slash commands. Reference `#snippets` anywhere - in your messages, in slash commands, even inside other snippets:
 
