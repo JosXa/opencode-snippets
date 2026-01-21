@@ -147,7 +147,7 @@ You can also use JSON array style: `aliases: ["cp", "pick"]`
 
 ### Shell Command Substitution
 
-Snippets support the same `!`backtick\`` syntax as [OpenCode slash commands](https://opencode.ai/docs/commands/#shell-output) for injecting live command output:
+Snippets support the same ``!`command` `` syntax as [OpenCode slash commands](https://opencode.ai/docs/commands/#shell-output) for injecting live command output:
 
 ```markdown
 Current branch: !`git branch --show-current`
