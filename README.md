@@ -4,7 +4,7 @@
 
 ## Why Snippets?
 
-As developers, we DRY our code. We extract functions, create libraries, compose modules. **Why should our prompts be any different?**
+As developers, we DRY (Don't Repeat Yourself) our code. We extract functions, create libraries, compose modules. **Why should our prompts be any different?**
 
 Copy-pasting the same instructions into every message? Finding yourself retyping "be careful" or "follow our style guide" over and over? **Stop treating prompts like throwaway scripts.**
 
