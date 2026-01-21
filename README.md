@@ -31,6 +31,25 @@ Snippets compose with each other and with slash commands. Reference `#snippets` 
 
 **Example: Slash commands as snippet proxies**
 
+**Example: Slash commands as snippet proxies**
+
+`~/.config/opencode/snippet/todoadd.md`:
+```markdown
+Add this todo item via todowrite
+```
+
+`~/.config/opencode/command/todo-add.md`:
+```markdown
+---
+description: Add a todo item
+---
+#todoadd
+
+$ARGUMENTS
+```
+
+The `/todo-add` slash command is just a thin wrapper around `#todoadd`. The snippet holds the actual logic, the command is the interface. Minimal boilerplate, maximum reuse.
+
 **Example: Extending snippets with logic**
 
 `~/.config/opencode/command/commit-and-push.md`:
