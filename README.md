@@ -135,6 +135,28 @@ Refactor this function Think step by step. Double-check your work before making 
 Ask clarifying questions if anything is ambiguous.
 ```
 
+## 📁 Where to Store Snippets
+
+Snippets can be stored in two locations:
+
+### Global Snippets
+`~/.config/opencode/snippet/*.md` - Available in all projects
+
+Perfect for:
+- Team standards and conventions
+- Personal preferences and workflows
+- Reusable patterns across projects
+
+### Project-Specific Snippets
+`.opencode/snippet/*.md` - Only available in this project
+
+Perfect for:
+- Project-specific context and conventions
+- Team-specific workflows
+- Domain knowledge and terminology
+
+**Both directories are loaded automatically.** Project snippets override global snippets with the same name, just like OpenCode's slash commands.
+
 ## Features
 
 ### Hashtag Expansion
