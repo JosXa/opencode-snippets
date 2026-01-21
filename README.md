@@ -22,6 +22,13 @@ Snippets compose with each other and with slash commands. Reference `#snippets` 
 
 **Example: Slash commands as snippet proxies**
 
+`~/.config/opencode/snippet/ralph.md`:
+```markdown
+Start a ralph loop for this. Automatically guess how many iterations it will require if not specified.
+#todofile
+Give the path of the status/todo file to the ralph task and tell to continuously update it.
+```
+
 `~/.config/opencode/command/ralph.md`:
 ```markdown
 ---
