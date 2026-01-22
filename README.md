@@ -36,7 +36,8 @@ Snippets compose with each other and with slash commands. Reference `#snippets` 
 ---
 description: Create a git commit and push to remote
 ---
-Please create a git commit with the current changes and push to the remote repository. #use-conventional-commits
+Please create a git commit with the current changes and push to the remote repository.
+#use-conventional-commits
 
 Here is the current git status:
 !`git status`
@@ -47,7 +48,7 @@ Here are the staged changes:
 #project-context
 ```
 
-You could also make "current git status and staged changes" a snippet of its own.
+You could also make "current git status and staged changes" a shell-enabled snippet of its own.
 
 **Example: Snippets composing snippets**
 
@@ -214,11 +215,6 @@ Be extremely concise. No explanations unless asked.
 | Multiple per message | No ❌ | Yes ✅ |
 | Live shell data | Yes 💻 | Yes 💻 |
 | Best for | Triggering actions & workflows ⚡ | Context injection 📝 |
-
-**Use both together:**
-```
-/commit #conventional-commits #project-context
-```
 
 > [!TIP]
 > #### My recommendation:
