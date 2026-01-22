@@ -255,7 +255,8 @@ Logs are written to `~/.config/opencode/logs/snippets/daily/`.
 
 ## Contributing
 
-Contributions welcome! Please open an issue or PR on GitHub.
+Contributions welcome! Please open an issue or PR on GitHub. 
+👥 [Discord Forum](https://discord.com/channels/1391832426048651334/1463378026833379409)
 
 ## License
 
