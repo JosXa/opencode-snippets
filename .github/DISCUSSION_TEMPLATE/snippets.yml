@@ -10,30 +10,22 @@ body:
 
         **Looking for inspiration?** Check out the [built-in examples](https://github.com/JosXa/opencode-snippets/tree/main/.opencode/snippet) or browse what others have shared.
 
-  - type: input
-    id: description
-    attributes:
-      label: Description
-      description: "One sentence explaining what this snippet does"
-      placeholder: "Encourages careful, step-by-step reasoning"
-    validations:
-      required: true
-
-  - type: input
-    id: aliases
-    attributes:
-      label: Aliases
-      description: "Comma-separated alternative triggers (optional)"
-      placeholder: "safe, cautious"
-
   - type: textarea
     id: content
     attributes:
       label: Snippet content
-      description: "The expanded text (without frontmatter - we'll generate that from the fields above)"
-      placeholder: |
-        Think step by step. Double-check your work before making changes.
-        Ask clarifying questions if anything is ambiguous.
+      description: "The full snippet file content including frontmatter"
+      value: |
+        ```markdown
+        ---
+        description: "One sentence explaining what this snippet does"
+        aliases:
+          - short
+          - alt-name
+        ---
+        Your expanded snippet content here.
+        ```
+      render: markdown
     validations:
       required: true
 
