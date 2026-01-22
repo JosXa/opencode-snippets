@@ -6,16 +6,9 @@ body:
       value: |
         Thanks for sharing your snippet!
 
-        **Looking for inspiration?** Check out the [built-in examples](https://github.com/JosXa/opencode-snippets/tree/main/.opencode/snippet) or browse what others have shared.
+        Use the **title field above** as the filename (e.g., `careful.md`).
 
-  - type: input
-    id: filename
-    attributes:
-      label: Filename
-      description: "The markdown filename for your snippet (without .md)"
-      placeholder: "careful"
-    validations:
-      required: true
+        **Looking for inspiration?** Check out the [built-in examples](https://github.com/JosXa/opencode-snippets/tree/main/.opencode/snippet) or browse what others have shared.
 
   - type: input
     id: description
