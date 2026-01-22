@@ -3,7 +3,9 @@
 ✨ **Instant inline text expansion for OpenCode** - Type `#snippet` anywhere in your message and watch it transform.
 
 > [!TIP]
-> **Share Your Snippets!** Got a snippet that saves you time? Share it with the community!
+> **Share Your Snippets!**
+> 
+> Got a snippet that saves you time? Share it with the community!
 > Browse and contribute at [GitHub Discussions](https://github.com/JosXa/opencode-snippets/discussions/categories/snippets).
 
 ## Why Snippets?
