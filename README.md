@@ -220,6 +220,22 @@ Be extremely concise. No explanations unless asked.
 /commit #conventional-commits #project-context
 ```
 
+> [!TIP]
+> #### My recommendation:
+> 
+> Use /slash commands for **triggering actions and workflows** imperatively - anything that needs to happen _right now_: `/commit-and-push`, `/add-worktree`, or `/pull-rebase`.  
+> Use #snippets for **all other context engineering**.
+>
+> If you can't decide, get the best of both worlds and just have your command proxy through to the snippet:
+>
+> `~/.config/opencode/command/pull.md`:
+> ```markdown
+> ---
+> description: Proxy through to the snippet at snippet/pull.md
+> ---
+> #pull
+> ```
+
 ## Configuration
 
 ### Debug Logging
