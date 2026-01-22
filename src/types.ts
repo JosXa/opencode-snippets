@@ -11,9 +11,21 @@ export interface Snippet {
 }
 
 /**
- * Snippet registry that maps keys to content
+ * Extended snippet info with file metadata
  */
-export type SnippetRegistry = Map<string, string>;
+export interface SnippetInfo {
+  name: string;
+  content: string;
+  aliases: string[];
+  description?: string;
+  filePath: string;
+  source: "global" | "project";
+}
+
+/**
+ * Snippet registry that maps keys to snippet info
+ */
+export type SnippetRegistry = Map<string, SnippetInfo>;
 
 /**
  * Frontmatter data from snippet files

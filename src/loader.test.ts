@@ -35,8 +35,8 @@ Think step by step. Double-check your work.`,
       const snippets = await loadSnippets(undefined, globalSnippetDir);
 
       expect(snippets.size).toBe(2);
-      expect(snippets.get("careful")).toBe("Think step by step. Double-check your work.");
-      expect(snippets.get("safe")).toBe("Think step by step. Double-check your work.");
+      expect(snippets.get("careful")?.content).toBe("Think step by step. Double-check your work.");
+      expect(snippets.get("safe")?.content).toBe("Think step by step. Double-check your work.");
     });
 
     it("should load multiple snippets from global directory", async () => {
@@ -46,8 +46,8 @@ Think step by step. Double-check your work.`,
       const snippets = await loadSnippets(undefined, globalSnippetDir);
 
       expect(snippets.size).toBe(2);
-      expect(snippets.get("snippet1")).toBe("Content of snippet 1");
-      expect(snippets.get("snippet2")).toBe("Content of snippet 2");
+      expect(snippets.get("snippet1")?.content).toBe("Content of snippet 1");
+      expect(snippets.get("snippet2")?.content).toBe("Content of snippet 2");
     });
   });
 
@@ -63,7 +63,7 @@ Think step by step. Double-check your work.`,
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       expect(snippets.size).toBe(1);
-      expect(snippets.get("project-specific")).toBe("This is a project-specific snippet");
+      expect(snippets.get("project-specific")?.content).toBe("This is a project-specific snippet");
     });
 
     it("should handle missing global directory when project exists", async () => {
@@ -74,8 +74,8 @@ Think step by step. Double-check your work.`,
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       expect(snippets.size).toBe(2);
-      expect(snippets.get("team-rule")).toBe("Team rule 1");
-      expect(snippets.get("domain-knowledge")).toBe("Domain knowledge");
+      expect(snippets.get("team-rule")?.content).toBe("Team rule 1");
+      expect(snippets.get("domain-knowledge")?.content).toBe("Domain knowledge");
     });
   });
 
@@ -91,8 +91,8 @@ Think step by step. Double-check your work.`,
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       expect(snippets.size).toBe(2);
-      expect(snippets.get("global")).toBe("Global snippet content");
-      expect(snippets.get("project")).toBe("Project snippet content");
+      expect(snippets.get("global")?.content).toBe("Global snippet content");
+      expect(snippets.get("project")?.content).toBe("Project snippet content");
     });
 
     it("should allow project snippets to override global snippets", async () => {
@@ -106,7 +106,7 @@ Think step by step. Double-check your work.`,
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       // Project snippet should override global
-      expect(snippets.get("careful")).toBe("Project-specific careful content");
+      expect(snippets.get("careful")?.content).toBe("Project-specific careful content");
       expect(snippets.size).toBe(1);
     });
   });
@@ -139,12 +139,12 @@ Project test guidelines`,
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       expect(snippets.size).toBe(6); // review, pr, check, test, tdd, testing
-      expect(snippets.get("review")).toBe("Global review guidelines");
-      expect(snippets.get("pr")).toBe("Global review guidelines");
-      expect(snippets.get("check")).toBe("Global review guidelines");
-      expect(snippets.get("test")).toBe("Project test guidelines");
-      expect(snippets.get("tdd")).toBe("Project test guidelines");
-      expect(snippets.get("testing")).toBe("Project test guidelines");
+      expect(snippets.get("review")?.content).toBe("Global review guidelines");
+      expect(snippets.get("pr")?.content).toBe("Global review guidelines");
+      expect(snippets.get("check")?.content).toBe("Global review guidelines");
+      expect(snippets.get("test")?.content).toBe("Project test guidelines");
+      expect(snippets.get("tdd")?.content).toBe("Project test guidelines");
+      expect(snippets.get("testing")?.content).toBe("Project test guidelines");
     });
 
     it("should allow project to override global aliases", async () => {
@@ -172,9 +172,9 @@ Project careful`,
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       // Project should override with its aliases
-      expect(snippets.get("careful")).toBe("Project careful");
-      expect(snippets.get("safe")).toBe("Project careful");
-      expect(snippets.get("cautious")).toBeUndefined();
+      expect(snippets.get("careful")?.content).toBe("Project careful");
+      expect(snippets.get("safe")?.content).toBe("Project careful");
+      expect(snippets.get("cautious")?.content).toBeUndefined();
       expect(snippets.size).toBe(2);
     });
   });
@@ -185,7 +185,7 @@ Project careful`,
 
       const snippets = await loadSnippets(undefined, globalSnippetDir);
       expect(snippets.size).toBe(1);
-      expect(snippets.get("empty")).toBe("");
+      expect(snippets.get("empty")?.content).toBe("");
     });
 
     it("should handle snippet with only metadata", async () => {
@@ -199,8 +199,8 @@ aliases: meta
 
       const snippets = await loadSnippets(undefined, globalSnippetDir);
       expect(snippets.size).toBe(2);
-      expect(snippets.get("metadata-only")).toBe("");
-      expect(snippets.get("meta")).toBe("");
+      expect(snippets.get("metadata-only")?.content).toBe("");
+      expect(snippets.get("meta")?.content).toBe("");
     });
 
     it("should handle multiline content", async () => {
@@ -212,7 +212,7 @@ Line 3`,
       );
 
       const snippets = await loadSnippets(undefined, globalSnippetDir);
-      expect(snippets.get("multiline")).toBe("Line 1\nLine 2\nLine 3");
+      expect(snippets.get("multiline")?.content).toBe("Line 1\nLine 2\nLine 3");
     });
 
     it("should ignore non-.md files", async () => {
@@ -221,7 +221,7 @@ Line 3`,
 
       const snippets = await loadSnippets(undefined, globalSnippetDir);
       expect(snippets.size).toBe(1);
-      expect(snippets.get("valid")).toBe("This should be loaded");
+      expect(snippets.get("valid")?.content).toBe("This should be loaded");
       expect(snippets.has("not-a-snippet")).toBe(false);
     });
 
@@ -238,7 +238,7 @@ Content`,
 
       const snippets = await loadSnippets(undefined, globalSnippetDir);
       // Should load valid snippet, skip invalid one
-      expect(snippets.get("special-chars")).toBe("Special content");
+      expect(snippets.get("special-chars")?.content).toBe("Special content");
     });
 
     it("should handle non-existent directories gracefully", async () => {

@@ -1,16 +1,16 @@
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import matter from "gray-matter";
 import { CONFIG, PATHS } from "./constants.js";
 import { logger } from "./logger.js";
-import type { SnippetFrontmatter, SnippetRegistry } from "./types.js";
+import type { SnippetFrontmatter, SnippetInfo, SnippetRegistry } from "./types.js";
 
 /**
  * Loads all snippets from global and project directories
  *
  * @param projectDir - Optional project directory path (from ctx.directory)
  * @param globalDir - Optional global snippets directory (for testing)
- * @returns A map of snippet keys (lowercase) to their content
+ * @returns A map of snippet keys (lowercase) to their SnippetInfo
  */
 export async function loadSnippets(
   projectDir?: string,
@@ -41,7 +41,7 @@ export async function loadSnippets(
 async function loadFromDirectory(
   dir: string,
   registry: SnippetRegistry,
-  source: string,
+  source: "global" | "project",
 ): Promise<void> {
   try {
     const files = await readdir(dir);
@@ -49,9 +49,9 @@ async function loadFromDirectory(
     for (const file of files) {
       if (!file.endsWith(CONFIG.SNIPPET_EXTENSION)) continue;
 
-      const snippet = await loadSnippetFile(dir, file);
+      const snippet = await loadSnippetFile(dir, file, source);
       if (snippet) {
-        registerSnippet(registry, snippet.name, snippet.content, snippet.aliases);
+        registerSnippet(registry, snippet);
       }
     }
 
@@ -73,9 +73,14 @@ async function loadFromDirectory(
  *
  * @param dir - Directory containing the snippet file
  * @param filename - The filename to load (e.g., "my-snippet.md")
- * @returns The parsed snippet data, or null if parsing failed
+ * @param source - Whether this is a global or project snippet
+ * @returns The parsed snippet info, or null if parsing failed
  */
-async function loadSnippetFile(dir: string, filename: string) {
+async function loadSnippetFile(
+  dir: string,
+  filename: string,
+  source: "global" | "project",
+): Promise<SnippetInfo | null> {
   try {
     const name = basename(filename, CONFIG.SNIPPET_EXTENSION);
     const filePath = join(dir, filename);
@@ -95,7 +100,14 @@ async function loadSnippetFile(dir: string, filename: string) {
       }
     }
 
-    return { name, content, aliases };
+    return {
+      name,
+      content,
+      aliases,
+      description: frontmatter.description,
+      filePath,
+      source,
+    };
   } catch (error) {
     // Failed to read or parse this snippet - skip it
     logger.warn("Failed to load snippet file", {
@@ -109,34 +121,146 @@ async function loadSnippetFile(dir: string, filename: string) {
 /**
  * Registers a snippet and its aliases in the registry
  *
- * @param registry - The snippet registry to update
- * @param name - The primary name of the snippet
- * @param content - The snippet content
- * @param aliases - Alternative names for the snippet
+ * @param registry - The registry to add the snippet to
+ * @param snippet - The snippet info to register
  */
-function registerSnippet(
-  registry: SnippetRegistry,
-  name: string,
-  content: string,
-  aliases: string[],
-) {
-  const key = name.toLowerCase();
+function registerSnippet(registry: SnippetRegistry, snippet: SnippetInfo): void {
+  const key = snippet.name.toLowerCase();
 
-  // If snippet already exists, remove all entries with the old content
-  const oldContent = registry.get(key);
-  if (oldContent !== undefined) {
-    for (const [k, v] of registry.entries()) {
-      if (v === oldContent) {
-        registry.delete(k);
-      }
+  // If snippet with same name exists, remove its old aliases first
+  const existing = registry.get(key);
+  if (existing) {
+    for (const alias of existing.aliases) {
+      registry.delete(alias.toLowerCase());
     }
   }
 
-  // Register with primary name (lowercase)
-  registry.set(key, content);
+  // Register the snippet under its name
+  registry.set(key, snippet);
 
-  // Register all aliases (lowercase)
-  for (const alias of aliases) {
-    registry.set(alias.toLowerCase(), content);
+  // Register under all aliases (pointing to the same snippet info)
+  for (const alias of snippet.aliases) {
+    registry.set(alias.toLowerCase(), snippet);
+  }
+}
+
+/**
+ * Lists all unique snippets (by name) from the registry
+ *
+ * @param registry - The snippet registry
+ * @returns Array of unique snippet info objects
+ */
+export function listSnippets(registry: SnippetRegistry): SnippetInfo[] {
+  const seen = new Set<string>();
+  const snippets: SnippetInfo[] = [];
+
+  for (const snippet of registry.values()) {
+    if (!seen.has(snippet.name)) {
+      seen.add(snippet.name);
+      snippets.push(snippet);
+    }
+  }
+
+  return snippets;
+}
+
+/**
+ * Ensures the snippets directory exists
+ */
+export async function ensureSnippetsDir(projectDir?: string): Promise<string> {
+  const dir = projectDir ? join(projectDir, ".opencode", "snippet") : PATHS.SNIPPETS_DIR;
+  await mkdir(dir, { recursive: true });
+  return dir;
+}
+
+/**
+ * Creates a new snippet file
+ *
+ * @param name - The snippet name (without extension)
+ * @param content - The snippet content
+ * @param options - Optional metadata (aliases, description)
+ * @param projectDir - If provided, creates in project directory; otherwise global
+ * @returns The path to the created snippet file
+ */
+export async function createSnippet(
+  name: string,
+  content: string,
+  options: { aliases?: string[]; description?: string } = {},
+  projectDir?: string,
+): Promise<string> {
+  const dir = await ensureSnippetsDir(projectDir);
+  const filePath = join(dir, `${name}${CONFIG.SNIPPET_EXTENSION}`);
+
+  // Build frontmatter if we have metadata
+  const frontmatter: SnippetFrontmatter = {};
+  if (options.aliases?.length) {
+    frontmatter.aliases = options.aliases;
+  }
+  if (options.description) {
+    frontmatter.description = options.description;
+  }
+
+  // Create file content with frontmatter if needed
+  let fileContent: string;
+  if (Object.keys(frontmatter).length > 0) {
+    fileContent = matter.stringify(content, frontmatter);
+  } else {
+    fileContent = content;
+  }
+
+  await writeFile(filePath, fileContent, "utf-8");
+  logger.info("Created snippet", { name, path: filePath });
+
+  return filePath;
+}
+
+/**
+ * Deletes a snippet file
+ *
+ * @param name - The snippet name (without extension)
+ * @param projectDir - If provided, looks in project directory first; otherwise global
+ * @returns The path of the deleted file, or null if not found
+ */
+export async function deleteSnippet(name: string, projectDir?: string): Promise<string | null> {
+  // Try project directory first if provided
+  if (projectDir) {
+    const projectPath = join(
+      projectDir,
+      ".opencode",
+      "snippet",
+      `${name}${CONFIG.SNIPPET_EXTENSION}`,
+    );
+    try {
+      await unlink(projectPath);
+      logger.info("Deleted project snippet", { name, path: projectPath });
+      return projectPath;
+    } catch {
+      // Not found in project, try global
+    }
+  }
+
+  // Try global directory
+  const globalPath = join(PATHS.SNIPPETS_DIR, `${name}${CONFIG.SNIPPET_EXTENSION}`);
+  try {
+    await unlink(globalPath);
+    logger.info("Deleted global snippet", { name, path: globalPath });
+    return globalPath;
+  } catch {
+    logger.warn("Snippet not found for deletion", { name });
+    return null;
+  }
+}
+
+/**
+ * Reloads snippets into the registry from disk
+ */
+export async function reloadSnippets(
+  registry: SnippetRegistry,
+  projectDir?: string,
+): Promise<void> {
+  registry.clear();
+  const fresh = await loadSnippets(projectDir);
+  for (const [key, value] of fresh) {
+    registry.set(key, value);
   }
 }

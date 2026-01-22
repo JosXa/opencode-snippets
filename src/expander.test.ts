@@ -1,10 +1,20 @@
 import { expandHashtags } from "../src/expander.js";
-import type { SnippetRegistry } from "../src/types.js";
+import type { SnippetInfo, SnippetRegistry } from "../src/types.js";
+
+/** Helper to create a SnippetInfo from just content */
+function snippet(content: string, name = "test"): SnippetInfo {
+  return { name, content, aliases: [], filePath: "", source: "global" };
+}
+
+/** Helper to create a registry from [key, content] pairs */
+function createRegistry(entries: [string, string][]): SnippetRegistry {
+  return new Map(entries.map(([key, content]) => [key, snippet(content, key)]));
+}
 
 describe("expandHashtags - Recursive Includes and Loop Detection", () => {
   describe("Basic expansion", () => {
     it("should expand a single hashtag", () => {
-      const registry: SnippetRegistry = new Map([["greeting", "Hello, World!"]]);
+      const registry = createRegistry([["greeting", "Hello, World!"]]);
 
       const result = expandHashtags("Say #greeting", registry);
 
@@ -12,7 +22,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should expand multiple hashtags in one text", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["greeting", "Hello"],
         ["name", "Alice"],
       ]);
@@ -23,7 +33,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should leave unknown hashtags unchanged", () => {
-      const registry: SnippetRegistry = new Map([["known", "content"]]);
+      const registry = createRegistry([["known", "content"]]);
 
       const result = expandHashtags("This is #known and #unknown", registry);
 
@@ -31,7 +41,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle empty text", () => {
-      const registry: SnippetRegistry = new Map([["test", "content"]]);
+      const registry = createRegistry([["test", "content"]]);
 
       const result = expandHashtags("", registry);
 
@@ -39,7 +49,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle text with no hashtags", () => {
-      const registry: SnippetRegistry = new Map([["test", "content"]]);
+      const registry = createRegistry([["test", "content"]]);
 
       const result = expandHashtags("No hashtags here", registry);
 
@@ -47,7 +57,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle case-insensitive hashtags", () => {
-      const registry: SnippetRegistry = new Map([["greeting", "Hello"]]);
+      const registry = createRegistry([["greeting", "Hello"]]);
 
       const result = expandHashtags("#Greeting #GREETING #greeting", registry);
 
@@ -57,7 +67,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
   describe("Recursive expansion", () => {
     it("should expand nested hashtags one level deep", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["outer", "Start #inner End"],
         ["inner", "Middle"],
       ]);
@@ -68,7 +78,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should expand nested hashtags multiple levels deep", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["level1", "L1 #level2"],
         ["level2", "L2 #level3"],
         ["level3", "L3 #level4"],
@@ -81,7 +91,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should expand multiple nested hashtags in one snippet", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["main", "Start #a and #b End"],
         ["a", "Content A"],
         ["b", "Content B"],
@@ -93,7 +103,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should expand complex nested structure", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["greeting", "#hello #name"],
         ["hello", "Hello"],
         ["name", "#firstname #lastname"],
@@ -109,7 +119,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
   describe("Loop detection - Direct cycles", () => {
     it("should detect and prevent simple self-reference", { timeout: 100 }, () => {
-      const registry: SnippetRegistry = new Map([["self", "I reference #self"]]);
+      const registry = createRegistry([["self", "I reference #self"]]);
 
       const result = expandHashtags("#self", registry);
 
@@ -119,7 +129,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should detect and prevent two-way circular reference", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["a", "A references #b"],
         ["b", "B references #a"],
       ]);
@@ -132,7 +142,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should detect and prevent three-way circular reference", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["a", "A -> #b"],
         ["b", "B -> #c"],
         ["c", "C -> #a"],
@@ -146,7 +156,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should detect loops in longer chains", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["a", "#b"],
         ["b", "#c"],
         ["c", "#d"],
@@ -163,7 +173,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
   describe("Loop detection - Complex scenarios", () => {
     it("should allow same snippet in different branches", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["main", "#branch1 and #branch2"],
         ["branch1", "B1 uses #shared"],
         ["branch2", "B2 uses #shared"],
@@ -177,7 +187,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle partial loops with valid branches", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["main", "#valid and #loop"],
         ["valid", "Valid content"],
         ["loop", "Loop #loop"],
@@ -191,7 +201,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle multiple independent loops", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["main", "#loop1 and #loop2"],
         ["loop1", "L1 #loop1"],
         ["loop2", "L2 #loop2"],
@@ -205,7 +215,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle nested loops", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["outer", "Outer #inner"],
         ["inner", "Inner #outer and #self"],
         ["self", "Self #self"],
@@ -222,7 +232,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle diamond pattern (same snippet reached via multiple paths)", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["top", "#left #right"],
         ["left", "Left #bottom"],
         ["right", "Right #bottom"],
@@ -236,7 +246,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle loop after valid expansion", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["a", "#b #c"],
         ["b", "Valid B"],
         ["c", "#d"],
@@ -259,7 +269,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle snippet with empty content", () => {
-      const registry: SnippetRegistry = new Map([["empty", ""]]);
+      const registry = createRegistry([["empty", ""]]);
 
       const result = expandHashtags("Before #empty After", registry);
 
@@ -267,7 +277,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle snippet containing only hashtags", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["only-refs", "#a #b"],
         ["a", "A"],
         ["b", "B"],
@@ -279,7 +289,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle hashtags at start, middle, and end", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["start", "Start"],
         ["middle", "Middle"],
         ["end", "End"],
@@ -291,7 +301,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle consecutive hashtags", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["a", "A"],
         ["b", "B"],
         ["c", "C"],
@@ -303,7 +313,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle hashtags with hyphens and underscores", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["my-snippet", "Hyphenated"],
         ["my_snippet", "Underscored"],
         ["my-complex_name", "Mixed"],
@@ -315,7 +325,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle hashtags with numbers", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["test123", "Test with numbers"],
         ["123test", "Numbers first"],
       ]);
@@ -326,7 +336,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should not expand hashtags in URLs", () => {
-      const registry: SnippetRegistry = new Map([["issue", "ISSUE"]]);
+      const registry = createRegistry([["issue", "ISSUE"]]);
 
       // Note: The current implementation WILL expand #issue in URLs
       // This test documents current behavior
@@ -336,7 +346,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle multiline content", () => {
-      const registry: SnippetRegistry = new Map([["multiline", "Line 1\nLine 2\nLine 3"]]);
+      const registry = createRegistry([["multiline", "Line 1\nLine 2\nLine 3"]]);
 
       const result = expandHashtags("Start\n#multiline\nEnd", registry);
 
@@ -344,7 +354,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle nested multiline content", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["outer", "Outer start\n#inner\nOuter end"],
         ["inner", "Inner line 1\nInner line 2"],
       ]);
@@ -357,7 +367,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
   describe("Real-world scenarios", () => {
     it("should expand code review template with nested snippets", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["review", "Code Review Checklist:\n#security\n#performance\n#tests"],
         ["security", "- Check for SQL injection\n- Validate input"],
         ["performance", "- Check for N+1 queries\n- Review algorithm complexity"],
@@ -373,7 +383,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should expand documentation template with shared components", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["doc", "# Documentation\n#header\n#body\n#footer"],
         ["header", "Author: #author\nDate: 2024-01-01"],
         ["author", "John Doe"],
@@ -389,7 +399,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     });
 
     it("should handle instruction composition", () => {
-      const registry: SnippetRegistry = new Map([
+      const registry = createRegistry([
         ["careful", "Think step by step. #verify"],
         ["verify", "Double-check your work."],
         ["complete", "Be thorough. #careful"],
@@ -408,9 +418,9 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       // Create a chain: level0 -> level1 -> level2 -> ... -> level49 -> "End"
       for (let i = 0; i < depth - 1; i++) {
-        registry.set(`level${i}`, `L${i} #level${i + 1}`);
+        registry.set(`level${i}`, snippet(`L${i} #level${i + 1}`, `level${i}`));
       }
-      registry.set(`level${depth - 1}`, "End");
+      registry.set(`level${depth - 1}`, snippet("End", `level${depth - 1}`));
 
       const result = expandHashtags("#level0", registry);
 
@@ -424,7 +434,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       const count = 100;
 
       for (let i = 0; i < count; i++) {
-        registry.set(`snippet${i}`, `Content${i}`);
+        registry.set(`snippet${i}`, snippet(`Content${i}`, `snippet${i}`));
       }
 
       const hashtags = Array.from({ length: count }, (_, i) => `#snippet${i}`).join(" ");
@@ -440,10 +450,10 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       const branches = 20;
 
       const children = Array.from({ length: branches }, (_, i) => `#child${i}`).join(" ");
-      registry.set("parent", children);
+      registry.set("parent", snippet(children, "parent"));
 
       for (let i = 0; i < branches; i++) {
-        registry.set(`child${i}`, `Child${i}`);
+        registry.set(`child${i}`, snippet(`Child${i}`, `child${i}`));
       }
 
       const result = expandHashtags("#parent", registry);
