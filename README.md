@@ -4,7 +4,6 @@
 
 > [!TIP]
 > **Share Your Snippets!**
-> 
 > Got a snippet that saves you time? Share yours or steal ideas from the community!
 > Browse and contribute in [GitHub Discussions](https://github.com/JosXa/opencode-snippets/discussions/categories/snippets).
 
