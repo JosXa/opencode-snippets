@@ -6,7 +6,7 @@
 
 As developers, we DRY (Don't Repeat Yourself) our code. We extract functions, create libraries, compose modules. Why should our prompts be any different?
 
-Stop copy-pasting the same instructions into every message. Snippets bring software engineering principles to prompt engineering:
+Stop copy-pasting (or worse, *typing* 🤢) the same instructions into every message. Snippets bring software engineering principles to prompt engineering:
 
 - 🔄 **DRY** - Write once, reuse everywhere
 - 🧩 **Composability** - Build complex prompts from simple pieces  
