@@ -55,7 +55,6 @@ export function createCommandExecuteHandler(
         case "ls":
           await handleListCommand(ctx);
           break;
-        case "help":
         default:
           await handleHelpCommand(ctx);
           break;
