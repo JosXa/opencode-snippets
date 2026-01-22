@@ -34,8 +34,8 @@ export function expandHashtags(
     expanded = expanded.replace(PATTERNS.HASHTAG, (match, name) => {
       const key = name.toLowerCase();
 
-      const content = registry.get(key);
-      if (content === undefined) {
+      const snippet = registry.get(key);
+      if (snippet === undefined) {
         // Unknown snippet - leave as-is
         return match;
       }
@@ -54,7 +54,7 @@ export function expandHashtags(
       expansionCounts.set(key, count);
 
       // Recursively expand any hashtags in the snippet content
-      const result = expandHashtags(content, registry, expansionCounts);
+      const result = expandHashtags(snippet.content, registry, expansionCounts);
 
       return result;
     });

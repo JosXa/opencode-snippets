@@ -1,4 +1,5 @@
 import type { Plugin } from "@opencode-ai/plugin";
+import { createCommandExecuteHandler } from "./src/commands.js";
 import { expandHashtags } from "./src/expander.js";
 import { loadSnippets } from "./src/loader.js";
 import { logger } from "./src/logger.js";
@@ -8,6 +9,7 @@ import { executeShellCommands, type ShellContext } from "./src/shell.js";
  * Snippets Plugin for OpenCode
  *
  * Expands hashtag-based shortcuts in user messages into predefined text snippets.
+ * Also provides /snippet command for managing snippets.
  *
  * @see https://github.com/JosXa/opencode-snippets for full documentation
  */
@@ -22,7 +24,22 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     snippetCount: snippets.size,
   });
 
+  // Create command handler
+  const commandHandler = createCommandExecuteHandler(ctx.client, snippets, ctx.directory);
+
   return {
+    // Register /snippet command
+    config: async (opencodeConfig) => {
+      opencodeConfig.command ??= {};
+      opencodeConfig.command.snippet = {
+        template: "",
+        description: "Manage text snippets (create, delete, list, help)",
+      };
+    },
+
+    // Handle /snippet command execution
+    "command.execute.before": commandHandler,
+
     "chat.message": async (_input, output) => {
       // Only process user messages, never assistant messages
       if (output.message.role !== "user") return;
