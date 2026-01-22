@@ -25,7 +25,7 @@ body:
       description: "Describe your workflow or give an example"
       placeholder: "I add this when asking the AI to refactor critical code paths..."
     validations:
-      required: true
+      required: false
 
   - type: markdown
     attributes:
