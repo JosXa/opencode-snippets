@@ -1,0 +1,53 @@
+name: Check Discussion Title
+
+on:
+  discussion:
+    types: [created]
+
+jobs:
+  check-title:
+    if: github.event.discussion.category.slug == 'snippets'
+    runs-on: ubuntu-latest
+    permissions:
+      discussions: write
+    steps:
+      - name: Check title format
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.discussion.title;
+            const discussionId = context.payload.discussion.node_id;
+            
+            const isUnchanged = title === 'your-snippet-file-name.md';
+            const endsWithMd = title.endsWith('.md');
+            
+            if (isUnchanged || !endsWithMd) {
+              let message = `👋 Thanks for sharing your snippet!\n\n`;
+              
+              if (isUnchanged) {
+                message += `It looks like you kept the default title. `;
+              } else if (!endsWithMd) {
+                message += `It looks like your title doesn't end with \`.md\`. `;
+              }
+              
+              message += `Please update the title to match your snippet's filename (e.g., \`careful.md\`, \`tdd.md\`).\n\n`;
+              message += `This helps others find and use your snippet!`;
+              
+              // Add comment to discussion
+              await github.graphql(`
+                mutation($discussionId: ID!, $body: String!) {
+                  addDiscussionComment(input: {discussionId: $discussionId, body: $body}) {
+                    comment {
+                      id
+                    }
+                  }
+                }
+              `, {
+                discussionId,
+                body: message
+              });
+              
+              console.log('Posted reminder comment about title format');
+            } else {
+              console.log('Title format is valid:', title);
+            }
