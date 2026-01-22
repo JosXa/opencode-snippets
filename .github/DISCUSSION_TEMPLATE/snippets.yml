@@ -1,15 +1,6 @@
 title: ".md"
 labels: ["community-snippet"]
 body:
-  - type: input
-    id: description
-    attributes:
-      label: Description
-      description: "One sentence explaining what this snippet does"
-      placeholder: "Encourages careful, step-by-step reasoning"
-    validations:
-      required: true
-
   - type: textarea
     id: content
     attributes:
