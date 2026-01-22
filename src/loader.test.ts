@@ -177,6 +177,98 @@ Project careful`,
       expect(snippets.get("cautious")?.content).toBeUndefined();
       expect(snippets.size).toBe(2);
     });
+
+    describe("alias vs aliases frontmatter key", () => {
+      it("should accept 'alias' (singular) key as string", async () => {
+        await writeFile(
+          join(globalSnippetDir, "single-alias.md"),
+          `---
+alias: shortcut
+---
+Content with singular alias key`,
+        );
+
+        const snippets = await loadSnippets(undefined, globalSnippetDir);
+
+        expect(snippets.size).toBe(2);
+        expect(snippets.get("single-alias")?.content).toBe("Content with singular alias key");
+        expect(snippets.get("shortcut")?.content).toBe("Content with singular alias key");
+      });
+
+      it("should accept 'alias' (singular) key as array", async () => {
+        await writeFile(
+          join(globalSnippetDir, "alias-array.md"),
+          `---
+alias:
+  - one
+  - two
+---
+Content with alias array`,
+        );
+
+        const snippets = await loadSnippets(undefined, globalSnippetDir);
+
+        expect(snippets.size).toBe(3);
+        expect(snippets.get("alias-array")?.content).toBe("Content with alias array");
+        expect(snippets.get("one")?.content).toBe("Content with alias array");
+        expect(snippets.get("two")?.content).toBe("Content with alias array");
+      });
+
+      it("should accept 'aliases' (plural) key as string", async () => {
+        await writeFile(
+          join(globalSnippetDir, "aliases-string.md"),
+          `---
+aliases: shortcut
+---
+Content with aliases string`,
+        );
+
+        const snippets = await loadSnippets(undefined, globalSnippetDir);
+
+        expect(snippets.size).toBe(2);
+        expect(snippets.get("aliases-string")?.content).toBe("Content with aliases string");
+        expect(snippets.get("shortcut")?.content).toBe("Content with aliases string");
+      });
+
+      it("should accept 'aliases' (plural) key as array", async () => {
+        await writeFile(
+          join(globalSnippetDir, "aliases-array.md"),
+          `---
+aliases:
+  - one
+  - two
+---
+Content with aliases array`,
+        );
+
+        const snippets = await loadSnippets(undefined, globalSnippetDir);
+
+        expect(snippets.size).toBe(3);
+        expect(snippets.get("aliases-array")?.content).toBe("Content with aliases array");
+        expect(snippets.get("one")?.content).toBe("Content with aliases array");
+        expect(snippets.get("two")?.content).toBe("Content with aliases array");
+      });
+
+      it("should prefer 'aliases' over 'alias' when both are present", async () => {
+        await writeFile(
+          join(globalSnippetDir, "both-keys.md"),
+          `---
+aliases:
+  - preferred
+alias: ignored
+---
+Content with both keys`,
+        );
+
+        const snippets = await loadSnippets(undefined, globalSnippetDir);
+
+        expect(snippets.size).toBe(2);
+        expect(snippets.get("both-keys")?.content).toBe("Content with both keys");
+        expect(snippets.get("preferred")?.content).toBe("Content with both keys");
+        // The 'alias' key should be ignored since 'aliases' takes precedence
+        expect(snippets.get("ignored")).toBeUndefined();
+      });
+    });
   });
 
   describe("Edge cases", () => {
