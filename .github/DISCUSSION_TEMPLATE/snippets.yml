@@ -1,6 +1,15 @@
 title: ".md"
 labels: ["community-snippet"]
 body:
+  - type: input
+    id: description
+    attributes:
+      label: Description
+      description: "One sentence explaining what this snippet does"
+      placeholder: "Encourages careful, step-by-step reasoning"
+    validations:
+      required: true
+
   - type: textarea
     id: content
     attributes:
@@ -15,9 +24,15 @@ body:
         ---
         Your expanded snippet content here.
         ```
+    validations:
+      required: true
 
-        **When I use it:**
-        <!-- 👇 Describe your workflow or give an example. -->
+  - type: textarea
+    id: use-case
+    attributes:
+      label: When do you use it?
+      description: "Describe your workflow or give an example"
+      placeholder: "I add this when asking the AI to refactor critical code paths..."
     validations:
       required: true
 
