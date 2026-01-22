@@ -6,7 +6,7 @@
 > **Share Your Snippets!**
 > 
 > Got a snippet that saves you time? Share it with the community!
-> Browse and contribute at [GitHub Discussions](https://github.com/JosXa/opencode-snippets/discussions/categories/snippets).
+> Browse and contribute in [GitHub Discussions](https://github.com/JosXa/opencode-snippets/discussions/categories/snippets).
 
 ## Why Snippets?
 
