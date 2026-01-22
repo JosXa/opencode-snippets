@@ -1,0 +1,66 @@
+title: ".md"
+labels: ["community-snippet"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing your snippet!
+
+        **Looking for inspiration?** Check out the [built-in examples](https://github.com/JosXa/opencode-snippets/tree/main/.opencode/snippet) or browse what others have shared.
+
+  - type: input
+    id: filename
+    attributes:
+      label: Filename
+      description: "The markdown filename for your snippet (without .md)"
+      placeholder: "careful"
+    validations:
+      required: true
+
+  - type: input
+    id: description
+    attributes:
+      label: Description
+      description: "One sentence explaining what this snippet does"
+      placeholder: "Encourages careful, step-by-step reasoning"
+    validations:
+      required: true
+
+  - type: input
+    id: aliases
+    attributes:
+      label: Aliases
+      description: "Comma-separated alternative triggers (optional)"
+      placeholder: "safe, cautious"
+
+  - type: textarea
+    id: content
+    attributes:
+      label: Snippet content
+      description: "The expanded text (without frontmatter - we'll generate that from the fields above)"
+      placeholder: |
+        Think step by step. Double-check your work before making changes.
+        Ask clarifying questions if anything is ambiguous.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: When do you use it?
+      description: "Describe your workflow or give an example"
+      placeholder: "I add this when asking the AI to refactor critical code paths..."
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ### Tips for Great Snippets
+        - **Keep them focused** - one snippet, one purpose
+        - **Make them composable** - reference other snippets with `#hashtag`
+        - **Use shell commands** for dynamic context: `` !`git branch --show-current` ``
+
+        ---
+
+        Join the [Discord Forum](https://discord.com/channels/1391832426048651334/1463378026833379409)!
