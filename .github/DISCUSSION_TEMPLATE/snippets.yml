@@ -1,4 +1,4 @@
-title: ".md"
+title: "your-snippet-file-name.md"
 labels: ["community-snippet"]
 body:
   - type: textarea
