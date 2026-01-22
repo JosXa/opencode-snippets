@@ -95,12 +95,12 @@ async function handleAddCommand(ctx: CommandContext): Promise<void> {
         "Examples:\n" +
         "  /snippet add greeting\n" +
         '  /snippet add bye "see you later"\n' +
-        '  /snippet add hi "hello there" --alias=hello,hey\n' +
+        '  /snippet add hi "hello there" --aliases hello,hey\n' +
         '  /snippet add fix "fix imports" --project\n\n' +
         "Options:\n" +
-        "  --project       Add to project directory (.opencode/snippet/)\n" +
-        "  --alias=X,Y,Z   Add aliases (comma-separated)\n" +
-        '  --desc="..."    Add a description',
+        "  --project             Add to project directory (.opencode/snippet/)\n" +
+        "  --aliases X,Y,Z       Add aliases (comma-separated)\n" +
+        '  --desc "..."          Add a description',
     );
     return;
   }
@@ -116,16 +116,29 @@ async function handleAddCommand(ctx: CommandContext): Promise<void> {
   const aliases: string[] = [];
   let description: string | undefined;
 
-  for (const arg of args.slice(1)) {
-    if (arg.startsWith("--alias=")) {
-      const values = arg
-        .slice(8)
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      aliases.push(...values);
-    } else if (arg.startsWith("--desc=")) {
-      description = arg.slice(7);
+  // Parse arguments with --param value syntax
+  for (let i = 1; i < args.length; i++) {
+    const arg = args[i];
+
+    // Handle --aliases
+    if (arg === "--aliases") {
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith("--")) {
+        const values = nextArg
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        aliases.push(...values);
+        i++; // Skip the value arg
+      }
+    }
+    // Handle --desc or --description
+    else if (arg === "--desc" || arg === "--description") {
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith("--")) {
+        description = nextArg;
+        i++; // Skip the value arg
+      }
     }
   }
 
@@ -296,8 +309,8 @@ Usage: /snippet <command> [options]
 Commands:
   add <name> ["content"] [options]
     --project               Add to project directory (default: global)
-    --alias=X,Y,Z           Add aliases (comma-separated)
-    --desc="..."            Add a description
+    --aliases X,Y,Z         Add aliases (comma-separated)
+    --desc "..."            Add a description
 
   delete <name>             Delete a snippet
   list                      List all available snippets
@@ -314,7 +327,7 @@ Usage in messages:
 Examples:
   /snippet add greeting
   /snippet add bye "see you later"
-  /snippet add hi "hello there" --alias=hello,hey
+  /snippet add hi "hello there" --aliases hello,hey
   /snippet add fix "fix imports" --project
   /snippet delete old-snippet
   /snippet list`;
