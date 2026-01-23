@@ -2,7 +2,8 @@
   "name": "opencode-snippets",
   "version": "1.4.2",
   "description": "Hashtag-based snippet expansion plugin for OpenCode - instant inline text shortcuts",
-  "main": "index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "type": "module",
   "engines": {
     "bun": ">=1.0.0"
@@ -42,11 +43,13 @@
     "typescript": "^5"
   },
   "scripts": {
-    "build": "tsgo --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsgo --noEmit",
     "format:check": "biome check .",
     "format:fix": "biome check --write .",
     "ai:check": "bun run format:fix",
-    "prepare": "husky"
+    "prepare": "husky",
+    "prepublishOnly": "bun run build"
   },
-  "files": ["index.ts", "src/**/*.ts"]
+  "files": ["dist"]
 }
