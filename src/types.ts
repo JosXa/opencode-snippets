@@ -1,3 +1,10 @@
+import type { createOpencodeClient } from "@opencode-ai/sdk";
+
+/**
+ * OpenCode client type from the SDK
+ */
+export type OpencodeClient = ReturnType<typeof createOpencodeClient>;
+
 /**
  * A snippet with its content and metadata
  */

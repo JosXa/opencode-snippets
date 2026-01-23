@@ -3,13 +3,13 @@ import { PATHS } from "./constants.js";
 import { createSnippet, deleteSnippet, listSnippets, reloadSnippets } from "./loader.js";
 import { logger } from "./logger.js";
 import { sendIgnoredMessage } from "./notification.js";
-import type { SnippetRegistry } from "./types.js";
+import type { OpencodeClient, SnippetRegistry } from "./types.js";
 
 /** Marker error to indicate command was handled */
 const COMMAND_HANDLED_MARKER = "__SNIPPETS_COMMAND_HANDLED__";
 
 interface CommandContext {
-  client: any;
+  client: OpencodeClient;
   sessionId: string;
   args: string[];
   rawArguments: string;
@@ -115,7 +115,7 @@ function parseAliasValue(value: string): string[] {
  * Creates the command execute handler for the snippets command
  */
 export function createCommandExecuteHandler(
-  client: any,
+  client: OpencodeClient,
   snippets: SnippetRegistry,
   projectDir?: string,
 ) {

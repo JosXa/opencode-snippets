@@ -1,4 +1,5 @@
 import { logger } from "./logger.js";
+import type { OpencodeClient } from "./types.js";
 
 /**
  * Sends a message that will be displayed but ignored by the AI
@@ -9,7 +10,7 @@ import { logger } from "./logger.js";
  * @param text - The text to display
  */
 export async function sendIgnoredMessage(
-  client: any,
+  client: OpencodeClient,
   sessionId: string,
   text: string,
 ): Promise<void> {
