@@ -4,7 +4,7 @@ Guide through complete release workflow for opencode-snippets.
 
 ## Usage
 
-`/release` - Automatically bump patch version and publish a new release
+`/release` - Analyze commits and automatically bump version (patch/minor/major based on conventional commits)
 
 ## Instructions
 
@@ -24,10 +24,16 @@ You are guiding the user through the complete release workflow. Follow these ste
 
 Execute these steps IN ORDER:
 
-**Step 1: Version Bump**
-- Read current version from `package.json` (e.g., "1.4.1")
-- Parse as semver and increment patch version: X.Y.Z → X.Y.(Z+1)
-- Example: 1.4.1 → 1.4.2
+**Step 1: Determine Version Bump**
+- Read current version from `package.json`
+- Get commits since last tag: `git log $(git describe --tags --abbrev=0)..HEAD --oneline`
+- Analyze commit messages using conventional commits:
+  - **MAJOR** (X.0.0): Any commit with `BREAKING CHANGE:` in body OR `!` after type (e.g., `feat!:`, `fix!:`)
+  - **MINOR** (X.Y.0): Any commit starting with `feat:` or `feat(scope):`
+  - **PATCH** (X.Y.Z): Everything else (`fix:`, `chore:`, `docs:`, `refactor:`, etc.)
+- Use the HIGHEST bump level found (major > minor > patch)
+- **If MAJOR version bump detected:** STOP and ask user for confirmation before proceeding. Explain which commit(s) triggered the major bump.
+- Calculate new version and inform user: "Bumping version: 1.4.1 → 1.5.0 (minor - new features detected)"
 - Use Edit tool to update package.json with new version
 - Commit: `git add package.json && git commit -m "chore: bump version to vX.Y.Z"`
 
