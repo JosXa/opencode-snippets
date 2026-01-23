@@ -90,13 +90,15 @@ async function loadSnippetFile(
     const content = parsed.content.trim();
     const frontmatter = parsed.data as SnippetFrontmatter;
 
-    // Handle aliases as string or array
+    // Handle aliases: accept both 'aliases' (plural) and 'alias' (singular)
+    // Prefer 'aliases' if both are present
     let aliases: string[] = [];
-    if (frontmatter.aliases) {
-      if (Array.isArray(frontmatter.aliases)) {
-        aliases = frontmatter.aliases;
+    const aliasSource = frontmatter.aliases ?? frontmatter.alias;
+    if (aliasSource) {
+      if (Array.isArray(aliasSource)) {
+        aliases = aliasSource;
       } else {
-        aliases = [frontmatter.aliases];
+        aliases = [aliasSource];
       }
     }
 

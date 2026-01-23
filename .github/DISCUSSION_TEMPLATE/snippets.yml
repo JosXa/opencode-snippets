@@ -5,8 +5,7 @@ body:
     id: content
     attributes:
       label: Snippet content
-      value: |
-        <!-- 👇 Please keep the markdown code fence! Anything inside you can overwrite. -->
+      placeholder: |
         ```markdown
         ---
         description: "What it does: One sentence explaining the use case."

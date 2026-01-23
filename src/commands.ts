@@ -1,3 +1,4 @@
+import { parseCommandArgs } from "./arg-parser.js";
 import { PATHS } from "./constants.js";
 import { createSnippet, deleteSnippet, listSnippets, reloadSnippets } from "./loader.js";
 import { logger } from "./logger.js";
@@ -17,6 +18,100 @@ interface CommandContext {
 }
 
 /**
+ * Parsed options from the add command arguments
+ */
+export interface AddOptions {
+  aliases: string[];
+  description: string | undefined;
+  isProject: boolean;
+}
+
+/**
+ * Parses option arguments for the add command.
+ *
+ * Supports all variations per PR #13 requirements:
+ * - --alias=a,b, --alias a,b, --aliases=a,b, --aliases a,b
+ * - --desc=x, --desc x, --description=x, --description x
+ * - --project flag
+ *
+ * @param args - Array of parsed arguments (after name and content extraction)
+ * @returns Parsed options object
+ */
+export function parseAddOptions(args: string[]): AddOptions {
+  const result: AddOptions = {
+    aliases: [],
+    description: undefined,
+    isProject: false,
+  };
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+
+    // Skip non-option arguments
+    if (!arg.startsWith("--")) {
+      continue;
+    }
+
+    // Handle --project flag
+    if (arg === "--project") {
+      result.isProject = true;
+      continue;
+    }
+
+    // Check for --alias or --aliases
+    if (arg === "--alias" || arg === "--aliases") {
+      // Space-separated: --alias a,b
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith("--")) {
+        result.aliases = parseAliasValue(nextArg);
+        i++; // Skip the value arg
+      }
+      continue;
+    }
+
+    if (arg.startsWith("--alias=") || arg.startsWith("--aliases=")) {
+      // Equals syntax: --alias=a,b
+      const value = arg.includes("--aliases=")
+        ? arg.slice("--aliases=".length)
+        : arg.slice("--alias=".length);
+      result.aliases = parseAliasValue(value);
+      continue;
+    }
+
+    // Check for --desc or --description
+    if (arg === "--desc" || arg === "--description") {
+      // Space-separated: --desc value
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith("--")) {
+        result.description = nextArg;
+        i++; // Skip the value arg
+      }
+      continue;
+    }
+
+    if (arg.startsWith("--desc=") || arg.startsWith("--description=")) {
+      // Equals syntax: --desc=value
+      const value = arg.startsWith("--description=")
+        ? arg.slice("--description=".length)
+        : arg.slice("--desc=".length);
+      result.description = value;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Parse comma-separated alias values, trimming whitespace
+ */
+function parseAliasValue(value: string): string[] {
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
  * Creates the command execute handler for the snippets command
  */
 export function createCommandExecuteHandler(
@@ -27,7 +122,8 @@ export function createCommandExecuteHandler(
   return async (input: { command: string; sessionID: string; arguments: string }) => {
     if (input.command !== "snippet") return;
 
-    const args = input.arguments.split(/\s+/).filter(Boolean);
+    // Use shell-like argument parsing to handle quoted strings correctly
+    const args = parseCommandArgs(input.arguments);
     const subcommand = args[0]?.toLowerCase() || "help";
 
     const ctx: CommandContext = {
@@ -83,7 +179,7 @@ export function createCommandExecuteHandler(
  * Handle /snippet add <name> ["content"] [--project] [--alias=<alias>] [--desc=<description>]
  */
 async function handleAddCommand(ctx: CommandContext): Promise<void> {
-  const { client, sessionId, args, rawArguments, snippets, projectDir } = ctx;
+  const { client, sessionId, args, snippets, projectDir } = ctx;
 
   if (args.length === 0) {
     await sendIgnoredMessage(
@@ -106,47 +202,30 @@ async function handleAddCommand(ctx: CommandContext): Promise<void> {
 
   const name = args[0];
 
-  // Extract quoted content from raw arguments
-  // Match content between quotes after the subcommand and name
-  const quotedMatch = rawArguments.match(/(?:add|create|new)\s+\S+\s+"([^"]+)"/i);
-  const content = quotedMatch ? quotedMatch[1] : "";
+  // Extract content: second argument if it doesn't start with --
+  // The arg-parser already handles quoted strings, so content is clean
+  let content = "";
+  let optionArgs = args.slice(1);
 
-  const isProject = args.includes("--project");
-  const aliases: string[] = [];
-  let description: string | undefined;
-
-  // Parse arguments with --param value syntax
-  for (let i = 1; i < args.length; i++) {
-    const arg = args[i];
-
-    // Handle --aliases
-    if (arg === "--aliases") {
-      const nextArg = args[i + 1];
-      if (nextArg && !nextArg.startsWith("--")) {
-        const values = nextArg
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean);
-        aliases.push(...values);
-        i++; // Skip the value arg
-      }
-    }
-    // Handle --desc or --description
-    else if (arg === "--desc" || arg === "--description") {
-      const nextArg = args[i + 1];
-      if (nextArg && !nextArg.startsWith("--")) {
-        description = nextArg;
-        i++; // Skip the value arg
-      }
-    }
+  if (args[1] && !args[1].startsWith("--")) {
+    content = args[1];
+    optionArgs = args.slice(2);
   }
 
+  // Parse all options using the new parser
+  const options = parseAddOptions(optionArgs);
+
   // Default to global, --project puts it in project directory
-  const targetDir = isProject ? projectDir : undefined;
-  const location = isProject && projectDir ? "project" : "global";
+  const targetDir = options.isProject ? projectDir : undefined;
+  const location = options.isProject && projectDir ? "project" : "global";
 
   try {
-    const filePath = await createSnippet(name, content, { aliases, description }, targetDir);
+    const filePath = await createSnippet(
+      name,
+      content,
+      { aliases: options.aliases, description: options.description },
+      targetDir,
+    );
 
     // Reload snippets
     await reloadSnippets(snippets, projectDir);
@@ -157,8 +236,8 @@ async function handleAddCommand(ctx: CommandContext): Promise<void> {
     } else {
       message += "\n\nEdit the file to add your snippet content.";
     }
-    if (aliases.length > 0) {
-      message += `\nAliases: ${aliases.join(", ")}`;
+    if (options.aliases.length > 0) {
+      message += `\nAliases: ${options.aliases.join(", ")}`;
     }
 
     await sendIgnoredMessage(client, sessionId, message);

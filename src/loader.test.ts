@@ -258,4 +258,95 @@ Content`,
       expect(Array.isArray(Array.from(snippets.keys()))).toBe(true);
     });
   });
+
+  // PR #13 requirement: accept both 'alias' and 'aliases' in frontmatter
+  describe("Frontmatter alias/aliases normalization", () => {
+    it("accepts 'alias' as string (singular form)", async () => {
+      await writeFile(
+        join(globalSnippetDir, "greeting.md"),
+        `---
+alias: hi
+---
+Hello there!`,
+      );
+
+      const snippets = await loadSnippets(undefined, globalSnippetDir);
+
+      expect(snippets.size).toBe(2);
+      expect(snippets.get("greeting")?.content).toBe("Hello there!");
+      expect(snippets.get("hi")?.content).toBe("Hello there!");
+    });
+
+    it("accepts 'alias' as array (singular form)", async () => {
+      await writeFile(
+        join(globalSnippetDir, "greeting.md"),
+        `---
+alias:
+  - hi
+  - hello
+---
+Hello there!`,
+      );
+
+      const snippets = await loadSnippets(undefined, globalSnippetDir);
+
+      expect(snippets.size).toBe(3);
+      expect(snippets.get("greeting")?.content).toBe("Hello there!");
+      expect(snippets.get("hi")?.content).toBe("Hello there!");
+      expect(snippets.get("hello")?.content).toBe("Hello there!");
+    });
+
+    it("accepts 'aliases' as string (existing behavior)", async () => {
+      await writeFile(
+        join(globalSnippetDir, "greeting.md"),
+        `---
+aliases: hi
+---
+Hello there!`,
+      );
+
+      const snippets = await loadSnippets(undefined, globalSnippetDir);
+
+      expect(snippets.size).toBe(2);
+      expect(snippets.get("greeting")?.content).toBe("Hello there!");
+      expect(snippets.get("hi")?.content).toBe("Hello there!");
+    });
+
+    it("accepts 'aliases' as array (existing behavior)", async () => {
+      await writeFile(
+        join(globalSnippetDir, "greeting.md"),
+        `---
+aliases:
+  - hi
+  - hello
+---
+Hello there!`,
+      );
+
+      const snippets = await loadSnippets(undefined, globalSnippetDir);
+
+      expect(snippets.size).toBe(3);
+      expect(snippets.get("greeting")?.content).toBe("Hello there!");
+      expect(snippets.get("hi")?.content).toBe("Hello there!");
+      expect(snippets.get("hello")?.content).toBe("Hello there!");
+    });
+
+    it("prefers 'aliases' over 'alias' if both present", async () => {
+      await writeFile(
+        join(globalSnippetDir, "greeting.md"),
+        `---
+alias: ignored
+aliases: used
+---
+Hello there!`,
+      );
+
+      const snippets = await loadSnippets(undefined, globalSnippetDir);
+
+      expect(snippets.size).toBe(2);
+      expect(snippets.get("greeting")?.content).toBe("Hello there!");
+      expect(snippets.get("used")?.content).toBe("Hello there!");
+      expect(snippets.has("ignored")).toBe(false);
+    });
+  });
 });
