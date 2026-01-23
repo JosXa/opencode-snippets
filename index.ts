@@ -33,7 +33,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
       opencodeConfig.command ??= {};
       opencodeConfig.command.snippet = {
         template: "",
-        description: "Manage text snippets (create, delete, list, help)",
+        description: "Manage text snippets (add, delete, list, help)",
       };
     },
 
