@@ -1,23 +1,65 @@
-import { describe, expect, it } from "bun:test";
-import type { Message, Part, UserMessage } from "@opencode-ai/sdk";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { Hooks, PluginInput } from "@opencode-ai/plugin";
+import type { Config, Message, Part, UserMessage } from "@opencode-ai/sdk";
 import { SnippetsPlugin } from "./index.js";
 
+/** Temp directory for test snippets */
+let tempDir: string;
+let globalSnippetDir: string;
+let projectSnippetDir: string;
+
 /** Mock OpenCode plugin context */
-function createMockContext(snippetsDir?: string) {
+function createMockContext(snippetsDir?: string): PluginInput {
   return {
-    client: {} as unknown,
-    project: {} as unknown,
+    client: {} as PluginInput["client"],
+    project: {
+      id: "test-project",
+      worktree: "/test/worktree",
+      time: { created: new Date().toISOString() },
+    },
     directory: snippetsDir || "/test/project",
     worktree: "/test/worktree",
     serverUrl: new URL("http://localhost:3000"),
-    $: {} as unknown,
+    $: {} as PluginInput["$"],
+  };
+}
+
+/** Create a mock context that uses temp snippet directory */
+function createMockContextWithSnippets(): PluginInput {
+  return {
+    client: {} as PluginInput["client"],
+    project: {
+      id: "test-project",
+      worktree: join(tempDir, "project"),
+      time: { created: new Date().toISOString() },
+    },
+    directory: join(tempDir, "project"),
+    worktree: join(tempDir, "project"),
+    serverUrl: new URL("http://localhost:3000"),
+    $: {} as PluginInput["$"],
   };
 }
 
 describe("SnippetsPlugin - Hook Integration", () => {
-  describe("chat.message hook", () => {
+  describe("chat.message hook with actual snippets", () => {
+    beforeEach(async () => {
+      // Create temp directory structure
+      tempDir = join(import.meta.dir, ".test-snippets-" + Date.now());
+      projectSnippetDir = join(tempDir, "project", ".opencode", "snippet");
+      await mkdir(projectSnippetDir, { recursive: true });
+
+      // Create test snippet
+      await writeFile(join(projectSnippetDir, "greeting.md"), "Hello, I am a test snippet!");
+    });
+
+    afterEach(async () => {
+      await rm(tempDir, { recursive: true, force: true });
+    });
+
     it("should expand hashtags in user messages", async () => {
-      const ctx = createMockContext();
+      const ctx = createMockContextWithSnippets();
       const hooks = await SnippetsPlugin(ctx);
 
       const userMessage: UserMessage = {
@@ -27,11 +69,9 @@ describe("SnippetsPlugin - Hook Integration", () => {
 
       const output = {
         message: userMessage,
-        parts: [{ type: "text", text: "#test hashtag" }] as Part[],
+        parts: [{ type: "text", text: "Say #greeting please" }] as Part[],
       };
 
-      // Note: This test would need actual snippet loading
-      // For now it verifies the hook exists and can be called
       await hooks["chat.message"]?.(
         {
           sessionID: "test-session",
@@ -39,8 +79,8 @@ describe("SnippetsPlugin - Hook Integration", () => {
         output,
       );
 
-      // Hook should process the parts
-      expect(hooks["chat.message"]).toBeDefined();
+      // Snippet should be expanded
+      expect(output.parts[0].text).toBe("Say Hello, I am a test snippet! please");
     });
 
     it("should not process assistant messages", async () => {
@@ -69,19 +109,36 @@ describe("SnippetsPlugin - Hook Integration", () => {
     });
   });
 
-  describe("experimental.chat.messages.transform hook", () => {
+  describe("experimental.chat.messages.transform hook with actual snippets", () => {
+    beforeEach(async () => {
+      // Create temp directory structure
+      tempDir = join(import.meta.dir, ".test-snippets-transform-" + Date.now());
+      projectSnippetDir = join(tempDir, "project", ".opencode", "snippet");
+      await mkdir(projectSnippetDir, { recursive: true });
+
+      // Create test snippet
+      await writeFile(
+        join(projectSnippetDir, "question-hint.md"),
+        "Please provide detailed information.",
+      );
+    });
+
+    afterEach(async () => {
+      await rm(tempDir, { recursive: true, force: true });
+    });
+
     it("should expand hashtags in all user messages", async () => {
-      const ctx = createMockContext();
+      const ctx = createMockContextWithSnippets();
       const hooks = await SnippetsPlugin(ctx);
 
-      const messages = [
+      const messages: Array<{ info: Message; parts: Part[] }> = [
         {
           info: { role: "user" } as Message,
-          parts: [{ type: "text", text: "#test in question response" }] as Part[],
+          parts: [{ type: "text", text: "#question-hint Answer my query" }] as Part[],
         },
         {
           info: { role: "assistant" } as Message,
-          parts: [{ type: "text", text: "#test should not expand" }] as Part[],
+          parts: [{ type: "text", text: "#question-hint should not expand" }] as Part[],
         },
       ];
 
@@ -89,18 +146,22 @@ describe("SnippetsPlugin - Hook Integration", () => {
 
       await hooks["experimental.chat.messages.transform"]?.({}, output);
 
-      // Hook should exist
-      expect(hooks["experimental.chat.messages.transform"]).toBeDefined();
+      // User message should be expanded
+      expect(messages[0].parts[0].text).toBe(
+        "Please provide detailed information. Answer my query",
+      );
 
       // Assistant message should remain unchanged
-      expect(messages[1].parts[0].text).toBe("#test should not expand");
+      expect(messages[1].parts[0].text).toBe("#question-hint should not expand");
     });
 
     it("should handle empty messages array", async () => {
-      const ctx = createMockContext();
+      const ctx = createMockContextWithSnippets();
       const hooks = await SnippetsPlugin(ctx);
 
-      const output = { messages: [] };
+      const output: { messages: Array<{ info: Message; parts: Part[] }> } = {
+        messages: [],
+      };
 
       await hooks["experimental.chat.messages.transform"]?.({}, output);
 
@@ -108,41 +169,74 @@ describe("SnippetsPlugin - Hook Integration", () => {
     });
   });
 
-  describe("tool.execute.after hook", () => {
+  describe("tool.execute.after hook with actual snippets", () => {
+    /** Type for tool.execute.after hook input */
+    type ToolExecuteInput = {
+      tool: string;
+      sessionID: string;
+      callID: string;
+    };
+
+    /** Type for tool.execute.after hook output */
+    type ToolExecuteOutput = {
+      title: string;
+      output: string;
+      metadata: unknown;
+    };
+
+    beforeEach(async () => {
+      // Create temp directory structure
+      tempDir = join(import.meta.dir, ".test-snippets-tool-" + Date.now());
+      projectSnippetDir = join(tempDir, "project", ".opencode", "snippet");
+      await mkdir(projectSnippetDir, { recursive: true });
+
+      // Create test snippet
+      await writeFile(
+        join(projectSnippetDir, "skill-helper.md"),
+        "This is additional context from a snippet.",
+      );
+    });
+
+    afterEach(async () => {
+      await rm(tempDir, { recursive: true, force: true });
+    });
+
     it("should expand hashtags in skill tool output", async () => {
-      const ctx = createMockContext();
+      const ctx = createMockContextWithSnippets();
       const hooks = await SnippetsPlugin(ctx);
 
-      const input = {
+      const input: ToolExecuteInput = {
         tool: "skill",
         sessionID: "test-session",
         callID: "call-123",
       };
 
-      const output = {
+      const output: ToolExecuteOutput = {
         title: "Skill Loaded",
-        output: "Skill content with #test hashtag",
+        output: "Skill content with #skill-helper for extra help",
         metadata: {},
       };
 
       await hooks["tool.execute.after"]?.(input, output);
 
-      // Hook should exist
-      expect(hooks["tool.execute.after"]).toBeDefined();
+      // Snippet should be expanded in skill output
+      expect(output.output).toBe(
+        "Skill content with This is additional context from a snippet. for extra help",
+      );
     });
 
     it("should not process non-skill tools", async () => {
-      const ctx = createMockContext();
+      const ctx = createMockContextWithSnippets();
       const hooks = await SnippetsPlugin(ctx);
 
-      const input = {
+      const input: ToolExecuteInput = {
         tool: "bash",
         sessionID: "test-session",
         callID: "call-123",
       };
 
-      const originalOutput = "Command output with #test";
-      const output = {
+      const originalOutput = "Command output with #skill-helper";
+      const output: ToolExecuteOutput = {
         title: "Bash Result",
         output: originalOutput,
         metadata: {},
@@ -155,16 +249,16 @@ describe("SnippetsPlugin - Hook Integration", () => {
     });
 
     it("should handle empty skill output", async () => {
-      const ctx = createMockContext();
+      const ctx = createMockContextWithSnippets();
       const hooks = await SnippetsPlugin(ctx);
 
-      const input = {
+      const input: ToolExecuteInput = {
         tool: "skill",
         sessionID: "test-session",
         callID: "call-123",
       };
 
-      const output = {
+      const output: ToolExecuteOutput = {
         title: "Skill Loaded",
         output: "",
         metadata: {},
@@ -177,16 +271,16 @@ describe("SnippetsPlugin - Hook Integration", () => {
     });
 
     it("should handle non-string skill output", async () => {
-      const ctx = createMockContext();
+      const ctx = createMockContextWithSnippets();
       const hooks = await SnippetsPlugin(ctx);
 
-      const input = {
+      const input: ToolExecuteInput = {
         tool: "skill",
         sessionID: "test-session",
         callID: "call-123",
       };
 
-      const output = {
+      const output: ToolExecuteOutput = {
         title: "Skill Loaded",
         output: { data: "object output" } as unknown as string,
         metadata: {},
@@ -204,12 +298,12 @@ describe("SnippetsPlugin - Hook Integration", () => {
       const ctx = createMockContext();
       const hooks = await SnippetsPlugin(ctx);
 
-      const config = {} as unknown as Record<string, unknown>;
-      await hooks.config?.(config);
+      const config: Partial<Config> = {};
+      await hooks.config?.(config as Config);
 
       expect(config.command).toBeDefined();
-      expect(config.command.snippet).toBeDefined();
-      expect(config.command.snippet.description).toContain("snippet");
+      expect(config.command?.snippet).toBeDefined();
+      expect(config.command?.snippet?.description).toContain("snippet");
     });
   });
 });
