@@ -47,22 +47,11 @@ Execute these steps IN ORDER:
 - Push tag: `git push origin vX.Y.Z`
 - Inform user that CI will now run publish workflow
 
-**Step 4: Write Release Notes**
-- Ask user to provide release notes content
-- Write release notes to `release-notes-X.Y.Z.md`
-- Format should include:
-  - Version header (## vX.Y.Z)
-  - Release highlights/changes
-  - Any breaking changes
-  - Bug fixes
-  - Other notable changes
+**Step 4: Create GitHub Release**
+- Use `gh release create vX.Y.Z --title "vX.Y.Z" --generate-notes` to auto-generate release notes from commits
+- DO NOT ask user for release notes - always use `--generate-notes`
 
-**Step 5: Create GitHub Release**
-- MUST use Write tool to create release notes file FIRST
-- Then run: `gh release create vX.Y.Z --title "vX.Y.Z" --notes-file release-notes-X.Y.Z.md`
-- NEVER use heredoc or pipes - always use --notes-file with actual file
-
-**Step 6: Monitor and Verify**
+**Step 5: Monitor and Verify**
 - Check publish workflow: `gh run list --limit 5`
 - Wait for publish workflow to complete
 - Open release page: `start https://github.com/JosXa/opencode-snippets/releases/tag/vX.Y.Z`

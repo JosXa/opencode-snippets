@@ -8,23 +8,13 @@ ALWAYS use Bun. NEVER npm. Commands: `bun install`, `bun add`, `bun remove`, `bu
 
 # Release Workflow
 
-1. Commit all changes
-2. Bump version in `package.json`
-3. Commit version bump
-4. Push to remote
-5. Verify CI passes: `gh run list --limit 3`
-6. Create git tag: `git tag vX.Y.Z`
-7. Push tag: `git push origin vX.Y.Z`
-8. Write release notes to `release-notes-X.Y.Z.md`
-9. Create GitHub release: `gh release create vX.Y.Z --title "vX.Y.Z" --notes-file release-notes-X.Y.Z.md`
-10. Monitor Actions: `gh run list --limit 3` or `gh run watch`
+Use `/release` command - it handles everything automatically.
 
-Publish to npm is automated via CI on tag push.
-
-## Post-Release Verification
-
-1. Verify publish workflow success: `gh run list --limit 5`
-2. Open release page: `start https://github.com/JosXa/opencode-snippets/releases/tag/vX.Y.Z`
+Key points:
+- Version bump is auto-determined from conventional commits
+- Release notes are auto-generated via `gh release create --generate-notes`
+- NEVER ask user for release notes content
+- Publish to npm is automated via CI on tag push
 
 ## Recovery: Tag Pushed While CI Failing
 
