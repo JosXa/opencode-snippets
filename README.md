@@ -291,6 +291,17 @@ DEBUG_SNIPPETS=true opencode
 
 Logs are written to `~/.config/opencode/logs/snippets/daily/`.
 
+## Where Snippets Work
+
+Snippets expand in all user input contexts:
+
+- ✅ **Regular chat messages** - Your main messages to OpenCode
+- ✅ **Question tool responses** - When OpenCode asks you a question and you respond
+- ✅ **Skills** - When the `skill` tool loads skill content (`.opencode/skills/*/SKILL.md`)
+- ✅ **Slash commands** - When referencing snippets inside command templates
+
+This means you can use snippets consistently everywhere you communicate with OpenCode, whether answering questions, loading skills, or sending regular messages.
+
 ## Behavior Notes
 
 - Snippets are loaded once at plugin startup
