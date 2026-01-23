@@ -293,6 +293,7 @@ Logs are written to `~/.config/opencode/logs/snippets/daily/`.
 
 ## Behavior Notes
 
+- Snippets expand everywhere: regular chat, question responses, skills, and slash commands
 - Snippets are loaded once at plugin startup
 - Hashtag matching is **case-insensitive** (`#Hello` = `#hello`)
 - Unknown hashtags are left unchanged

@@ -27,6 +27,44 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   // Create command handler
   const commandHandler = createCommandExecuteHandler(ctx.client, snippets, ctx.directory);
 
+  /**
+   * Processes text parts for snippet expansion and shell command execution
+   */
+  const processTextParts = async (parts: Array<{ type: string; text?: string }>) => {
+    const messageStart = performance.now();
+    let expandTimeTotal = 0;
+    let shellTimeTotal = 0;
+    let processedParts = 0;
+
+    for (const part of parts) {
+      if (part.type === "text" && part.text) {
+        // 1. Expand hashtags recursively with loop detection
+        const expandStart = performance.now();
+        const expansionResult = expandHashtags(part.text, snippets);
+        part.text = assembleMessage(expansionResult);
+        const expandTime = performance.now() - expandStart;
+        expandTimeTotal += expandTime;
+
+        // 2. Execute shell commands: !`command`
+        const shellStart = performance.now();
+        part.text = await executeShellCommands(part.text, ctx as unknown as ShellContext);
+        const shellTime = performance.now() - shellStart;
+        shellTimeTotal += shellTime;
+        processedParts += 1;
+      }
+    }
+
+    const totalTime = performance.now() - messageStart;
+    if (processedParts > 0) {
+      logger.debug("Text parts processing complete", {
+        totalTimeMs: totalTime.toFixed(2),
+        snippetExpandTimeMs: expandTimeTotal.toFixed(2),
+        shellTimeMs: shellTimeTotal.toFixed(2),
+        processedParts,
+      });
+    }
+  };
+
   return {
     // Register /snippet command
     config: async (opencodeConfig) => {
@@ -43,37 +81,33 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     "chat.message": async (_input, output) => {
       // Only process user messages, never assistant messages
       if (output.message.role !== "user") return;
+      await processTextParts(output.parts);
+    },
 
-      const messageStart = performance.now();
-      let expandTimeTotal = 0;
-      let shellTimeTotal = 0;
-      let processedParts = 0;
-
-      for (const part of output.parts) {
-        if (part.type === "text" && part.text) {
-          // 1. Expand hashtags recursively with loop detection
-          const expandStart = performance.now();
-          const expansionResult = expandHashtags(part.text, snippets);
-          part.text = assembleMessage(expansionResult);
-          const expandTime = performance.now() - expandStart;
-          expandTimeTotal += expandTime;
-
-          // 2. Execute shell commands: !`command`
-          const shellStart = performance.now();
-          part.text = await executeShellCommands(part.text, ctx as unknown as ShellContext);
-          const shellTime = performance.now() - shellStart;
-          shellTimeTotal += shellTime;
-          processedParts += 1;
+    // Process all messages including question tool responses
+    "experimental.chat.messages.transform": async (_input, output) => {
+      for (const message of output.messages) {
+        // Only process user messages
+        if (message.info.role === "user") {
+          await processTextParts(message.parts);
         }
       }
+    },
 
-      const totalTime = performance.now() - messageStart;
-      if (processedParts > 0) {
-        logger.debug("Message processing complete", {
-          totalTimeMs: totalTime.toFixed(2),
-          snippetExpandTimeMs: expandTimeTotal.toFixed(2),
-          shellTimeMs: shellTimeTotal.toFixed(2),
-          processedParts,
+    // Process skill tool output to expand snippets in skill content
+    "tool.execute.after": async (input, output) => {
+      // Only process the skill tool
+      if (input.tool !== "skill") return;
+
+      // The skill tool returns markdown content in its output
+      // Expand hashtags in the skill content
+      if (typeof output.output === "string" && output.output.trim()) {
+        const expansionResult = expandHashtags(output.output, snippets);
+        output.output = assembleMessage(expansionResult);
+
+        logger.debug("Skill content expanded", {
+          tool: input.tool,
+          callID: input.callID,
         });
       }
     },
