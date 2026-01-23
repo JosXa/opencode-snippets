@@ -1,17 +1,16 @@
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import type { Message, Part, UserMessage } from "@opencode-ai/sdk";
 import { SnippetsPlugin } from "./index.js";
-import type { SnippetRegistry } from "./src/types.js";
 
 /** Mock OpenCode plugin context */
 function createMockContext(snippetsDir?: string) {
   return {
-    client: {} as any,
-    project: {} as any,
+    client: {} as unknown,
+    project: {} as unknown,
     directory: snippetsDir || "/test/project",
     worktree: "/test/worktree",
     serverUrl: new URL("http://localhost:3000"),
-    $: {} as any,
+    $: {} as unknown,
   };
 }
 
@@ -51,7 +50,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
       const assistantMessage = {
         role: "assistant",
         content: "Test response",
-      } as any;
+      } as unknown as UserMessage;
 
       const output = {
         message: assistantMessage,
@@ -189,7 +188,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
 
       const output = {
         title: "Skill Loaded",
-        output: { data: "object output" } as any,
+        output: { data: "object output" } as unknown as string,
         metadata: {},
       };
 
@@ -205,7 +204,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
       const ctx = createMockContext();
       const hooks = await SnippetsPlugin(ctx);
 
-      const config = {} as any;
+      const config = {} as unknown as Record<string, unknown>;
       await hooks.config?.(config);
 
       expect(config.command).toBeDefined();
