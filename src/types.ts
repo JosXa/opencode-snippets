@@ -36,3 +36,27 @@ export interface SnippetFrontmatter {
   /** Optional description of what this snippet does */
   description?: string;
 }
+
+/**
+ * Parsed snippet content with inline text and prepend/append blocks
+ */
+export interface ParsedSnippetContent {
+  /** Content outside blocks (replaces hashtag inline) */
+  inline: string;
+  /** <prepend> block contents in document order */
+  prepend: string[];
+  /** <append> block contents in document order */
+  append: string[];
+}
+
+/**
+ * Result of expanding hashtags, including collected prepend/append blocks
+ */
+export interface ExpansionResult {
+  /** The inline-expanded text */
+  text: string;
+  /** Collected prepend blocks from all expanded snippets */
+  prepend: string[];
+  /** Collected append blocks from all expanded snippets */
+  append: string[];
+}

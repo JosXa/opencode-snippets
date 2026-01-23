@@ -1,4 +1,4 @@
-import { expandHashtags } from "../src/expander.js";
+import { assembleMessage, expandHashtags, parseSnippetBlocks } from "../src/expander.js";
 import type { SnippetInfo, SnippetRegistry } from "../src/types.js";
 
 /** Helper to create a SnippetInfo from just content */
@@ -18,7 +18,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("Say #greeting", registry);
 
-      expect(result).toBe("Say Hello, World!");
+      expect(result.text).toBe("Say Hello, World!");
     });
 
     it("should expand multiple hashtags in one text", () => {
@@ -29,7 +29,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#greeting, #name!", registry);
 
-      expect(result).toBe("Hello, Alice!");
+      expect(result.text).toBe("Hello, Alice!");
     });
 
     it("should leave unknown hashtags unchanged", () => {
@@ -37,7 +37,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("This is #known and #unknown", registry);
 
-      expect(result).toBe("This is content and #unknown");
+      expect(result.text).toBe("This is content and #unknown");
     });
 
     it("should handle empty text", () => {
@@ -45,7 +45,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("", registry);
 
-      expect(result).toBe("");
+      expect(result.text).toBe("");
     });
 
     it("should handle text with no hashtags", () => {
@@ -53,7 +53,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("No hashtags here", registry);
 
-      expect(result).toBe("No hashtags here");
+      expect(result.text).toBe("No hashtags here");
     });
 
     it("should handle case-insensitive hashtags", () => {
@@ -61,7 +61,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#Greeting #GREETING #greeting", registry);
 
-      expect(result).toBe("Hello Hello Hello");
+      expect(result.text).toBe("Hello Hello Hello");
     });
   });
 
@@ -74,7 +74,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#outer", registry);
 
-      expect(result).toBe("Start Middle End");
+      expect(result.text).toBe("Start Middle End");
     });
 
     it("should expand nested hashtags multiple levels deep", () => {
@@ -87,7 +87,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#level1", registry);
 
-      expect(result).toBe("L1 L2 L3 L4");
+      expect(result.text).toBe("L1 L2 L3 L4");
     });
 
     it("should expand multiple nested hashtags in one snippet", () => {
@@ -99,7 +99,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#main", registry);
 
-      expect(result).toBe("Start Content A and Content B End");
+      expect(result.text).toBe("Start Content A and Content B End");
     });
 
     it("should expand complex nested structure", () => {
@@ -113,7 +113,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#greeting", registry);
 
-      expect(result).toBe("Hello John Doe");
+      expect(result.text).toBe("Hello John Doe");
     });
   });
 
@@ -125,7 +125,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       // Loop detected after 15 expansions, #self left as-is
       const expected = `${"I reference ".repeat(15)}#self`;
-      expect(result).toBe(expected);
+      expect(result.text).toBe(expected);
     });
 
     it("should detect and prevent two-way circular reference", () => {
@@ -138,7 +138,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       // Should expand alternating A and B 15 times then stop
       const expected = `${"A references B references ".repeat(15)}#a`;
-      expect(result).toBe(expected);
+      expect(result.text).toBe(expected);
     });
 
     it("should detect and prevent three-way circular reference", () => {
@@ -152,7 +152,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       // Should expand cycling through A, B, C 15 times then stop
       const expected = `${"A -> B -> C -> ".repeat(15)}#a`;
-      expect(result).toBe(expected);
+      expect(result.text).toBe(expected);
     });
 
     it("should detect loops in longer chains", () => {
@@ -167,7 +167,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       const result = expandHashtags("#a", registry);
 
       // Should expand until loop detected
-      expect(result).toBe("#b");
+      expect(result.text).toBe("#b");
     });
   });
 
@@ -183,7 +183,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       const result = expandHashtags("#main", registry);
 
       // #shared should be expanded in both branches
-      expect(result).toBe("B1 uses Shared content and B2 uses Shared content");
+      expect(result.text).toBe("B1 uses Shared content and B2 uses Shared content");
     });
 
     it("should handle partial loops with valid branches", () => {
@@ -197,7 +197,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       // Valid expands once, loop expands 15 times
       const expected = `Valid content and ${"Loop ".repeat(15)}#loop`;
-      expect(result).toBe(expected);
+      expect(result.text).toBe(expected);
     });
 
     it("should handle multiple independent loops", () => {
@@ -211,7 +211,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       // Each loop expands 15 times independently
       const expected = `${"L1 ".repeat(15)}#loop1 and ${"L2 ".repeat(15)}#loop2`;
-      expect(result).toBe(expected);
+      expect(result.text).toBe(expected);
     });
 
     it("should handle nested loops", () => {
@@ -225,10 +225,10 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       // Complex nested loop - outer/inner cycle 15 times, plus self cycles
       // This is complex expansion behavior, just verify it doesn't hang
-      expect(result).toContain("Outer");
-      expect(result).toContain("Inner");
-      expect(result).toContain("#outer");
-      expect(result).toContain("#self");
+      expect(result.text).toContain("Outer");
+      expect(result.text).toContain("Inner");
+      expect(result.text).toContain("#outer");
+      expect(result.text).toContain("#self");
     });
 
     it("should handle diamond pattern (same snippet reached via multiple paths)", () => {
@@ -242,7 +242,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       const result = expandHashtags("#top", registry);
 
       // Diamond: top -> left -> bottom, top -> right -> bottom
-      expect(result).toBe("Left Bottom Right Bottom");
+      expect(result.text).toBe("Left Bottom Right Bottom");
     });
 
     it("should handle loop after valid expansion", () => {
@@ -255,7 +255,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#a", registry);
 
-      expect(result).toBe("Valid B #c");
+      expect(result.text).toBe("Valid B #c");
     });
   });
 
@@ -265,7 +265,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#anything", registry);
 
-      expect(result).toBe("#anything");
+      expect(result.text).toBe("#anything");
     });
 
     it("should handle snippet with empty content", () => {
@@ -273,7 +273,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("Before #empty After", registry);
 
-      expect(result).toBe("Before  After");
+      expect(result.text).toBe("Before  After");
     });
 
     it("should handle snippet containing only hashtags", () => {
@@ -285,7 +285,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#only-refs", registry);
 
-      expect(result).toBe("A B");
+      expect(result.text).toBe("A B");
     });
 
     it("should handle hashtags at start, middle, and end", () => {
@@ -297,7 +297,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#start text #middle text #end", registry);
 
-      expect(result).toBe("Start text Middle text End");
+      expect(result.text).toBe("Start text Middle text End");
     });
 
     it("should handle consecutive hashtags", () => {
@@ -309,7 +309,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#a#b#c", registry);
 
-      expect(result).toBe("ABC");
+      expect(result.text).toBe("ABC");
     });
 
     it("should handle hashtags with hyphens and underscores", () => {
@@ -321,7 +321,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#my-snippet #my_snippet #my-complex_name", registry);
 
-      expect(result).toBe("Hyphenated Underscored Mixed");
+      expect(result.text).toBe("Hyphenated Underscored Mixed");
     });
 
     it("should handle hashtags with numbers", () => {
@@ -332,7 +332,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#test123 #123test", registry);
 
-      expect(result).toBe("Test with numbers Numbers first");
+      expect(result.text).toBe("Test with numbers Numbers first");
     });
 
     it("should not expand hashtags in URLs", () => {
@@ -342,7 +342,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       // This test documents current behavior
       const result = expandHashtags("See https://github.com/user/repo/issues/#issue", registry);
 
-      expect(result).toBe("See https://github.com/user/repo/issues/ISSUE");
+      expect(result.text).toBe("See https://github.com/user/repo/issues/ISSUE");
     });
 
     it("should handle multiline content", () => {
@@ -350,7 +350,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("Start\n#multiline\nEnd", registry);
 
-      expect(result).toBe("Start\nLine 1\nLine 2\nLine 3\nEnd");
+      expect(result.text).toBe("Start\nLine 1\nLine 2\nLine 3\nEnd");
     });
 
     it("should handle nested multiline content", () => {
@@ -361,7 +361,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#outer", registry);
 
-      expect(result).toBe("Outer start\nInner line 1\nInner line 2\nOuter end");
+      expect(result.text).toBe("Outer start\nInner line 1\nInner line 2\nOuter end");
     });
   });
 
@@ -376,10 +376,10 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#review", registry);
 
-      expect(result).toContain("Code Review Checklist:");
-      expect(result).toContain("Check for SQL injection");
-      expect(result).toContain("Check for N+1 queries");
-      expect(result).toContain("Unit tests present");
+      expect(result.text).toContain("Code Review Checklist:");
+      expect(result.text).toContain("Check for SQL injection");
+      expect(result.text).toContain("Check for N+1 queries");
+      expect(result.text).toContain("Unit tests present");
     });
 
     it("should expand documentation template with shared components", () => {
@@ -394,8 +394,8 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       const result = expandHashtags("#doc", registry);
 
       // #author should be expanded in both header and footer
-      expect(result).toContain("Author: John Doe");
-      expect(result).toContain("Contact: John Doe");
+      expect(result.text).toContain("Author: John Doe");
+      expect(result.text).toContain("Contact: John Doe");
     });
 
     it("should handle instruction composition", () => {
@@ -407,7 +407,9 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("Instructions: #complete", registry);
 
-      expect(result).toBe("Instructions: Be thorough. Think step by step. Double-check your work.");
+      expect(result.text).toBe(
+        "Instructions: Be thorough. Think step by step. Double-check your work.",
+      );
     });
   });
 
@@ -424,9 +426,9 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
 
       const result = expandHashtags("#level0", registry);
 
-      expect(result).toContain("L0");
-      expect(result).toContain("End");
-      expect(result.split(" ").length).toBe(depth);
+      expect(result.text).toContain("L0");
+      expect(result.text).toContain("End");
+      expect(result.text.split(" ").length).toBe(depth);
     });
 
     it("should handle many snippets in one text", () => {
@@ -440,9 +442,9 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       const hashtags = Array.from({ length: count }, (_, i) => `#snippet${i}`).join(" ");
       const result = expandHashtags(hashtags, registry);
 
-      expect(result.split(" ").length).toBe(count);
-      expect(result).toContain("Content0");
-      expect(result).toContain(`Content${count - 1}`);
+      expect(result.text.split(" ").length).toBe(count);
+      expect(result.text).toContain("Content0");
+      expect(result.text).toContain(`Content${count - 1}`);
     });
 
     it("should handle wide branching (many children)", () => {
@@ -459,8 +461,378 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       const result = expandHashtags("#parent", registry);
 
       for (let i = 0; i < branches; i++) {
-        expect(result).toContain(`Child${i}`);
+        expect(result.text).toContain(`Child${i}`);
       }
     });
+  });
+});
+
+describe("parseSnippetBlocks", () => {
+  describe("Basic parsing", () => {
+    it("should return full content as inline when no blocks present", () => {
+      const result = parseSnippetBlocks("Just some content");
+
+      expect(result).toEqual({
+        inline: "Just some content",
+        prepend: [],
+        append: [],
+      });
+    });
+
+    it("should extract append block and inline content", () => {
+      const result = parseSnippetBlocks("Inline text\n<append>\nAppend content\n</append>");
+
+      expect(result).toEqual({
+        inline: "Inline text",
+        prepend: [],
+        append: ["Append content"],
+      });
+    });
+
+    it("should extract prepend block and inline content", () => {
+      const result = parseSnippetBlocks("<prepend>\nPrepend content\n</prepend>\nInline text");
+
+      expect(result).toEqual({
+        inline: "Inline text",
+        prepend: ["Prepend content"],
+        append: [],
+      });
+    });
+
+    it("should extract both prepend and append blocks", () => {
+      const content = `<prepend>
+Before content
+</prepend>
+Inline text
+<append>
+After content
+</append>`;
+
+      const result = parseSnippetBlocks(content);
+
+      expect(result).toEqual({
+        inline: "Inline text",
+        prepend: ["Before content"],
+        append: ["After content"],
+      });
+    });
+
+    it("should handle multiple blocks of the same type", () => {
+      const content = `<append>
+First append
+</append>
+Inline
+<append>
+Second append
+</append>`;
+
+      const result = parseSnippetBlocks(content);
+
+      expect(result).toEqual({
+        inline: "Inline",
+        prepend: [],
+        append: ["First append", "Second append"],
+      });
+    });
+  });
+
+  describe("Edge cases", () => {
+    it("should handle empty inline (only blocks)", () => {
+      const content = `<append>
+Only append content
+</append>`;
+
+      const result = parseSnippetBlocks(content);
+
+      expect(result).toEqual({
+        inline: "",
+        prepend: [],
+        append: ["Only append content"],
+      });
+    });
+
+    it("should handle unclosed tag leniently (rest is block content)", () => {
+      const content = "Inline\n<append>\nUnclosed append content";
+
+      const result = parseSnippetBlocks(content);
+
+      expect(result).toEqual({
+        inline: "Inline",
+        prepend: [],
+        append: ["Unclosed append content"],
+      });
+    });
+
+    it("should return null for nested tags", () => {
+      const content = "<append>\n<prepend>\nnested\n</prepend>\n</append>";
+
+      const result = parseSnippetBlocks(content);
+
+      expect(result).toBeNull();
+    });
+
+    it("should trim content inside blocks", () => {
+      const content = "<append>\n  \n  Content with whitespace  \n  \n</append>";
+
+      const result = parseSnippetBlocks(content);
+
+      expect(result?.append[0]).toBe("Content with whitespace");
+    });
+
+    it("should trim inline content", () => {
+      const content = "  \n  Inline with whitespace  \n  ";
+
+      const result = parseSnippetBlocks(content);
+
+      expect(result?.inline).toBe("Inline with whitespace");
+    });
+
+    it("should be case-insensitive for tags", () => {
+      const content = "<APPEND>\nContent\n</APPEND>";
+
+      const result = parseSnippetBlocks(content);
+
+      expect(result).toEqual({
+        inline: "",
+        prepend: [],
+        append: ["Content"],
+      });
+    });
+
+    it("should handle empty blocks", () => {
+      const content = "Inline<append></append>";
+
+      const result = parseSnippetBlocks(content);
+
+      expect(result).toEqual({
+        inline: "Inline",
+        prepend: [],
+        append: [],
+      });
+    });
+  });
+
+  describe("Real-world content", () => {
+    it("should parse Jira MCP example", () => {
+      const content = `Jira MCP server
+<append>
+## Jira MCP Usage
+
+Use these custom field mappings when creating issues:
+- customfield_16570 => Acceptance Criteria
+- customfield_11401 => Team
+</append>`;
+
+      const result = parseSnippetBlocks(content);
+
+      expect(result?.inline).toBe("Jira MCP server");
+      expect(result?.append).toHaveLength(1);
+      expect(result?.append[0]).toContain("Jira MCP Usage");
+      expect(result?.append[0]).toContain("customfield_16570");
+    });
+  });
+});
+
+describe("assembleMessage", () => {
+  it("should assemble text only", () => {
+    const result = assembleMessage({
+      text: "Main content",
+      prepend: [],
+      append: [],
+    });
+
+    expect(result).toBe("Main content");
+  });
+
+  it("should assemble with append blocks", () => {
+    const result = assembleMessage({
+      text: "Main content",
+      prepend: [],
+      append: ["Appended section"],
+    });
+
+    expect(result).toBe("Main content\n\nAppended section");
+  });
+
+  it("should assemble with prepend blocks", () => {
+    const result = assembleMessage({
+      text: "Main content",
+      prepend: ["Prepended section"],
+      append: [],
+    });
+
+    expect(result).toBe("Prepended section\n\nMain content");
+  });
+
+  it("should assemble with both prepend and append", () => {
+    const result = assembleMessage({
+      text: "Main content",
+      prepend: ["Before"],
+      append: ["After"],
+    });
+
+    expect(result).toBe("Before\n\nMain content\n\nAfter");
+  });
+
+  it("should join multiple prepend blocks", () => {
+    const result = assembleMessage({
+      text: "Main",
+      prepend: ["First", "Second"],
+      append: [],
+    });
+
+    expect(result).toBe("First\n\nSecond\n\nMain");
+  });
+
+  it("should join multiple append blocks", () => {
+    const result = assembleMessage({
+      text: "Main",
+      prepend: [],
+      append: ["First", "Second"],
+    });
+
+    expect(result).toBe("Main\n\nFirst\n\nSecond");
+  });
+
+  it("should handle empty text with blocks", () => {
+    const result = assembleMessage({
+      text: "",
+      prepend: ["Before"],
+      append: ["After"],
+    });
+
+    expect(result).toBe("Before\n\nAfter");
+  });
+
+  it("should handle whitespace-only text with blocks", () => {
+    const result = assembleMessage({
+      text: "   ",
+      prepend: ["Before"],
+      append: ["After"],
+    });
+
+    expect(result).toBe("Before\n\nAfter");
+  });
+});
+
+describe("Prepend/Append integration with expandHashtags", () => {
+  it("should collect append blocks during expansion", () => {
+    const registry = createRegistry([
+      ["jira", "Jira MCP server\n<append>\nJira reference docs\n</append>"],
+    ]);
+
+    const result = expandHashtags("Create a ticket in #jira", registry);
+
+    expect(result.text).toBe("Create a ticket in Jira MCP server");
+    expect(result.append).toEqual(["Jira reference docs"]);
+  });
+
+  it("should collect prepend blocks during expansion", () => {
+    const registry = createRegistry([
+      ["context", "<prepend>\nImportant context\n</prepend>\nUse the context"],
+    ]);
+
+    const result = expandHashtags("#context please", registry);
+
+    expect(result.text).toBe("Use the context please");
+    expect(result.prepend).toEqual(["Important context"]);
+  });
+
+  it("should collect blocks from nested snippets", () => {
+    const registry = createRegistry([
+      ["outer", "Outer #inner text"],
+      ["inner", "Inner\n<append>\nInner's append\n</append>"],
+    ]);
+
+    const result = expandHashtags("#outer", registry);
+
+    expect(result.text).toBe("Outer Inner text");
+    expect(result.append).toEqual(["Inner's append"]);
+  });
+
+  it("should collect blocks from multiple snippets", () => {
+    const registry = createRegistry([
+      ["a", "A text\n<append>\nA's append\n</append>"],
+      ["b", "B text\n<append>\nB's append\n</append>"],
+    ]);
+
+    const result = expandHashtags("#a and #b", registry);
+
+    expect(result.text).toBe("A text and B text");
+    expect(result.append).toEqual(["A's append", "B's append"]);
+  });
+
+  it("should handle empty inline with only blocks", () => {
+    const registry = createRegistry([["ref", "<append>\nReference material\n</append>"]]);
+
+    const result = expandHashtags("Use #ref here", registry);
+
+    expect(result.text).toBe("Use  here");
+    expect(result.append).toEqual(["Reference material"]);
+  });
+
+  it("should assemble full message correctly", () => {
+    const registry = createRegistry([
+      ["jira", "Jira MCP server\n<append>\n## Jira Usage\n- Field mappings here\n</append>"],
+    ]);
+
+    const result = expandHashtags("Create a bug ticket in #jira about the memory leak", registry);
+    const assembled = assembleMessage(result);
+
+    expect(assembled).toBe(
+      "Create a bug ticket in Jira MCP server about the memory leak\n\n## Jira Usage\n- Field mappings here",
+    );
+  });
+
+  it("should collect multiple append blocks from single snippet", () => {
+    const registry = createRegistry([
+      ["multi", "Inline\n<append>\nFirst append\n</append>\n<append>\nSecond append\n</append>"],
+    ]);
+
+    const result = expandHashtags("#multi", registry);
+
+    expect(result.text).toBe("Inline");
+    expect(result.append).toEqual(["First append", "Second append"]);
+  });
+
+  it("should collect multiple prepend blocks from single snippet", () => {
+    const registry = createRegistry([
+      [
+        "multi",
+        "<prepend>\nFirst prepend\n</prepend>\n<prepend>\nSecond prepend\n</prepend>\nInline",
+      ],
+    ]);
+
+    const result = expandHashtags("#multi", registry);
+
+    expect(result.text).toBe("Inline");
+    expect(result.prepend).toEqual(["First prepend", "Second prepend"]);
+  });
+
+  it("should assemble multiple prepends and appends in correct order", () => {
+    const registry = createRegistry([
+      ["a", "<prepend>\nA prepend\n</prepend>\nA inline\n<append>\nA append\n</append>"],
+      ["b", "<prepend>\nB prepend\n</prepend>\nB inline\n<append>\nB append\n</append>"],
+    ]);
+
+    const result = expandHashtags("#a then #b", registry);
+    const assembled = assembleMessage(result);
+
+    // Prepends first (in order), then inline, then appends (in order)
+    expect(assembled).toBe(
+      "A prepend\n\nB prepend\n\nA inline then B inline\n\nA append\n\nB append",
+    );
+  });
+
+  it("should handle mix of snippets with and without blocks", () => {
+    const registry = createRegistry([
+      ["plain", "Plain content"],
+      ["withblocks", "Block inline\n<append>\nBlock append\n</append>"],
+    ]);
+
+    const result = expandHashtags("#plain and #withblocks", registry);
+    const assembled = assembleMessage(result);
+
+    expect(assembled).toBe("Plain content and Block inline\n\nBlock append");
   });
 });

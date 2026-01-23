@@ -190,6 +190,48 @@ I reference I reference I reference ... (15 times) ... I reference #self
 
 This generous limit supports complex snippet hierarchies while preventing infinite loops.
 
+### Prepend and Append Blocks
+
+For long reference material that would break your writing flow, use `<append>` blocks to place content at the end of your message:
+
+```markdown
+---
+aliases: jira-mcp
+---
+Jira MCP server
+<append>
+## Jira MCP Usage
+
+Use these custom field mappings when creating issues:
+- customfield_16570 => Acceptance Criteria
+- customfield_11401 => Team
+</append>
+```
+
+**Input:** `Create a bug ticket in #jira-mcp about the memory leak`
+
+**Output:**
+```
+Create a bug ticket in Jira MCP server about the memory leak
+
+## Jira MCP Usage
+
+Use these custom field mappings when creating issues:
+- customfield_16570 => Acceptance Criteria
+- customfield_11401 => Team
+```
+
+Write naturally—reference what you need mid-sentence—and the context follows at the bottom.
+
+Use `<prepend>` for content that should appear at the top of your message. Multiple blocks of the same type are concatenated in order of appearance.
+
+**Block behavior:**
+- Content outside `<prepend>`/`<append>` blocks replaces the hashtag inline
+- If a snippet has only blocks (no inline content), the hashtag is simply removed
+- Blocks from nested snippets are collected and assembled in the final message
+- Unclosed tags are handled leniently (rest of content becomes the block)
+- Nested `<prepend>` inside `<append>` (or vice versa) is an error—the hashtag is left unchanged
+
 ## Example Snippets
 
 ### `~/.config/opencode/snippet/context.md`

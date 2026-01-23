@@ -1,6 +1,6 @@
 import type { Plugin } from "@opencode-ai/plugin";
 import { createCommandExecuteHandler } from "./src/commands.js";
-import { expandHashtags } from "./src/expander.js";
+import { assembleMessage, expandHashtags } from "./src/expander.js";
 import { loadSnippets } from "./src/loader.js";
 import { logger } from "./src/logger.js";
 import { executeShellCommands, type ShellContext } from "./src/shell.js";
@@ -53,7 +53,8 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         if (part.type === "text" && part.text) {
           // 1. Expand hashtags recursively with loop detection
           const expandStart = performance.now();
-          part.text = expandHashtags(part.text, snippets);
+          const expansionResult = expandHashtags(part.text, snippets);
+          part.text = assembleMessage(expansionResult);
           const expandTime = performance.now() - expandStart;
           expandTimeTotal += expandTime;
 
