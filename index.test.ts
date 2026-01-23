@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Hooks, PluginInput } from "@opencode-ai/plugin";
+import type { PluginInput } from "@opencode-ai/plugin";
 import type { Config, Message, Part, UserMessage } from "@opencode-ai/sdk";
 import { SnippetsPlugin } from "./index.js";
 
 /** Temp directory for test snippets */
 let tempDir: string;
-let globalSnippetDir: string;
+let _globalSnippetDir: string;
 let projectSnippetDir: string;
 
 /** Mock OpenCode plugin context */
@@ -46,7 +46,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
   describe("chat.message hook with actual snippets", () => {
     beforeEach(async () => {
       // Create temp directory structure
-      tempDir = join(import.meta.dir, ".test-snippets-" + Date.now());
+      tempDir = join(import.meta.dir, `.test-snippets-${Date.now()}`);
       projectSnippetDir = join(tempDir, "project", ".opencode", "snippet");
       await mkdir(projectSnippetDir, { recursive: true });
 
@@ -112,7 +112,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
   describe("experimental.chat.messages.transform hook with actual snippets", () => {
     beforeEach(async () => {
       // Create temp directory structure
-      tempDir = join(import.meta.dir, ".test-snippets-transform-" + Date.now());
+      tempDir = join(import.meta.dir, `.test-snippets-transform-${Date.now()}`);
       projectSnippetDir = join(tempDir, "project", ".opencode", "snippet");
       await mkdir(projectSnippetDir, { recursive: true });
 
@@ -186,7 +186,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
 
     beforeEach(async () => {
       // Create temp directory structure
-      tempDir = join(import.meta.dir, ".test-snippets-tool-" + Date.now());
+      tempDir = join(import.meta.dir, `.test-snippets-tool-${Date.now()}`);
       projectSnippetDir = join(tempDir, "project", ".opencode", "snippet");
       await mkdir(projectSnippetDir, { recursive: true });
 
