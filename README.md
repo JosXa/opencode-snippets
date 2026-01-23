@@ -230,7 +230,7 @@ Use `<prepend>` for content that should appear at the top of your message. Multi
 - If a snippet has only blocks (no inline content), the hashtag is simply removed
 - Blocks from nested snippets are collected and assembled in the final message
 - Unclosed tags are handled leniently (rest of content becomes the block)
-- Nested `<prepend>` inside `<append>` (or vice versa) is an error—the hashtag is left unchanged
+- Nested blocks are not allowed—the hashtag is left unchanged
 
 ## Example Snippets
 

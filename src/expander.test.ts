@@ -563,8 +563,16 @@ Only append content
       });
     });
 
-    it("should return null for nested tags", () => {
+    it("should return null for nested tags (different types)", () => {
       const content = "<append>\n<prepend>\nnested\n</prepend>\n</append>";
+
+      const result = parseSnippetBlocks(content);
+
+      expect(result).toBeNull();
+    });
+
+    it("should return null for nested tags (same type)", () => {
+      const content = "<prepend>\n<prepend>\nnested\n</prepend>\n</prepend>";
 
       const result = parseSnippetBlocks(content);
 
