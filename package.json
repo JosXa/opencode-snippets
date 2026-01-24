@@ -29,7 +29,8 @@
   },
   "homepage": "https://github.com/JosXa/opencode-snippets#readme",
   "dependencies": {
-    "gray-matter": "^4.0.3"
+    "gray-matter": "^4.0.3",
+    "jsonc-parser": "^3.3.1"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": ">=1.0.0"
