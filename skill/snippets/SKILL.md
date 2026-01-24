@@ -34,6 +34,7 @@ Full config example with all options:
   // Logging settings
   "logging": {
     // Enable debug logging to file
+    // Logs are written to ~/.config/opencode/logs/snippets/daily/
     // Default: false
     "debug": false
   },

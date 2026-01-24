@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { readdir, unlink } from "node:fs/promises";
 import { basename, join } from "node:path";
 import matter from "gray-matter";
 import { CONFIG, PATHS } from "./constants.js";
@@ -84,7 +84,7 @@ async function loadSnippetFile(
   try {
     const name = basename(filename, CONFIG.SNIPPET_EXTENSION);
     const filePath = join(dir, filename);
-    const fileContent = await readFile(filePath, "utf-8");
+    const fileContent = await Bun.file(filePath).text();
     const parsed = matter(fileContent);
 
     const content = parsed.content.trim();
@@ -171,6 +171,7 @@ export function listSnippets(registry: SnippetRegistry): SnippetInfo[] {
  */
 export async function ensureSnippetsDir(projectDir?: string): Promise<string> {
   const dir = projectDir ? join(projectDir, ".opencode", "snippet") : PATHS.SNIPPETS_DIR;
+  const { mkdir } = await import("node:fs/promises");
   await mkdir(dir, { recursive: true });
   return dir;
 }
@@ -210,7 +211,7 @@ export async function createSnippet(
     fileContent = content;
   }
 
-  await writeFile(filePath, fileContent, "utf-8");
+  await Bun.write(filePath, fileContent);
   logger.info("Created snippet", { name, path: filePath });
 
   return filePath;

@@ -1,8 +1,9 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Plugin } from "@opencode-ai/plugin";
 import { createCommandExecuteHandler } from "./src/commands.js";
+import { loadConfig } from "./src/config.js";
 import { assembleMessage, expandHashtags } from "./src/expander.js";
 import { loadSnippets } from "./src/loader.js";
 import { logger } from "./src/logger.js";
@@ -14,22 +15,24 @@ const PLUGIN_ROOT = join(__dirname, "..");
 const SKILL_DIR = join(PLUGIN_ROOT, "skill");
 
 // Install skill to global config directory
-function installSkillToGlobal() {
+async function installSkillToGlobal() {
   const home = process.env.HOME || process.env.USERPROFILE || "";
   const globalSkillDir = join(home, ".config", "opencode", "skill", "snippets");
   const globalSkillPath = join(globalSkillDir, "SKILL.md");
   const sourceSkillPath = join(SKILL_DIR, "snippets", "SKILL.md");
 
   try {
-    if (!existsSync(sourceSkillPath)) {
+    const sourceFile = Bun.file(sourceSkillPath);
+    if (!(await sourceFile.exists())) {
       logger.debug("Source skill not found", { path: sourceSkillPath });
       return;
     }
 
     // Check if already installed with same content
-    if (existsSync(globalSkillPath)) {
-      const existing = readFileSync(globalSkillPath, "utf-8");
-      const source = readFileSync(sourceSkillPath, "utf-8");
+    const globalFile = Bun.file(globalSkillPath);
+    if (await globalFile.exists()) {
+      const existing = await globalFile.text();
+      const source = await sourceFile.text();
       if (existing === source) {
         logger.debug("Skill already installed", { path: globalSkillPath });
         return;
@@ -37,7 +40,7 @@ function installSkillToGlobal() {
     }
 
     mkdirSync(globalSkillDir, { recursive: true });
-    copyFileSync(sourceSkillPath, globalSkillPath);
+    await Bun.write(globalSkillPath, sourceFile);
     logger.debug("Installed snippets skill", { path: globalSkillPath });
   } catch (err) {
     logger.debug("Failed to install skill", { error: String(err) });
@@ -53,8 +56,16 @@ function installSkillToGlobal() {
  * @see https://github.com/JosXa/opencode-snippets for full documentation
  */
 export const SnippetsPlugin: Plugin = async (ctx) => {
-  // Install skill to global config so OpenCode discovers it
-  installSkillToGlobal();
+  // Load configuration (global + project-local override)
+  const config = loadConfig(ctx.directory);
+
+  // Apply config settings
+  logger.debugEnabled = config.logging.debug;
+
+  // Install skill to global config so OpenCode discovers it (if enabled)
+  if (config.installSkill) {
+    await installSkillToGlobal();
+  }
 
   // Load all snippets at startup (global + project directory)
   const startupStart = performance.now();
@@ -64,6 +75,8 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   logger.debug("Plugin startup complete", {
     startupTimeMs: startupTime.toFixed(2),
     snippetCount: snippets.size,
+    installSkill: config.installSkill,
+    debugLogging: config.logging.debug,
   });
 
   // Create command handler

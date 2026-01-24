@@ -281,15 +281,30 @@ Be extremely concise. No explanations unless asked.
 
 ## Configuration
 
-### Debug Logging
+The plugin can be configured via `config.jsonc` files:
 
-Enable debug logs by setting an environment variable:
+- **Global**: `~/.config/opencode/snippet/config.jsonc`
+- **Project**: `.opencode/snippet/config.jsonc` (overrides global settings)
 
-```bash
-DEBUG_SNIPPETS=true opencode
+A default config file is created automatically on first run.
+
+### Full Configuration Example
+
+```jsonc
+{
+  "$schema": "https://raw.githubusercontent.com/JosXa/opencode-snippets/main/schema/config.schema.json",
+  "logging": {
+    "debug": false // Enable debug logging (logs: ~/.config/opencode/logs/snippets/daily/)
+  },
+  "installSkill": true // Auto-install SKILL.md to ~/.config/opencode/skill/snippets/
+}
 ```
 
-Logs are written to `~/.config/opencode/logs/snippets/daily/`.
+All boolean settings accept: `true`, `false`, `"enabled"`, `"disabled"`
+
+### Debug Logging
+
+Logs are written to `~/.config/opencode/logs/snippets/daily/` when enabled.
 
 ## Behavior Notes
 

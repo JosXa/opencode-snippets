@@ -6,6 +6,14 @@ alwaysApply: true
 
 ALWAYS use Bun. NEVER npm. Commands: `bun install`, `bun add`, `bun remove`, `bun run`, `bun test`.
 
+# Bun APIs
+
+MUST use Bun-native APIs over Node.js equivalents:
+- `Bun.file()`, `Bun.write()` instead of `node:fs`
+- `Bun.spawn()` instead of `node:child_process`
+
+Use `node:*` imports only when no Bun equivalent exists.
+
 # Release Workflow
 
 Use `/release` command - it handles everything automatically.
@@ -22,3 +30,17 @@ MUST delete tag immediately:
 ```
 git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z
 ```
+
+# Style Guide
+
+**AVOID:**
+- `else` statements unless truly necessary
+- `try`/`catch` where possible
+- `any` type
+- `let` statements (prefer `const`)
+- Unnecessary destructuring
+
+**PREFER:**
+- Single-word variable names where possible
+- Keep logic in one function unless reusable/composable
+- Bun APIs (see above)

@@ -2,23 +2,13 @@ import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { PATHS } from "./constants.js";
 
-/**
- * Check if debug logging is enabled via environment variable
- */
-function isDebugEnabled(): boolean {
-  const value = process.env.DEBUG_SNIPPETS;
-  return value === "1" || value === "true";
-}
-
 export class Logger {
   private logDir: string;
+  debugEnabled: boolean;
 
-  constructor(logDirOverride?: string) {
+  constructor(logDirOverride?: string, debugEnabled = false) {
     this.logDir = logDirOverride ?? join(PATHS.CONFIG_DIR, "logs", "snippets");
-  }
-
-  get enabled(): boolean {
-    return isDebugEnabled();
+    this.debugEnabled = debugEnabled;
   }
 
   private ensureLogDir() {
@@ -74,7 +64,8 @@ export class Logger {
   }
 
   private write(level: string, component: string, message: string, data?: Record<string, unknown>) {
-    if (!this.enabled) return;
+    // Only write debug logs when debugEnabled, but always write other levels
+    if (level === "DEBUG" && !this.debugEnabled) return;
 
     try {
       this.ensureLogDir();

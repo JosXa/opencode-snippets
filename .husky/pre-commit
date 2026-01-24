@@ -4,5 +4,8 @@ bun run ai:check
 # Re-stage any files that were auto-fixed
 git add -u
 
+# Fail on any remaining biome errors or warnings
+bunx biome check --error-on-warnings .
+
 # Run tests
 bun test
