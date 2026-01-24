@@ -1,12 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  getGlobalConfigPath,
-  getProjectConfigPath,
-  loadConfig,
-  type SnippetsConfig,
-} from "./config.js";
+import { getGlobalConfigPath, getProjectConfigPath, loadConfig } from "./config.js";
 import { PATHS } from "./constants.js";
 
 // Use temp directories for testing to avoid affecting real config
