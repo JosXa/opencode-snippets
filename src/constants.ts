@@ -20,8 +20,22 @@ export const PATHS = {
   CONFIG_DIR: join(homedir(), ".config", "opencode"),
 
   /** Snippets directory */
-  SNIPPETS_DIR: join(join(homedir(), ".config", "opencode"), "snippet"),
+  SNIPPETS_DIR: join(homedir(), ".config", "opencode", "snippet"),
+
+  /** Global config file */
+  CONFIG_FILE_GLOBAL: join(homedir(), ".config", "opencode", "snippet", "config.jsonc"),
 } as const;
+
+/**
+ * Get project-specific paths based on project directory
+ */
+export function getProjectPaths(projectDir: string) {
+  const snippetDir = join(projectDir, ".opencode", "snippet");
+  return {
+    SNIPPETS_DIR: snippetDir,
+    CONFIG_FILE: join(snippetDir, "config.jsonc"),
+  };
+}
 
 /**
  * Plugin configuration

@@ -9,10 +9,44 @@ Reusable text blocks expanded via `#hashtag` in messages.
 
 ## Locations
 
+### Snippets
 - **Global**: `~/.config/opencode/snippet/*.md`
 - **Project**: `.opencode/snippet/*.md` (overrides global)
 
-## Format
+### Configuration
+- **Global**: `~/.config/opencode/snippet/config.jsonc`
+- **Project**: `.opencode/snippet/config.jsonc` (merges with global, project takes priority)
+
+### Logs
+- **Debug logs**: `~/.config/opencode/logs/snippets/daily/YYYY-MM-DD.log`
+
+## Configuration
+
+All boolean settings accept: `true`, `false`, `"enabled"`, `"disabled"`
+
+Full config example with all options:
+
+```jsonc
+{
+  // JSON Schema for editor autocompletion
+  "$schema": "https://raw.githubusercontent.com/JosXa/opencode-snippets/main/schema/config.schema.json",
+
+  // Logging settings
+  "logging": {
+    // Enable debug logging to file
+    // Default: false
+    "debug": false
+  },
+
+  // Automatically install SKILL.md to global skill directory
+  // When enabled, the snippets skill is copied to ~/.config/opencode/skill/snippets/
+  // This enables the LLM to understand how to use snippets
+  // Default: true
+  "installSkill": true
+}
+```
+
+## Snippet Format
 
 ```md
 ---

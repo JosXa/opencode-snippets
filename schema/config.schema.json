@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "opencode-snippets Configuration",
+  "description": "Configuration file for the opencode-snippets plugin",
+  "type": "object",
+  "definitions": {
+    "booleanSetting": {
+      "oneOf": [{ "type": "boolean" }, { "type": "string", "enum": ["enabled", "disabled"] }],
+      "description": "Boolean setting that accepts true, false, \"enabled\", or \"disabled\""
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema URL for editor autocompletion"
+    },
+    "logging": {
+      "type": "object",
+      "description": "Logging settings",
+      "properties": {
+        "debug": {
+          "$ref": "#/definitions/booleanSetting",
+          "default": false,
+          "description": "Enable debug logging to file. Logs are written to ~/.config/opencode/logs/snippets/daily/"
+        }
+      },
+      "additionalProperties": false
+    },
+    "installSkill": {
+      "$ref": "#/definitions/booleanSetting",
+      "default": true,
+      "description": "Automatically install SKILL.md to global skill directory. When enabled, the snippets skill is copied to ~/.config/opencode/skill/snippets/ so the LLM understands how to use snippets."
+    }
+  },
+  "additionalProperties": false
+}
