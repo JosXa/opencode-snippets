@@ -107,6 +107,33 @@ describe("SnippetsPlugin - Hook Integration", () => {
       // Should not modify assistant messages - text should remain unchanged
       expect(output.parts[0].text).toBe("#test hashtag");
     });
+
+    it("should not process ignored messages (command output)", async () => {
+      const ctx = createMockContextWithSnippets();
+      const hooks = await SnippetsPlugin(ctx);
+
+      const userMessage: UserMessage = {
+        role: "user",
+        content: "Command output",
+      };
+
+      const output = {
+        message: userMessage,
+        parts: [
+          { type: "text", text: "Snippet content: !`echo test` and #greeting", ignored: true },
+        ] as Part[],
+      };
+
+      await hooks["chat.message"]?.(
+        {
+          sessionID: "test-session",
+        },
+        output,
+      );
+
+      // Should not process ignored messages - commands and hashtags should not be expanded
+      expect(output.parts[0].text).toBe("Snippet content: !`echo test` and #greeting");
+    });
   });
 
   describe("experimental.chat.messages.transform hook with actual snippets", () => {
@@ -166,6 +193,31 @@ describe("SnippetsPlugin - Hook Integration", () => {
       await hooks["experimental.chat.messages.transform"]?.({}, output);
 
       expect(output.messages).toHaveLength(0);
+    });
+
+    it("should not process ignored messages in transform hook", async () => {
+      const ctx = createMockContextWithSnippets();
+      const hooks = await SnippetsPlugin(ctx);
+
+      const messages: Array<{ info: Message; parts: Part[] }> = [
+        {
+          info: { role: "user" } as Message,
+          parts: [
+            {
+              type: "text",
+              text: "Command output: !`echo test` and #question-hint",
+              ignored: true,
+            },
+          ] as Part[],
+        },
+      ];
+
+      const output = { messages };
+
+      await hooks["experimental.chat.messages.transform"]?.({}, output);
+
+      // Ignored message should not be processed
+      expect(messages[0].parts[0].text).toBe("Command output: !`echo test` and #question-hint");
     });
   });
 
