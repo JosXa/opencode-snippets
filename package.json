@@ -1,6 +1,6 @@
 {
   "name": "opencode-snippets",
-  "version": "1.4.3",
+  "version": "1.5.0",
   "description": "Hashtag-based snippet expansion plugin for OpenCode - instant inline text shortcuts",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
