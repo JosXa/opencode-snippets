@@ -120,6 +120,7 @@ Snippets can be global (`~/.config/opencode/snippet/*.md`) or project-specific (
 
 Define multiple triggers for the same snippet:
 
+`~/.config/opencode/snippet/cherry-pick.md`:
 ```markdown
 ---
 aliases:
