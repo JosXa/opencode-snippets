@@ -90,7 +90,6 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   // Create command handler
   const commandHandler = createCommandExecuteHandler(ctx.client, snippets, ctx.directory);
 
-  // Injection manager handles lifecycle of inject blocks per session
   const injectionManager = new InjectionManager();
 
   /**
@@ -108,14 +107,12 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
 
     for (const part of parts) {
       if (part.type === "text" && part.text) {
-        // 1. Expand hashtags recursively with loop detection
         const expandStart = performance.now();
         const expansionResult = expandHashtags(part.text, snippets);
         part.text = assembleMessage(expansionResult);
         allInjected.push(...expansionResult.inject);
         expandTimeTotal += performance.now() - expandStart;
 
-        // 2. Execute shell commands: !`command`
         const shellStart = performance.now();
         part.text = await executeShellCommands(part.text, ctx as unknown as ShellContext, {
           hideCommandInOutput: config.hideCommandInOutput,
@@ -139,7 +136,6 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   };
 
   return {
-    // Register /snippet command
     config: async (opencodeConfig) => {
       opencodeConfig.command ??= {};
       opencodeConfig.command.snippet = {
@@ -148,34 +144,27 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
       };
     },
 
-    // Handle /snippet command execution
     "command.execute.before": commandHandler,
 
     "chat.message": async (input: ChatMessageInput, output: ChatMessageOutput) => {
-      // Only process user messages, never assistant messages
       if (output.message.role !== "user") return;
-      // Skip processing if any part is marked as ignored (e.g., command output)
       if (output.parts.some((part) => part.ignored)) return;
 
       const injected = await processTextParts(output.parts);
 
-      // Mark parts as processed to avoid re-processing in transform
       output.parts.forEach((part) => {
         if (part.type === "text") {
           part.snippetsProcessed = true;
         }
       });
 
-      // Store new injections for this session (clears any previous injections automatically)
       injectionManager.setInjections(input.sessionID, injected);
     },
 
-    // Process all messages including question tool responses
     "experimental.chat.messages.transform": async (
       input: TransformInput,
       output: TransformOutput,
     ) => {
-      // SessionID might be in different locations depending on OpenCode version
       const sessionID = input.sessionID || input.session?.id || output.messages[0]?.info?.sessionID;
 
       logger.debug("Transform hook called", {
@@ -186,24 +175,18 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
       });
 
       for (const message of output.messages) {
-        // Only process user messages
         if (message.info.role === "user") {
-          // Skip if already processed in chat.message hook
           if (message.parts.some((part) => part.snippetsProcessed)) continue;
-          // Skip processing if any part is marked as ignored (e.g., command output)
           if (message.parts.some((part) => part.ignored)) continue;
 
           const injected = await processTextParts(message.parts);
 
-          // Also collect injections found during transform (e.g. from tool outputs if they contain hashtags)
           if (injected.length > 0 && sessionID) {
             injectionManager.addInjections(sessionID, injected);
           }
         }
       }
 
-      // Inject active injections at the end of the message history
-      // WITHOUT synthetic flag so they're visible to the user
       if (sessionID) {
         const injections = injectionManager.getInjections(sessionID);
         logger.debug("Transform hook - checking for injections", {
@@ -230,25 +213,17 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
             messagesBefore: beforeCount,
             messagesAfter: output.messages.length,
           });
-          // DO NOT clear here - let session.idle handle it
         }
       }
     },
 
-    // Clear active injections when the session goes idle
     "session.idle": async (event: SessionIdleEvent) => {
       injectionManager.clearSession(event.sessionID);
     },
 
-    // Process skill tool output to expand snippets in skill content
-
-    // Process skill tool output to expand snippets in skill content
     "tool.execute.after": async (input, output) => {
-      // Only process the skill tool
       if (input.tool !== "skill") return;
 
-      // The skill tool returns markdown content in its output
-      // Expand hashtags in the skill content
       if (typeof output.output === "string" && output.output.trim()) {
         const expansionResult = expandHashtags(output.output, snippets);
         output.output = assembleMessage(expansionResult);

@@ -9,10 +9,8 @@ export class InjectionManager {
 
   /**
    * Stores new injections for a session, clearing any previous injections.
-   * This ensures injections only last for ONE user message cycle.
    */
   setInjections(sessionID: string, injections: string[]): void {
-    // Clear old injections first
     if (this.activeInjections.has(sessionID)) {
       logger.debug("Clearing previous injections for new user message", {
         sessionID,
@@ -21,10 +19,9 @@ export class InjectionManager {
       this.activeInjections.delete(sessionID);
     }
 
-    // Store new injections if any
     if (injections.length > 0) {
       this.activeInjections.set(sessionID, injections);
-      logger.debug("Stored NEW inject blocks for session", {
+      logger.debug("Stored inject blocks for session", {
         sessionID,
         count: injections.length,
       });
@@ -32,8 +29,7 @@ export class InjectionManager {
   }
 
   /**
-   * Adds additional injections to an existing session, deduplicating to avoid duplicates.
-   * Used when transform hook discovers additional injections.
+   * Adds additional injections to an existing session without duplicates.
    */
   addInjections(sessionID: string, newInjections: string[]): void {
     if (newInjections.length === 0) return;
