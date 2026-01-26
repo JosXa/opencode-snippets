@@ -5,10 +5,17 @@ import type { Plugin } from "@opencode-ai/plugin";
 import { createCommandExecuteHandler } from "./src/commands.js";
 import { loadConfig } from "./src/config.js";
 import { assembleMessage, expandHashtags } from "./src/expander.js";
+import type {
+  ChatMessageInput,
+  ChatMessageOutput,
+  SessionIdleEvent,
+  TransformInput,
+  TransformOutput,
+} from "./src/hook-types.js";
+import { InjectionManager } from "./src/injection-manager.js";
 import { loadSnippets } from "./src/loader.js";
 import { logger } from "./src/logger.js";
 import { executeShellCommands, type ShellContext } from "./src/shell.js";
-import type { ExpansionResult } from "./src/types.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -83,14 +90,16 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   // Create command handler
   const commandHandler = createCommandExecuteHandler(ctx.client, snippets, ctx.directory);
 
-  // Map to store active injections per session
-  const activeInjections = new Map<string, string[]>();
+  // Injection manager handles lifecycle of inject blocks per session
+  const injectionManager = new InjectionManager();
 
   /**
-   * Processes text parts for snippet expansion and shell command execution
-   * Returns collected inject blocks
+   * Processes text parts for snippet expansion and shell command execution.
+   * Returns collected inject blocks from expanded snippets.
    */
-  const processTextParts = async (parts: Array<{ type: string; text?: string }>) => {
+  const processTextParts = async (
+    parts: Array<{ type: string; text?: string }>,
+  ): Promise<string[]> => {
     const messageStart = performance.now();
     let expandTimeTotal = 0;
     let shellTimeTotal = 0;
@@ -104,24 +113,21 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         const expansionResult = expandHashtags(part.text, snippets);
         part.text = assembleMessage(expansionResult);
         allInjected.push(...expansionResult.inject);
-        const expandTime = performance.now() - expandStart;
-        expandTimeTotal += expandTime;
+        expandTimeTotal += performance.now() - expandStart;
 
         // 2. Execute shell commands: !`command`
         const shellStart = performance.now();
         part.text = await executeShellCommands(part.text, ctx as unknown as ShellContext, {
           hideCommandInOutput: config.hideCommandInOutput,
         });
-        const shellTime = performance.now() - shellStart;
-        shellTimeTotal += shellTime;
+        shellTimeTotal += performance.now() - shellStart;
         processedParts += 1;
       }
     }
 
-    const totalTime = performance.now() - messageStart;
     if (processedParts > 0) {
       logger.debug("Text parts processing complete", {
-        totalTimeMs: totalTime.toFixed(2),
+        totalTimeMs: (performance.now() - messageStart).toFixed(2),
         snippetExpandTimeMs: expandTimeTotal.toFixed(2),
         shellTimeMs: shellTimeTotal.toFixed(2),
         processedParts,
@@ -145,45 +151,30 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     // Handle /snippet command execution
     "command.execute.before": commandHandler,
 
-    "chat.message": async (input: any, output: any) => {
+    "chat.message": async (input: ChatMessageInput, output: ChatMessageOutput) => {
       // Only process user messages, never assistant messages
       if (output.message.role !== "user") return;
       // Skip processing if any part is marked as ignored (e.g., command output)
-      if (output.parts.some((part: any) => "ignored" in part && part.ignored)) return;
+      if (output.parts.some((part) => part.ignored)) return;
 
       const injected = await processTextParts(output.parts);
 
       // Mark parts as processed to avoid re-processing in transform
-      output.parts.forEach((part: any) => {
+      output.parts.forEach((part) => {
         if (part.type === "text") {
-          (part as any).snippetsProcessed = true;
+          part.snippetsProcessed = true;
         }
       });
 
-      const sessionID = input.sessionID;
-
-      // CRITICAL: Clear old injections from this session FIRST
-      // This ensures injections only last for ONE user message cycle
-      if (activeInjections.has(sessionID)) {
-        logger.debug("Clearing previous injections for new user message", {
-          sessionID,
-          previousCount: activeInjections.get(sessionID)?.length || 0,
-        });
-        activeInjections.delete(sessionID);
-      }
-
-      // Store any NEW injections for this session
-      if (injected.length > 0) {
-        activeInjections.set(sessionID, injected);
-        logger.debug("Stored NEW inject blocks for session", {
-          sessionID,
-          count: injected.length,
-        });
-      }
+      // Store new injections for this session (clears any previous injections automatically)
+      injectionManager.setInjections(input.sessionID, injected);
     },
 
     // Process all messages including question tool responses
-    "experimental.chat.messages.transform": async (input: any, output: any) => {
+    "experimental.chat.messages.transform": async (
+      input: TransformInput,
+      output: TransformOutput,
+    ) => {
       // SessionID might be in different locations depending on OpenCode version
       const sessionID = input.sessionID || input.session?.id || output.messages[0]?.info?.sessionID;
 
@@ -198,20 +189,15 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         // Only process user messages
         if (message.info.role === "user") {
           // Skip if already processed in chat.message hook
-          if (message.parts.some((part: any) => (part as any).snippetsProcessed)) continue;
+          if (message.parts.some((part) => part.snippetsProcessed)) continue;
           // Skip processing if any part is marked as ignored (e.g., command output)
-          if (message.parts.some((part: any) => "ignored" in part && part.ignored)) continue;
+          if (message.parts.some((part) => part.ignored)) continue;
 
           const injected = await processTextParts(message.parts);
 
           // Also collect injections found during transform (e.g. from tool outputs if they contain hashtags)
           if (injected.length > 0 && sessionID) {
-            const existing = activeInjections.get(sessionID) || [];
-            // Deduplicate to avoid adding same injection multiple times in transform loop
-            const newInjections = injected.filter((inv) => !existing.includes(inv));
-            if (newInjections.length > 0) {
-              activeInjections.set(sessionID, [...existing, ...newInjections]);
-            }
+            injectionManager.addInjections(sessionID, injected);
           }
         }
       }
@@ -219,13 +205,13 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
       // Inject active injections at the end of the message history
       // WITHOUT synthetic flag so they're visible to the user
       if (sessionID) {
-        const injections = activeInjections.get(sessionID);
+        const injections = injectionManager.getInjections(sessionID);
         logger.debug("Transform hook - checking for injections", {
           sessionID,
           hasInjections: !!injections,
           injectionCount: injections?.length || 0,
-          totalSessions: activeInjections.size,
-          allSessionIDs: Array.from(activeInjections.keys()),
+          totalSessions: injectionManager.size,
+          allSessionIDs: injectionManager.getAllSessionIDs(),
         });
         if (injections && injections.length > 0) {
           const beforeCount = output.messages.length;
@@ -234,7 +220,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
               info: {
                 role: "user",
                 sessionID: sessionID,
-              } as any,
+              },
               parts: [{ type: "text", text: injectText }],
             });
           }
@@ -250,11 +236,8 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     },
 
     // Clear active injections when the session goes idle
-    "session.idle": async ({ sessionID }: { sessionID: string }) => {
-      if (activeInjections.has(sessionID)) {
-        activeInjections.delete(sessionID);
-        logger.debug("Cleared active injections on session idle", { sessionID });
-      }
+    "session.idle": async (event: SessionIdleEvent) => {
+      injectionManager.clearSession(event.sessionID);
     },
 
     // Process skill tool output to expand snippets in skill content
