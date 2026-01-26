@@ -64,6 +64,7 @@ describe("config", () => {
       expect(config).toEqual({
         logging: { debug: false },
         installSkill: true,
+        hideCommandInOutput: false,
       });
     });
 
@@ -200,6 +201,7 @@ describe("config", () => {
       expect(config).toEqual({
         logging: { debug: false },
         installSkill: true,
+        hideCommandInOutput: false,
       });
     });
 

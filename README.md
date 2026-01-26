@@ -152,7 +152,7 @@ Last commit: !`git log -1 --oneline`
 Working directory: !`pwd`
 ```
 
-> **Note:** Snippets deviate slightly from the regular slash command behavior. Instead of just passing the command output to the LLM, snippets prepend the command itself:
+> **Note:** By default, snippets show both the command and its output (unlike OpenCode's slash commands which only show output):
 > ``!`ls` `` → 
 > ```
 > $ ls
@@ -160,7 +160,7 @@ Working directory: !`pwd`
 > ```
 > This tells the LLM which command was actually run and makes failures visible (empty output would otherwise be indistinguishable from success).
 >
-> **TODO:** This behavior should either be PR'd upstream to OpenCode or made configurable in opencode-snippets.
+> To match OpenCode's slash command behavior (output only), set `hideCommandInOutput: true` in your config.
 
 ### Recursive Includes
 
@@ -297,7 +297,8 @@ A default config file is created automatically on first run.
   "logging": {
     "debug": false // Enable debug logging (logs: ~/.config/opencode/logs/snippets/daily/)
   },
-  "installSkill": true // Auto-install SKILL.md to ~/.config/opencode/skill/snippets/
+  "installSkill": true, // Auto-install SKILL.md to ~/.config/opencode/skill/snippets/
+  "hideCommandInOutput": false // Show only output for shell commands (hides "$ cmd\n-->")
 }
 ```
 

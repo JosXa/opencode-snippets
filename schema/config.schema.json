@@ -30,6 +30,11 @@
       "$ref": "#/definitions/booleanSetting",
       "default": true,
       "description": "Automatically install SKILL.md to global skill directory. When enabled, the snippets skill is copied to ~/.config/opencode/skill/snippets/ so the LLM understands how to use snippets."
+    },
+    "hideCommandInOutput": {
+      "$ref": "#/definitions/booleanSetting",
+      "default": false,
+      "description": "Hide the shell command in snippet output. When false (default), shell commands show as '$ command\\n--> output'. When true, only the output is shown (matching OpenCode's slash command behavior)."
     }
   },
   "additionalProperties": false

@@ -6,6 +6,7 @@ import { logger } from "./logger.js";
  *
  * @param text - The text containing shell commands to execute
  * @param ctx - The plugin context (with Bun shell)
+ * @param options - Shell execution options
  * @returns The text with shell commands replaced by their output
  */
 export type ShellContext = {
@@ -17,8 +18,18 @@ export type ShellContext = {
   };
 };
 
-export async function executeShellCommands(text: string, ctx: ShellContext): Promise<string> {
+export interface ShellOptions {
+  /** Hide the command prefix in output, showing only the result */
+  hideCommandInOutput?: boolean;
+}
+
+export async function executeShellCommands(
+  text: string,
+  ctx: ShellContext,
+  options: ShellOptions = {},
+): Promise<string> {
   let result = text;
+  const hideCommand = options.hideCommandInOutput ?? false;
 
   // Reset regex state (global flag requires this)
   PATTERNS.SHELL_COMMAND.lastIndex = 0;
@@ -33,8 +44,7 @@ export async function executeShellCommands(text: string, ctx: ShellContext): Pro
 
     try {
       const output = await ctx.$`${{ raw: cmd }}`.quiet().nothrow().text();
-      // Deviate from slash commands' substitution mechanism: print command first, then output
-      const replacement = `$ ${cmd}\n--> ${output.trim()}`;
+      const replacement = hideCommand ? output.trim() : `$ ${cmd}\n--> ${output.trim()}`;
       result = result.replace(_placeholder, replacement);
     } catch (error) {
       // If shell command fails, leave it as-is
