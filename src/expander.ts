@@ -10,7 +10,7 @@ const MAX_EXPANSION_COUNT = 15;
 /**
  * Tag types for parsing
  */
-type BlockType = "prepend" | "append";
+type BlockType = "prepend" | "append" | "inject";
 
 /**
  * Parses snippet content to extract inline text and prepend/append blocks
@@ -21,15 +21,16 @@ type BlockType = "prepend" | "append";
  * - Multiple blocks → collected in document order
  *
  * @param content - The raw snippet content to parse
- * @returns Parsed content with inline, prepend, and append parts, or null on error
+ * @returns Parsed content with inline, prepend, append, and inject parts, or null on error
  */
 export function parseSnippetBlocks(content: string): ParsedSnippetContent | null {
   const prepend: string[] = [];
   const append: string[] = [];
+  const inject: string[] = [];
   let inline = "";
 
   // Regex to find opening and closing tags
-  const tagPattern = /<(\/?)(?<tagName>prepend|append)>/gi;
+  const tagPattern = /<(\/?)(?<tagName>prepend|append|inject)>/gi;
   let lastIndex = 0;
   let currentBlock: { type: BlockType; startIndex: number; contentStart: number } | null = null;
 
@@ -58,8 +59,10 @@ export function parseSnippetBlocks(content: string): ParsedSnippetContent | null
       if (blockContent) {
         if (currentBlock.type === "prepend") {
           prepend.push(blockContent);
-        } else {
+        } else if (currentBlock.type === "append") {
           append.push(blockContent);
+        } else {
+          inject.push(blockContent);
         }
       }
       lastIndex = tagEnd;
@@ -85,8 +88,10 @@ export function parseSnippetBlocks(content: string): ParsedSnippetContent | null
     if (blockContent) {
       if (currentBlock.type === "prepend") {
         prepend.push(blockContent);
-      } else {
+      } else if (currentBlock.type === "append") {
         append.push(blockContent);
+      } else {
+        inject.push(blockContent);
       }
     }
   } else {
@@ -98,6 +103,7 @@ export function parseSnippetBlocks(content: string): ParsedSnippetContent | null
     inline: inline.trim(),
     prepend,
     append,
+    inject,
   };
 }
 
@@ -119,6 +125,7 @@ export function expandHashtags(
 ): ExpansionResult {
   const collectedPrepend: string[] = [];
   const collectedAppend: string[] = [];
+  const collectedInject: string[] = [];
 
   let expanded = text;
   let hasChanges = true;
@@ -134,6 +141,7 @@ export function expandHashtags(
     // We need to collect blocks during replacement, so we track them here
     const roundPrepend: string[] = [];
     const roundAppend: string[] = [];
+    const roundInject: string[] = [];
 
     expanded = expanded.replace(PATTERNS.HASHTAG, (match, name) => {
       const key = name.toLowerCase();
@@ -165,9 +173,10 @@ export function expandHashtags(
         return match;
       }
 
-      // Collect prepend/append blocks
+      // Collect prepend/append/inject blocks
       roundPrepend.push(...parsed.prepend);
       roundAppend.push(...parsed.append);
+      roundInject.push(...parsed.inject);
 
       // Recursively expand any hashtags in the inline content
       const nestedResult = expandHashtags(parsed.inline, registry, expansionCounts);
@@ -175,6 +184,7 @@ export function expandHashtags(
       // Collect blocks from nested expansion
       roundPrepend.push(...nestedResult.prepend);
       roundAppend.push(...nestedResult.append);
+      roundInject.push(...nestedResult.inject);
 
       return nestedResult.text;
     });
@@ -182,6 +192,7 @@ export function expandHashtags(
     // Add this round's blocks to collected blocks
     collectedPrepend.push(...roundPrepend);
     collectedAppend.push(...roundAppend);
+    collectedInject.push(...roundInject);
 
     // Only continue if the text actually changed AND no loop was detected
     hasChanges = expanded !== previous && !loopDetected;
@@ -191,6 +202,7 @@ export function expandHashtags(
     text: expanded,
     prepend: collectedPrepend,
     append: collectedAppend,
+    inject: collectedInject,
   };
 }
 

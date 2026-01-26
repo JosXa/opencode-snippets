@@ -1,3 +1,4 @@
+import { describe, expect, it } from "bun:test";
 import { assembleMessage, expandHashtags, parseSnippetBlocks } from "../src/expander.js";
 import type { SnippetInfo, SnippetRegistry } from "../src/types.js";
 
@@ -118,7 +119,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
   });
 
   describe("Loop detection - Direct cycles", () => {
-    it("should detect and prevent simple self-reference", { timeout: 100 }, () => {
+    it("should detect and prevent simple self-reference", () => {
       const registry = createRegistry([["self", "I reference #self"]]);
 
       const result = expandHashtags("#self", registry);
@@ -126,7 +127,7 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       // Loop detected after 15 expansions, #self left as-is
       const expected = `${"I reference ".repeat(15)}#self`;
       expect(result.text).toBe(expected);
-    });
+    }, 100);
 
     it("should detect and prevent two-way circular reference", () => {
       const registry = createRegistry([
@@ -476,6 +477,7 @@ describe("parseSnippetBlocks", () => {
         inline: "Just some content",
         prepend: [],
         append: [],
+        inject: [],
       });
     });
 
@@ -486,6 +488,7 @@ describe("parseSnippetBlocks", () => {
         inline: "Inline text",
         prepend: [],
         append: ["Append content"],
+        inject: [],
       });
     });
 
@@ -496,6 +499,7 @@ describe("parseSnippetBlocks", () => {
         inline: "Inline text",
         prepend: ["Prepend content"],
         append: [],
+        inject: [],
       });
     });
 
@@ -514,6 +518,7 @@ After content
         inline: "Inline text",
         prepend: ["Before content"],
         append: ["After content"],
+        inject: [],
       });
     });
 
@@ -532,6 +537,18 @@ Second append
         inline: "Inline",
         prepend: [],
         append: ["First append", "Second append"],
+        inject: [],
+      });
+    });
+
+    it("should extract inject blocks", () => {
+      const result = parseSnippetBlocks("Inline\n<inject>\nInject content\n</inject>");
+
+      expect(result).toEqual({
+        inline: "Inline",
+        prepend: [],
+        append: [],
+        inject: ["Inject content"],
       });
     });
   });
@@ -548,6 +565,7 @@ Only append content
         inline: "",
         prepend: [],
         append: ["Only append content"],
+        inject: [],
       });
     });
 
@@ -560,6 +578,7 @@ Only append content
         inline: "Inline",
         prepend: [],
         append: ["Unclosed append content"],
+        inject: [],
       });
     });
 
@@ -604,6 +623,7 @@ Only append content
         inline: "",
         prepend: [],
         append: ["Content"],
+        inject: [],
       });
     });
 
@@ -616,6 +636,7 @@ Only append content
         inline: "Inline",
         prepend: [],
         append: [],
+        inject: [],
       });
     });
   });
@@ -647,6 +668,7 @@ describe("assembleMessage", () => {
       text: "Main content",
       prepend: [],
       append: [],
+      inject: [],
     });
 
     expect(result).toBe("Main content");
@@ -657,6 +679,7 @@ describe("assembleMessage", () => {
       text: "Main content",
       prepend: [],
       append: ["Appended section"],
+      inject: [],
     });
 
     expect(result).toBe("Main content\n\nAppended section");
@@ -667,6 +690,7 @@ describe("assembleMessage", () => {
       text: "Main content",
       prepend: ["Prepended section"],
       append: [],
+      inject: [],
     });
 
     expect(result).toBe("Prepended section\n\nMain content");
@@ -677,6 +701,7 @@ describe("assembleMessage", () => {
       text: "Main content",
       prepend: ["Before"],
       append: ["After"],
+      inject: [],
     });
 
     expect(result).toBe("Before\n\nMain content\n\nAfter");
@@ -687,6 +712,7 @@ describe("assembleMessage", () => {
       text: "Main",
       prepend: ["First", "Second"],
       append: [],
+      inject: [],
     });
 
     expect(result).toBe("First\n\nSecond\n\nMain");
@@ -697,6 +723,7 @@ describe("assembleMessage", () => {
       text: "Main",
       prepend: [],
       append: ["First", "Second"],
+      inject: [],
     });
 
     expect(result).toBe("Main\n\nFirst\n\nSecond");
@@ -707,6 +734,7 @@ describe("assembleMessage", () => {
       text: "",
       prepend: ["Before"],
       append: ["After"],
+      inject: [],
     });
 
     expect(result).toBe("Before\n\nAfter");
@@ -717,6 +745,7 @@ describe("assembleMessage", () => {
       text: "   ",
       prepend: ["Before"],
       append: ["After"],
+      inject: [],
     });
 
     expect(result).toBe("Before\n\nAfter");
@@ -842,5 +871,16 @@ describe("Prepend/Append integration with expandHashtags", () => {
     const assembled = assembleMessage(result);
 
     expect(assembled).toBe("Plain content and Block inline\n\nBlock append");
+  });
+
+  it("should collect inject blocks and not include them in assembled message", () => {
+    const registry = createRegistry([["inj", "Inline\n<inject>\nInjected message\n</inject>"]]);
+
+    const result = expandHashtags("Use #inj", registry);
+    const assembled = assembleMessage(result);
+
+    expect(result.text).toBe("Use Inline");
+    expect(result.inject).toEqual(["Injected message"]);
+    expect(assembled).toBe("Use Inline"); // assembled message should NOT contain injected content
   });
 });

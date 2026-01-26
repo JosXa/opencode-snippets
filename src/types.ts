@@ -56,6 +56,8 @@ export interface ParsedSnippetContent {
   prepend: string[];
   /** <append> block contents in document order */
   append: string[];
+  /** <inject> block contents in document order */
+  inject: string[];
 }
 
 /**
@@ -68,4 +70,6 @@ export interface ExpansionResult {
   prepend: string[];
   /** Collected append blocks from all expanded snippets */
   append: string[];
+  /** Collected inject blocks from all expanded snippets */
+  inject: string[];
 }
