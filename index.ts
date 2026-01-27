@@ -193,8 +193,6 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
           sessionID,
           hasInjections: !!injections,
           injectionCount: injections?.length || 0,
-          totalSessions: injectionManager.size,
-          allSessionIDs: injectionManager.getAllSessionIDs(),
         });
         if (injections && injections.length > 0) {
           const beforeCount = output.messages.length;
