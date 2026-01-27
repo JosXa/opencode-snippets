@@ -13,7 +13,7 @@ const MAX_EXPANSION_COUNT = 15;
 type BlockType = "prepend" | "append" | "inject";
 
 /**
- * Parses snippet content to extract inline text and prepend/append blocks
+ * Parses snippet content to extract inline text and prepend/append/inject blocks
  *
  * Uses a lenient stack-based parser:
  * - Unclosed tags → treat rest of content as block

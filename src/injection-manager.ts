@@ -2,7 +2,7 @@ import { logger } from "./logger.js";
 
 /**
  * Manages injection lifecycle per session.
- * Injections are ephemeral messages that last for exactly one user message cycle.
+ * Injections persist for the entire agentic loop until session idle.
  */
 export class InjectionManager {
   private activeInjections = new Map<string, string[]>();
