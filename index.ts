@@ -1,4 +1,3 @@
-import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Plugin } from "@opencode-ai/plugin";
@@ -13,39 +12,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PLUGIN_ROOT = join(__dirname, "..");
 const SKILL_DIR = join(PLUGIN_ROOT, "skill");
-
-// Install skill to global config directory
-async function installSkillToGlobal() {
-  const home = process.env.HOME || process.env.USERPROFILE || "";
-  const globalSkillDir = join(home, ".config", "opencode", "skill", "snippets");
-  const globalSkillPath = join(globalSkillDir, "SKILL.md");
-  const sourceSkillPath = join(SKILL_DIR, "snippets", "SKILL.md");
-
-  try {
-    const sourceFile = Bun.file(sourceSkillPath);
-    if (!(await sourceFile.exists())) {
-      logger.debug("Source skill not found", { path: sourceSkillPath });
-      return;
-    }
-
-    // Check if already installed with same content
-    const globalFile = Bun.file(globalSkillPath);
-    if (await globalFile.exists()) {
-      const existing = await globalFile.text();
-      const source = await sourceFile.text();
-      if (existing === source) {
-        logger.debug("Skill already installed", { path: globalSkillPath });
-        return;
-      }
-    }
-
-    mkdirSync(globalSkillDir, { recursive: true });
-    await Bun.write(globalSkillPath, sourceFile);
-    logger.debug("Installed snippets skill", { path: globalSkillPath });
-  } catch (err) {
-    logger.debug("Failed to install skill", { error: String(err) });
-  }
-}
 
 /**
  * Snippets Plugin for OpenCode
@@ -62,11 +28,6 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   // Apply config settings
   logger.debugEnabled = config.logging.debug;
 
-  // Install skill to global config so OpenCode discovers it (if enabled)
-  if (config.installSkill) {
-    await installSkillToGlobal();
-  }
-
   // Load all snippets at startup (global + project directory)
   const startupStart = performance.now();
   const snippets = await loadSnippets(ctx.directory);
@@ -75,7 +36,6 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   logger.debug("Plugin startup complete", {
     startupTimeMs: startupTime.toFixed(2),
     snippetCount: snippets.size,
-    installSkill: config.installSkill,
     debugLogging: config.logging.debug,
   });
 
@@ -123,8 +83,17 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   };
 
   return {
-    // Register /snippet command
+    // Register /snippet command and skill path
     config: async (opencodeConfig) => {
+      // Register skill folder path for automatic discovery
+      const cfg = opencodeConfig as typeof opencodeConfig & {
+        skills?: { paths?: string[] };
+      };
+      cfg.skills ??= {};
+      cfg.skills.paths ??= [];
+      cfg.skills.paths.push(SKILL_DIR);
+
+      // Register /snippet command
       opencodeConfig.command ??= {};
       opencodeConfig.command.snippet = {
         template: "",
