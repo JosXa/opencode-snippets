@@ -1,7 +1,12 @@
 /**
- * Plugin hook types - minimal definitions for type safety
+ * Plugin hook types - imported from @opencode-ai/sdk
  */
 
+export type { Message, Part, UserMessage } from "@opencode-ai/sdk";
+
+/**
+ * Extended Part type with snippets-specific metadata
+ */
 export interface MessagePart {
   type: string;
   text?: string;

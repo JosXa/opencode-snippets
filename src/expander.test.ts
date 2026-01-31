@@ -598,6 +598,33 @@ Only append content
       expect(result).toBeNull();
     });
 
+    it("should return null when <inject> is mixed with <prepend>", () => {
+      const content =
+        "<inject>\nInjected content\n</inject>\n<prepend>\nPrepended content\n</prepend>";
+
+      const result = parseSnippetBlocks(content);
+
+      expect(result).toBeNull();
+    });
+
+    it("should return null when <inject> is mixed with <append>", () => {
+      const content =
+        "<inject>\nInjected content\n</inject>\n<append>\nAppended content\n</append>";
+
+      const result = parseSnippetBlocks(content);
+
+      expect(result).toBeNull();
+    });
+
+    it("should return null when <inject> is mixed with both <prepend> and <append>", () => {
+      const content =
+        "<prepend>\nPre\n</prepend>\n<inject>\nInj\n</inject>\n<append>\nApp\n</append>";
+
+      const result = parseSnippetBlocks(content);
+
+      expect(result).toBeNull();
+    });
+
     it("should trim content inside blocks", () => {
       const content = "<append>\n  \n  Content with whitespace  \n  \n</append>";
 

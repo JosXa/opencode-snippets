@@ -99,6 +99,12 @@ export function parseSnippetBlocks(content: string): ParsedSnippetContent | null
     inline += content.slice(lastIndex);
   }
 
+  // Validation: <inject> cannot be mixed with <prepend> or <append>
+  if (inject.length > 0 && (prepend.length > 0 || append.length > 0)) {
+    logger.warn("<inject> cannot be mixed with <prepend> or <append> in the same snippet");
+    return null;
+  }
+
   return {
     inline: inline.trim(),
     prepend,
