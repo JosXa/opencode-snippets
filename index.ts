@@ -86,7 +86,6 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     // Register /snippet command and skill path
     config: async (opencodeConfig) => {
       // Register skill folder path for automatic discovery
-      // (requires OpenCode PR #9640 for skills.paths support)
       const cfg = opencodeConfig as typeof opencodeConfig & {
         skills?: { paths?: string[] };
       };
