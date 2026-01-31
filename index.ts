@@ -122,7 +122,6 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     // Register /snippet command and skill path
     config: async (opencodeConfig) => {
       // Register skill folder path for automatic discovery
-      // (requires OpenCode PR #9640 for skills.paths support)
       const cfg = opencodeConfig as typeof opencodeConfig & {
         skills?: { paths?: string[] };
       };
@@ -209,11 +208,12 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
       }
     },
 
-    "session.idle": async (event: SessionIdleEvent) => 
-      injectionManager.clearSession(event.sessionID);,
+    "session.idle": async (event: SessionIdleEvent) => {
+      injectionManager.clearSession(event.sessionID);
+    },
 
     // Process skill tool output to expand snippets and skill tags in skill content
-    "tool.execute.after": async (input, output) => 
+    "tool.execute.after": async (input, output) => {
       if (input.tool !== "skill") return;
 
       // The skill tool returns markdown content in its output
@@ -234,6 +234,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
           tool: input.tool,
           callID: input.callID,
         });
-      },
+      }
+    },
   };
 };
