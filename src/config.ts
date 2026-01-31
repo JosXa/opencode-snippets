@@ -23,9 +23,6 @@ export interface SnippetsConfig {
   /** Logging settings */
   logging: LoggingConfig;
 
-  /** Automatically install SKILL.md to global skill directory */
-  installSkill: boolean;
-
   /** Hide shell command in output, showing only the result */
   hideCommandInOutput: boolean;
 }
@@ -37,7 +34,6 @@ interface RawConfig {
   logging?: {
     debug?: BooleanSetting;
   };
-  installSkill?: BooleanSetting;
   hideCommandInOutput?: BooleanSetting;
 }
 
@@ -48,7 +44,6 @@ const DEFAULT_CONFIG: SnippetsConfig = {
   logging: {
     debug: false,
   },
-  installSkill: true,
   hideCommandInOutput: false,
 };
 
@@ -67,13 +62,6 @@ const DEFAULT_CONFIG_CONTENT = `{
     // Default: false
     "debug": false
   },
-
-  // Automatically install SKILL.md to global skill directory
-  // When enabled, the snippets skill is copied to ~/.config/opencode/skill/snippets/
-  // This enables the LLM to understand how to use snippets
-  // Values: true, false, "enabled", "disabled"
-  // Default: true
-  "installSkill": true,
 
   // Hide shell command in snippet output
   // When false (default), shell commands show as "$ command\\n--> output"
@@ -172,7 +160,6 @@ export function loadConfig(projectDir?: string): SnippetsConfig {
 
   logger.debug("Final config", {
     loggingDebug: config.logging.debug,
-    installSkill: config.installSkill,
     hideCommandInOutput: config.hideCommandInOutput,
   });
 
@@ -184,14 +171,12 @@ export function loadConfig(projectDir?: string): SnippetsConfig {
  */
 function mergeConfig(base: SnippetsConfig, raw: RawConfig): SnippetsConfig {
   const debugValue = normalizeBooleanSetting(raw.logging?.debug);
-  const installSkillValue = normalizeBooleanSetting(raw.installSkill);
   const hideCommandValue = normalizeBooleanSetting(raw.hideCommandInOutput);
 
   return {
     logging: {
       debug: debugValue !== undefined ? debugValue : base.logging.debug,
     },
-    installSkill: installSkillValue !== undefined ? installSkillValue : base.installSkill,
     hideCommandInOutput:
       hideCommandValue !== undefined ? hideCommandValue : base.hideCommandInOutput,
   };
