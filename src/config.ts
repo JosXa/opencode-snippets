@@ -17,11 +17,22 @@ export interface LoggingConfig {
 }
 
 /**
+ * Experimental features configuration
+ */
+export interface ExperimentalConfig {
+  /** Enable skill rendering with <skill>name</skill> or <skill name="name" /> syntax */
+  skillRendering: boolean;
+}
+
+/**
  * Configuration schema for the snippets plugin
  */
 export interface SnippetsConfig {
   /** Logging settings */
   logging: LoggingConfig;
+
+  /** Experimental features */
+  experimental: ExperimentalConfig;
 
   /** Automatically install SKILL.md to global skill directory */
   installSkill: boolean;
@@ -37,6 +48,9 @@ interface RawConfig {
   logging?: {
     debug?: BooleanSetting;
   };
+  experimental?: {
+    skillRendering?: BooleanSetting;
+  };
   installSkill?: BooleanSetting;
   hideCommandInOutput?: BooleanSetting;
 }
@@ -47,6 +61,9 @@ interface RawConfig {
 const DEFAULT_CONFIG: SnippetsConfig = {
   logging: {
     debug: false,
+  },
+  experimental: {
+    skillRendering: false,
   },
   installSkill: true,
   hideCommandInOutput: false,
@@ -66,6 +83,16 @@ const DEFAULT_CONFIG_CONTENT = `{
     // Values: true, false, "enabled", "disabled"
     // Default: false
     "debug": false
+  },
+
+  // Experimental features (may change or be removed)
+  "experimental": {
+    // Enable skill rendering with <skill>name</skill> or <skill name="name" /> syntax
+    // When enabled, skill tags are replaced with the skill's content body
+    // Skills are loaded from OpenCode's standard skill directories
+    // Values: true, false, "enabled", "disabled"
+    // Default: false
+    "skillRendering": false
   },
 
   // Automatically install SKILL.md to global skill directory
@@ -172,6 +199,7 @@ export function loadConfig(projectDir?: string): SnippetsConfig {
 
   logger.debug("Final config", {
     loggingDebug: config.logging.debug,
+    experimentalSkillRendering: config.experimental.skillRendering,
     installSkill: config.installSkill,
     hideCommandInOutput: config.hideCommandInOutput,
   });
@@ -184,12 +212,17 @@ export function loadConfig(projectDir?: string): SnippetsConfig {
  */
 function mergeConfig(base: SnippetsConfig, raw: RawConfig): SnippetsConfig {
   const debugValue = normalizeBooleanSetting(raw.logging?.debug);
+  const skillRenderingValue = normalizeBooleanSetting(raw.experimental?.skillRendering);
   const installSkillValue = normalizeBooleanSetting(raw.installSkill);
   const hideCommandValue = normalizeBooleanSetting(raw.hideCommandInOutput);
 
   return {
     logging: {
       debug: debugValue !== undefined ? debugValue : base.logging.debug,
+    },
+    experimental: {
+      skillRendering:
+        skillRenderingValue !== undefined ? skillRenderingValue : base.experimental.skillRendering,
     },
     installSkill: installSkillValue !== undefined ? installSkillValue : base.installSkill,
     hideCommandInOutput:
