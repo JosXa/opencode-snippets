@@ -63,6 +63,7 @@ describe("config", () => {
 
       expect(config).toEqual({
         logging: { debug: false },
+        experimental: { inject: false },
         installSkill: true,
         hideCommandInOutput: false,
       });
@@ -200,6 +201,7 @@ describe("config", () => {
       // Should return defaults when config is invalid
       expect(config).toEqual({
         logging: { debug: false },
+        experimental: { inject: false },
         installSkill: true,
         hideCommandInOutput: false,
       });

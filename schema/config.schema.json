@@ -26,6 +26,18 @@
       },
       "additionalProperties": false
     },
+    "experimental": {
+      "type": "object",
+      "description": "Experimental features (may change or be removed)",
+      "properties": {
+        "inject": {
+          "$ref": "#/definitions/booleanSetting",
+          "default": false,
+          "description": "Enable inject blocks for ephemeral messages during agentic loop. When enabled, <inject>...</inject> blocks in snippets will be sent as ephemeral user messages that persist only during the current agentic loop."
+        }
+      },
+      "additionalProperties": false
+    },
     "installSkill": {
       "$ref": "#/definitions/booleanSetting",
       "default": true,

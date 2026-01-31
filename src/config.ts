@@ -17,11 +17,22 @@ export interface LoggingConfig {
 }
 
 /**
+ * Experimental features configuration
+ */
+export interface ExperimentalConfig {
+  /** Enable inject blocks for ephemeral messages during agentic loop */
+  inject: boolean;
+}
+
+/**
  * Configuration schema for the snippets plugin
  */
 export interface SnippetsConfig {
   /** Logging settings */
   logging: LoggingConfig;
+
+  /** Experimental features */
+  experimental: ExperimentalConfig;
 
   /** Automatically install SKILL.md to global skill directory */
   installSkill: boolean;
@@ -37,6 +48,9 @@ interface RawConfig {
   logging?: {
     debug?: BooleanSetting;
   };
+  experimental?: {
+    inject?: BooleanSetting;
+  };
   installSkill?: BooleanSetting;
   hideCommandInOutput?: BooleanSetting;
 }
@@ -47,6 +61,9 @@ interface RawConfig {
 const DEFAULT_CONFIG: SnippetsConfig = {
   logging: {
     debug: false,
+  },
+  experimental: {
+    inject: false,
   },
   installSkill: true,
   hideCommandInOutput: false,
@@ -66,6 +83,16 @@ const DEFAULT_CONFIG_CONTENT = `{
     // Values: true, false, "enabled", "disabled"
     // Default: false
     "debug": false
+  },
+
+  // Experimental features (may change or be removed)
+  "experimental": {
+    // Enable inject blocks for ephemeral messages during agentic loop
+    // When enabled, <inject>...</inject> blocks in snippets will be sent as
+    // ephemeral user messages that persist only during the current agentic loop
+    // Values: true, false, "enabled", "disabled"
+    // Default: false
+    "inject": false
   },
 
   // Automatically install SKILL.md to global skill directory
@@ -172,6 +199,7 @@ export function loadConfig(projectDir?: string): SnippetsConfig {
 
   logger.debug("Final config", {
     loggingDebug: config.logging.debug,
+    experimentalInject: config.experimental.inject,
     installSkill: config.installSkill,
     hideCommandInOutput: config.hideCommandInOutput,
   });
@@ -184,12 +212,17 @@ export function loadConfig(projectDir?: string): SnippetsConfig {
  */
 function mergeConfig(base: SnippetsConfig, raw: RawConfig): SnippetsConfig {
   const debugValue = normalizeBooleanSetting(raw.logging?.debug);
+  const experimentalInjectValue = normalizeBooleanSetting(raw.experimental?.inject);
   const installSkillValue = normalizeBooleanSetting(raw.installSkill);
   const hideCommandValue = normalizeBooleanSetting(raw.hideCommandInOutput);
 
   return {
     logging: {
       debug: debugValue !== undefined ? debugValue : base.logging.debug,
+    },
+    experimental: {
+      inject:
+        experimentalInjectValue !== undefined ? experimentalInjectValue : base.experimental.inject,
     },
     installSkill: installSkillValue !== undefined ? installSkillValue : base.installSkill,
     hideCommandInOutput:

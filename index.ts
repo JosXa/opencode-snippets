@@ -84,6 +84,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     startupTimeMs: startupTime.toFixed(2),
     snippetCount: snippets.size,
     installSkill: config.installSkill,
+    experimentalInject: config.experimental.inject,
     debugLogging: config.logging.debug,
   });
 
@@ -158,7 +159,9 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         }
       });
 
-      injectionManager.setInjections(input.sessionID, injected);
+      if (config.experimental.inject) {
+        injectionManager.setInjections(input.sessionID, injected);
+      }
     },
 
     "experimental.chat.messages.transform": async (
@@ -181,13 +184,13 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
 
           const injected = await processTextParts(message.parts);
 
-          if (injected.length > 0 && sessionID) {
-            injectionManager.addInjections(sessionID, injected);
+          if (config.experimental.inject && injected.length > 0 && sessionID) {
+            injectionManager.addInjections(sessionID, ...injected);
           }
         }
       }
 
-      if (sessionID) {
+      if (config.experimental.inject && sessionID) {
         const injections = injectionManager.getInjections(sessionID);
         logger.debug("Transform hook - checking for injections", {
           sessionID,

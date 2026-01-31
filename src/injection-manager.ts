@@ -21,7 +21,7 @@ export class InjectionManager {
   /**
    * Adds additional injections to an existing session without duplicates.
    */
-  addInjections(sessionID: string, newInjections: string[]): void {
+  addInjections(sessionID: string, ...newInjections: string[]): void {
     if (newInjections.length === 0) return;
 
     const existing = this.activeInjections.get(sessionID) || [];
