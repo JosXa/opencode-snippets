@@ -34,9 +34,6 @@ export interface SnippetsConfig {
   /** Experimental features */
   experimental: ExperimentalConfig;
 
-  /** Automatically install SKILL.md to global skill directory */
-  installSkill: boolean;
-
   /** Hide shell command in output, showing only the result */
   hideCommandInOutput: boolean;
 }
@@ -51,7 +48,6 @@ interface RawConfig {
   experimental?: {
     skillRendering?: BooleanSetting;
   };
-  installSkill?: BooleanSetting;
   hideCommandInOutput?: BooleanSetting;
 }
 
@@ -65,7 +61,6 @@ const DEFAULT_CONFIG: SnippetsConfig = {
   experimental: {
     skillRendering: false,
   },
-  installSkill: true,
   hideCommandInOutput: false,
 };
 
@@ -94,13 +89,6 @@ const DEFAULT_CONFIG_CONTENT = `{
     // Default: false
     "skillRendering": false
   },
-
-  // Automatically install SKILL.md to global skill directory
-  // When enabled, the snippets skill is copied to ~/.config/opencode/skill/snippets/
-  // This enables the LLM to understand how to use snippets
-  // Values: true, false, "enabled", "disabled"
-  // Default: true
-  "installSkill": true,
 
   // Hide shell command in snippet output
   // When false (default), shell commands show as "$ command\\n--> output"
@@ -200,7 +188,6 @@ export function loadConfig(projectDir?: string): SnippetsConfig {
   logger.debug("Final config", {
     loggingDebug: config.logging.debug,
     experimentalSkillRendering: config.experimental.skillRendering,
-    installSkill: config.installSkill,
     hideCommandInOutput: config.hideCommandInOutput,
   });
 
@@ -213,7 +200,6 @@ export function loadConfig(projectDir?: string): SnippetsConfig {
 function mergeConfig(base: SnippetsConfig, raw: RawConfig): SnippetsConfig {
   const debugValue = normalizeBooleanSetting(raw.logging?.debug);
   const skillRenderingValue = normalizeBooleanSetting(raw.experimental?.skillRendering);
-  const installSkillValue = normalizeBooleanSetting(raw.installSkill);
   const hideCommandValue = normalizeBooleanSetting(raw.hideCommandInOutput);
 
   return {
@@ -224,7 +210,6 @@ function mergeConfig(base: SnippetsConfig, raw: RawConfig): SnippetsConfig {
       skillRendering:
         skillRenderingValue !== undefined ? skillRenderingValue : base.experimental.skillRendering,
     },
-    installSkill: installSkillValue !== undefined ? installSkillValue : base.installSkill,
     hideCommandInOutput:
       hideCommandValue !== undefined ? hideCommandValue : base.hideCommandInOutput,
   };
