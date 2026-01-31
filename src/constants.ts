@@ -10,6 +10,14 @@ export const PATTERNS = {
 
   /** Matches shell commands like !`command` */
   SHELL_COMMAND: /!`([^`]+)`/g,
+
+  /**
+   * Matches skill tags in two formats:
+   * 1. Self-closing: <skill name="skill-name" /> or <skill name='skill-name'/>
+   * 2. Block format: <skill>skill-name</skill>
+   */
+  SKILL_TAG_SELF_CLOSING: /<skill\s+name=["']([^"']+)["']\s*\/>/gi,
+  SKILL_TAG_BLOCK: /<skill>([^<]+)<\/skill>/gi,
 } as const;
 
 /**
