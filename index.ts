@@ -16,6 +16,8 @@ import { InjectionManager } from "./src/injection-manager.js";
 import { loadSnippets } from "./src/loader.js";
 import { logger } from "./src/logger.js";
 import { executeShellCommands, type ShellContext } from "./src/shell.js";
+import { loadSkills, type SkillRegistry } from "./src/skill-loader.js";
+import { expandSkillTags } from "./src/skill-renderer.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -78,11 +80,20 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   // Load all snippets at startup (global + project directory)
   const startupStart = performance.now();
   const snippets = await loadSnippets(ctx.directory);
+
+  // Load skills if skill rendering is enabled
+  let skills: SkillRegistry = new Map();
+  if (config.experimental.skillRendering) {
+    skills = await loadSkills(ctx.directory);
+  }
+
   const startupTime = performance.now() - startupStart;
 
   logger.debug("Plugin startup complete", {
     startupTimeMs: startupTime.toFixed(2),
     snippetCount: snippets.size,
+    skillCount: skills.size,
+    skillRenderingEnabled: config.experimental.skillRendering,
     installSkill: config.installSkill,
     debugLogging: config.logging.debug,
   });
@@ -93,7 +104,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   const injectionManager = new InjectionManager();
 
   /**
-   * Processes text parts for snippet expansion and shell command execution.
+   * Processes text parts for snippet expansion, skill rendering, and shell command execution.
    * Returns collected inject blocks from expanded snippets.
    */
   const processTextParts = async (
@@ -101,18 +112,28 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   ): Promise<string[]> => {
     const messageStart = performance.now();
     let expandTimeTotal = 0;
+    let skillTimeTotal = 0;
     let shellTimeTotal = 0;
     let processedParts = 0;
     const allInjected: string[] = [];
 
     for (const part of parts) {
       if (part.type === "text" && part.text) {
+        // 1. Expand skill tags if skill rendering is enabled
+        if (config.experimental.skillRendering && skills.size > 0) {
+          const skillStart = performance.now();
+          part.text = expandSkillTags(part.text, skills);
+          skillTimeTotal += performance.now() - skillStart;
+        }
+
+        // 2. Expand hashtags recursively with loop detection
         const expandStart = performance.now();
         const expansionResult = expandHashtags(part.text, snippets);
         part.text = assembleMessage(expansionResult);
         allInjected.push(...expansionResult.inject);
         expandTimeTotal += performance.now() - expandStart;
 
+        // 3. Execute shell commands: !`command`
         const shellStart = performance.now();
         part.text = await executeShellCommands(part.text, ctx as unknown as ShellContext, {
           hideCommandInOutput: config.hideCommandInOutput,
@@ -123,8 +144,10 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     }
 
     if (processedParts > 0) {
+      const totalTime = performance.now() - messageStart;
       logger.debug("Text parts processing complete", {
-        totalTimeMs: (performance.now() - messageStart).toFixed(2),
+        totalTimeMs: totalTime.toFixed(2),
+        skillTimeMs: skillTimeTotal.toFixed(2),
         snippetExpandTimeMs: expandTimeTotal.toFixed(2),
         shellTimeMs: shellTimeTotal.toFixed(2),
         processedParts,
@@ -219,11 +242,22 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
       injectionManager.clearSession(event.sessionID);
     },
 
+    // Process skill tool output to expand snippets and skill tags in skill content
     "tool.execute.after": async (input, output) => {
       if (input.tool !== "skill") return;
 
+      // The skill tool returns markdown content in its output
+      // Expand skill tags and hashtags in the skill content
       if (typeof output.output === "string" && output.output.trim()) {
-        const expansionResult = expandHashtags(output.output, snippets);
+        let processed = output.output;
+
+        // First expand skill tags if enabled
+        if (config.experimental.skillRendering && skills.size > 0) {
+          processed = expandSkillTags(processed, skills);
+        }
+
+        // Then expand hashtag snippets
+        const expansionResult = expandHashtags(processed, snippets);
         output.output = assembleMessage(expansionResult);
 
         logger.debug("Skill content expanded", {
