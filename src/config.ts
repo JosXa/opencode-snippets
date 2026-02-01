@@ -22,6 +22,8 @@ export interface LoggingConfig {
 export interface ExperimentalConfig {
   /** Enable skill rendering with <skill>name</skill> or <skill name="name" /> syntax */
   skillRendering: boolean;
+  /** Enable <inject>...</inject> blocks for persistent context messages */
+  injectBlocks: boolean;
 }
 
 /**
@@ -47,6 +49,7 @@ interface RawConfig {
   };
   experimental?: {
     skillRendering?: BooleanSetting;
+    injectBlocks?: BooleanSetting;
   };
   hideCommandInOutput?: BooleanSetting;
 }
@@ -60,6 +63,7 @@ const DEFAULT_CONFIG: SnippetsConfig = {
   },
   experimental: {
     skillRendering: false,
+    injectBlocks: false,
   },
   hideCommandInOutput: false,
 };
@@ -200,6 +204,7 @@ export function loadConfig(projectDir?: string): SnippetsConfig {
 function mergeConfig(base: SnippetsConfig, raw: RawConfig): SnippetsConfig {
   const debugValue = normalizeBooleanSetting(raw.logging?.debug);
   const skillRenderingValue = normalizeBooleanSetting(raw.experimental?.skillRendering);
+  const injectBlocksValue = normalizeBooleanSetting(raw.experimental?.injectBlocks);
   const hideCommandValue = normalizeBooleanSetting(raw.hideCommandInOutput);
 
   return {
@@ -209,6 +214,8 @@ function mergeConfig(base: SnippetsConfig, raw: RawConfig): SnippetsConfig {
     experimental: {
       skillRendering:
         skillRenderingValue !== undefined ? skillRenderingValue : base.experimental.skillRendering,
+      injectBlocks:
+        injectBlocksValue !== undefined ? injectBlocksValue : base.experimental.injectBlocks,
     },
     hideCommandInOutput:
       hideCommandValue !== undefined ? hideCommandValue : base.hideCommandInOutput,

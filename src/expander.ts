@@ -13,6 +13,14 @@ const MAX_EXPANSION_COUNT = 15;
 type BlockType = "prepend" | "append" | "inject";
 
 /**
+ * Options for snippet expansion
+ */
+export interface ExpandOptions {
+  /** Whether to extract inject blocks (default: true). If false, inject tags are left as-is. */
+  extractInject?: boolean;
+}
+
+/**
  * Parses snippet content to extract inline text and prepend/append/inject blocks
  *
  * Uses a lenient stack-based parser:
@@ -21,16 +29,22 @@ type BlockType = "prepend" | "append" | "inject";
  * - Multiple blocks → collected in document order
  *
  * @param content - The raw snippet content to parse
+ * @param options - Parsing options
  * @returns Parsed content with inline, prepend, append, and inject parts, or null on error
  */
-export function parseSnippetBlocks(content: string): ParsedSnippetContent | null {
+export function parseSnippetBlocks(
+  content: string,
+  options: ExpandOptions = {},
+): ParsedSnippetContent | null {
+  const { extractInject = true } = options;
   const prepend: string[] = [];
   const append: string[] = [];
   const inject: string[] = [];
   let inline = "";
 
-  // Regex to find opening and closing tags
-  const tagPattern = /<(\/?)(?<tagName>prepend|append|inject)>/gi;
+  // Build regex pattern based on what tags we're processing
+  const tagTypes = extractInject ? "prepend|append|inject" : "prepend|append";
+  const tagPattern = new RegExp(`<(/?)(?<tagName>${tagTypes})>`, "gi");
   let lastIndex = 0;
   let currentBlock: { type: BlockType; startIndex: number; contentStart: number } | null = null;
 
@@ -116,12 +130,14 @@ export function parseSnippetBlocks(content: string): ParsedSnippetContent | null
  * @param text - The text containing hashtags to expand
  * @param registry - The snippet registry to look up hashtags
  * @param expansionCounts - Map tracking how many times each snippet has been expanded
+ * @param options - Expansion options
  * @returns ExpansionResult with text and collected blocks
  */
 export function expandHashtags(
   text: string,
   registry: SnippetRegistry,
   expansionCounts = new Map<string, number>(),
+  options: ExpandOptions = {},
 ): ExpansionResult {
   const collectedPrepend: string[] = [];
   const collectedAppend: string[] = [];
@@ -166,7 +182,7 @@ export function expandHashtags(
       expansionCounts.set(key, count);
 
       // Parse the snippet content for blocks
-      const parsed = parseSnippetBlocks(snippet.content);
+      const parsed = parseSnippetBlocks(snippet.content, options);
       if (parsed === null) {
         // Parse error - leave hashtag unchanged
         logger.warn(`Failed to parse snippet '${key}', leaving hashtag unchanged`);
@@ -179,7 +195,7 @@ export function expandHashtags(
       roundInject.push(...parsed.inject);
 
       // Recursively expand any hashtags in the inline content
-      const nestedResult = expandHashtags(parsed.inline, registry, expansionCounts);
+      const nestedResult = expandHashtags(parsed.inline, registry, expansionCounts, options);
 
       // Collect blocks from nested expansion
       roundPrepend.push(...nestedResult.prepend);

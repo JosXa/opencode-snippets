@@ -884,3 +884,220 @@ describe("Prepend/Append integration with expandHashtags", () => {
     expect(assembled).toBe("Use Inline"); // assembled message should NOT contain injected content
   });
 });
+
+describe("Experimental feature flags", () => {
+  describe("extractInject option", () => {
+    it("should extract inject blocks when extractInject is true (default)", () => {
+      const registry = createRegistry([
+        ["safe", "Think step by step.\n<inject>\nBe careful with security.\n</inject>"],
+      ]);
+
+      const result = expandHashtags("Review #safe", registry);
+
+      expect(result.text).toBe("Review Think step by step.");
+      expect(result.inject).toEqual(["Be careful with security."]);
+    });
+
+    it("should extract inject blocks when extractInject is explicitly true", () => {
+      const registry = createRegistry([
+        ["safe", "Think step by step.\n<inject>\nBe careful with security.\n</inject>"],
+      ]);
+
+      const result = expandHashtags("Review #safe", registry, new Map(), { extractInject: true });
+
+      expect(result.text).toBe("Review Think step by step.");
+      expect(result.inject).toEqual(["Be careful with security."]);
+    });
+
+    it("should leave inject tags unchanged when extractInject is false", () => {
+      const registry = createRegistry([
+        ["safe", "Think step by step.\n<inject>\nBe careful with security.\n</inject>"],
+      ]);
+
+      const result = expandHashtags("Review #safe", registry, new Map(), { extractInject: false });
+
+      expect(result.text).toBe(
+        "Review Think step by step.\n<inject>\nBe careful with security.\n</inject>",
+      );
+      expect(result.inject).toEqual([]);
+    });
+
+    it("should still extract prepend/append blocks when extractInject is false", () => {
+      const registry = createRegistry([
+        [
+          "mixed",
+          "<prepend>\nPrepend content\n</prepend>\nInline\n<append>\nAppend content\n</append>\n<inject>\nInject content\n</inject>",
+        ],
+      ]);
+
+      const result = expandHashtags("#mixed", registry, new Map(), { extractInject: false });
+
+      expect(result.text).toBe("Inline\n\n<inject>\nInject content\n</inject>");
+      expect(result.prepend).toEqual(["Prepend content"]);
+      expect(result.append).toEqual(["Append content"]);
+      expect(result.inject).toEqual([]);
+    });
+
+    it("should propagate extractInject option through nested snippets", () => {
+      const registry = createRegistry([
+        ["outer", "Outer #inner"],
+        ["inner", "Inner\n<inject>\nNested inject\n</inject>"],
+      ]);
+
+      const result = expandHashtags("#outer", registry, new Map(), { extractInject: false });
+
+      expect(result.text).toBe("Outer Inner\n<inject>\nNested inject\n</inject>");
+      expect(result.inject).toEqual([]);
+    });
+
+    it("should collect inject from multiple snippets when enabled", () => {
+      const registry = createRegistry([
+        ["a", "A text\n<inject>\nA inject\n</inject>"],
+        ["b", "B text\n<inject>\nB inject\n</inject>"],
+      ]);
+
+      const result = expandHashtags("#a and #b", registry, new Map(), { extractInject: true });
+
+      expect(result.text).toBe("A text and B text");
+      expect(result.inject).toEqual(["A inject", "B inject"]);
+    });
+
+    it("should leave all inject tags when disabled with multiple snippets", () => {
+      const registry = createRegistry([
+        ["a", "A text\n<inject>\nA inject\n</inject>"],
+        ["b", "B text\n<inject>\nB inject\n</inject>"],
+      ]);
+
+      const result = expandHashtags("#a and #b", registry, new Map(), { extractInject: false });
+
+      expect(result.text).toBe(
+        "A text\n<inject>\nA inject\n</inject> and B text\n<inject>\nB inject\n</inject>",
+      );
+      expect(result.inject).toEqual([]);
+    });
+  });
+});
+
+describe("parseSnippetBlocks with options", () => {
+  it("should extract inject blocks by default", () => {
+    const result = parseSnippetBlocks("Inline\n<inject>\nInject content\n</inject>");
+
+    expect(result).toEqual({
+      inline: "Inline",
+      prepend: [],
+      append: [],
+      inject: ["Inject content"],
+    });
+  });
+
+  it("should extract inject blocks when extractInject is true", () => {
+    const result = parseSnippetBlocks("Inline\n<inject>\nInject content\n</inject>", {
+      extractInject: true,
+    });
+
+    expect(result).toEqual({
+      inline: "Inline",
+      prepend: [],
+      append: [],
+      inject: ["Inject content"],
+    });
+  });
+
+  it("should leave inject tags in content when extractInject is false", () => {
+    const result = parseSnippetBlocks("Inline\n<inject>\nInject content\n</inject>", {
+      extractInject: false,
+    });
+
+    expect(result).toEqual({
+      inline: "Inline\n<inject>\nInject content\n</inject>",
+      prepend: [],
+      append: [],
+      inject: [],
+    });
+  });
+
+  it("should still extract prepend/append when extractInject is false", () => {
+    const content =
+      "<prepend>\nPrepend\n</prepend>\nInline\n<append>\nAppend\n</append>\n<inject>\nInject\n</inject>";
+    const result = parseSnippetBlocks(content, { extractInject: false });
+
+    expect(result).toEqual({
+      inline: "Inline\n\n<inject>\nInject\n</inject>",
+      prepend: ["Prepend"],
+      append: ["Append"],
+      inject: [],
+    });
+  });
+
+  it("should handle multiple inject tags when disabled", () => {
+    const content = "Start\n<inject>\nFirst\n</inject>\nMiddle\n<inject>\nSecond\n</inject>\nEnd";
+    const result = parseSnippetBlocks(content, { extractInject: false });
+
+    expect(result?.inline).toBe(
+      "Start\n<inject>\nFirst\n</inject>\nMiddle\n<inject>\nSecond\n</inject>\nEnd",
+    );
+    expect(result?.inject).toEqual([]);
+  });
+});
+
+describe("Inject coexistence with prepend/append", () => {
+  it("should allow inject alongside prepend (not nested)", () => {
+    const content =
+      "<prepend>\nPrepend content\n</prepend>\nInline text\n<inject>\nInject content\n</inject>";
+    const result = parseSnippetBlocks(content);
+
+    expect(result).toEqual({
+      inline: "Inline text",
+      prepend: ["Prepend content"],
+      append: [],
+      inject: ["Inject content"],
+    });
+  });
+
+  it("should allow inject alongside append (not nested)", () => {
+    const content =
+      "Inline text\n<append>\nAppend content\n</append>\n<inject>\nInject content\n</inject>";
+    const result = parseSnippetBlocks(content);
+
+    expect(result).toEqual({
+      inline: "Inline text",
+      prepend: [],
+      append: ["Append content"],
+      inject: ["Inject content"],
+    });
+  });
+
+  it("should allow inject alongside both prepend and append (not nested)", () => {
+    const content =
+      "<prepend>\nPrepend\n</prepend>\nInline\n<append>\nAppend\n</append>\n<inject>\nInject\n</inject>";
+    const result = parseSnippetBlocks(content);
+
+    expect(result).toEqual({
+      inline: "Inline",
+      prepend: ["Prepend"],
+      append: ["Append"],
+      inject: ["Inject"],
+    });
+  });
+
+  it("should reject inject nested inside prepend", () => {
+    const content = "<prepend>\n<inject>\nnested\n</inject>\n</prepend>";
+    const result = parseSnippetBlocks(content);
+
+    expect(result).toBeNull();
+  });
+
+  it("should reject inject nested inside append", () => {
+    const content = "<append>\n<inject>\nnested\n</inject>\n</append>";
+    const result = parseSnippetBlocks(content);
+
+    expect(result).toBeNull();
+  });
+
+  it("should reject prepend nested inside inject", () => {
+    const content = "<inject>\n<prepend>\nnested\n</prepend>\n</inject>";
+    const result = parseSnippetBlocks(content);
+
+    expect(result).toBeNull();
+  });
+});

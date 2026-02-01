@@ -8,18 +8,7 @@ export class InjectionManager {
   private activeInjections = new Map<string, string[]>();
 
   /**
-   * Stores new injections for a session, clearing any previous injections.
-   */
-  setInjections(sessionID: string, injections: string[]): void {
-    if (injections.length > 0) {
-      this.activeInjections.set(sessionID, injections);
-    } else {
-      this.activeInjections.delete(sessionID);
-    }
-  }
-
-  /**
-   * Adds additional injections to an existing session without duplicates.
+   * Adds injections to a session without duplicates.
    */
   addInjections(sessionID: string, newInjections: string[]): void {
     if (newInjections.length === 0) return;

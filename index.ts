@@ -1,9 +1,10 @@
+import { rmdir, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Plugin } from "@opencode-ai/plugin";
 import { createCommandExecuteHandler } from "./src/commands.js";
 import { loadConfig } from "./src/config.js";
-import { assembleMessage, expandHashtags } from "./src/expander.js";
+import { assembleMessage, type ExpandOptions, expandHashtags } from "./src/expander.js";
 import type {
   ChatMessageInput,
   ChatMessageOutput,
@@ -24,6 +25,36 @@ const PLUGIN_ROOT = join(__dirname, "..");
 const SKILL_DIR = join(PLUGIN_ROOT, "skill");
 
 /**
+ * Clean up legacy skill installation from pre-v1.7.0
+ * We used to force-install SKILL.md to ~/.config/opencode/skill/snippets/
+ * Now we register the skill path instead, so we remove the orphaned file.
+ *
+ * TODO: Remove this cleanup code around mid-2026 when most users have upgraded.
+ */
+async function cleanupLegacySkillInstall(): Promise<void> {
+  const home = process.env.HOME || process.env.USERPROFILE || "";
+  if (!home) return;
+
+  const legacySkillDir = join(home, ".config", "opencode", "skill", "snippets");
+  const legacySkillPath = join(legacySkillDir, "SKILL.md");
+
+  try {
+    const file = Bun.file(legacySkillPath);
+    if (await file.exists()) {
+      await unlink(legacySkillPath);
+      logger.debug("Cleaned up legacy skill file", { path: legacySkillPath });
+
+      // Try to remove the empty directory too
+      await rmdir(legacySkillDir).catch(() => {
+        // Directory not empty or doesn't exist - that's fine
+      });
+    }
+  } catch (err) {
+    logger.debug("Failed to cleanup legacy skill", { error: String(err) });
+  }
+}
+
+/**
  * Snippets Plugin for OpenCode
  *
  * Expands hashtag-based shortcuts in user messages into predefined text snippets.
@@ -37,6 +68,9 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
 
   // Apply config settings
   logger.debugEnabled = config.logging.debug;
+
+  // Clean up legacy skill installation (pre-v1.7.0)
+  cleanupLegacySkillInstall();
 
   // Load all snippets at startup (global + project directory)
   const startupStart = performance.now();
@@ -55,6 +89,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     snippetCount: snippets.size,
     skillCount: skills.size,
     skillRenderingEnabled: config.experimental.skillRendering,
+    injectBlocksEnabled: config.experimental.injectBlocks,
     debugLogging: config.logging.debug,
   });
 
@@ -77,6 +112,10 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     let processedParts = 0;
     const allInjected: string[] = [];
 
+    const expandOptions: ExpandOptions = {
+      extractInject: config.experimental.injectBlocks,
+    };
+
     for (const part of parts) {
       if (part.type === "text" && part.text) {
         // 1. Expand skill tags if skill rendering is enabled
@@ -88,7 +127,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
 
         // 2. Expand hashtags recursively with loop detection
         const expandStart = performance.now();
-        const expansionResult = expandHashtags(part.text, snippets);
+        const expansionResult = expandHashtags(part.text, snippets, new Map(), expandOptions);
         part.text = assembleMessage(expansionResult);
         allInjected.push(...expansionResult.inject);
         expandTimeTotal += performance.now() - expandStart;
@@ -151,7 +190,9 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         }
       });
 
-      injectionManager.setInjections(input.sessionID, injected);
+      if (injected.length > 0) {
+        injectionManager.addInjections(input.sessionID, injected);
+      }
     },
 
     "experimental.chat.messages.transform": async (
@@ -186,6 +227,14 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
           sessionID,
           hasInjections: !!injections,
           injectionCount: injections?.length || 0,
+          messageTexts: output.messages.map((m) => ({
+            role: m.info.role,
+            text: m.parts
+              .filter((p) => p.type === "text")
+              .map((p) => (p.text || "").slice(0, 50))
+              .join(" | "),
+            snippetsProcessed: m.parts.some((p) => p.snippetsProcessed),
+          })),
         });
         if (injections && injections.length > 0) {
           const beforeCount = output.messages.length;
@@ -227,7 +276,10 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         }
 
         // Then expand hashtag snippets
-        const expansionResult = expandHashtags(processed, snippets);
+        const expandOptions: ExpandOptions = {
+          extractInject: config.experimental.injectBlocks,
+        };
+        const expansionResult = expandHashtags(processed, snippets, new Map(), expandOptions);
         output.output = assembleMessage(expansionResult);
 
         logger.debug("Skill content expanded", {

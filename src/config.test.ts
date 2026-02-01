@@ -63,7 +63,7 @@ describe("config", () => {
 
       expect(config).toEqual({
         logging: { debug: false },
-        experimental: { skillRendering: false },
+        experimental: { skillRendering: false, injectBlocks: false },
         hideCommandInOutput: false,
       });
     });
@@ -172,7 +172,7 @@ describe("config", () => {
       // Should return defaults when config is invalid
       expect(config).toEqual({
         logging: { debug: false },
-        experimental: { skillRendering: false },
+        experimental: { skillRendering: false, injectBlocks: false },
         hideCommandInOutput: false,
       });
     });

@@ -34,6 +34,11 @@
           "$ref": "#/definitions/booleanSetting",
           "default": false,
           "description": "Enable skill rendering with <skill>name</skill> or <skill name=\"name\" /> syntax. When enabled, skill tags are replaced with the skill's content body. Skills are loaded from OpenCode's standard skill directories."
+        },
+        "injectBlocks": {
+          "$ref": "#/definitions/booleanSetting",
+          "default": false,
+          "description": "Enable <inject>...</inject> blocks for persistent context messages. When enabled, inject blocks in snippets are sent as separate user messages that persist throughout the agentic loop."
         }
       },
       "additionalProperties": false

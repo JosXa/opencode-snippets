@@ -17,6 +17,12 @@ Reusable text blocks expanded via `#hashtag` in messages.
 - **Global**: `~/.config/opencode/snippet/config.jsonc`
 - **Project**: `.opencode/snippet/config.jsonc` (merges with global, project takes priority)
 
+IMPORTANT: When modifying snippet configuration:
+1. Check BOTH locations for existing config files
+2. If only one exists, modify that one
+3. If both exist, ask the user which one to modify
+4. If neither exists, create the global config
+
 ### Logs
 - **Debug logs**: `~/.config/opencode/logs/snippets/daily/YYYY-MM-DD.log`
 
@@ -37,7 +43,21 @@ Full config example with all options:
     // Logs are written to ~/.config/opencode/logs/snippets/daily/
     // Default: false
     "debug": false
-  }
+  },
+
+  // Experimental features (may change or be removed)
+  "experimental": {
+    // Enable <inject>...</inject> blocks for persistent context messages
+    // Default: false
+    "injectBlocks": false,
+    // Enable skill rendering with <skill>name</skill> syntax
+    // Default: false
+    "skillRendering": false
+  },
+
+  // Hide shell command in output, showing only the result
+  // Default: false
+  "hideCommandInOutput": false
 }
 ```
 
@@ -81,6 +101,56 @@ Input: `Create bug in #jira about leak`
 Output: Prepended section at top + `Create bug in Jira MCP about leak`.
 
 Use `<append>` for reference material at end. Content inside blocks should use `##` headings.
+
+### Inject Blocks (Experimental)
+
+Add persistent context that the LLM sees throughout the entire agentic loop, without cluttering the visible message.
+
+```md
+---
+aliases: safe
+---
+Think step by step.
+<inject>
+IMPORTANT: Double-check all code for security vulnerabilities.
+Always suggest tests for any implementation.
+</inject>
+```
+
+Input: `Review this code #safe`
+Output: User sees "Review this code Think step by step." but the LLM also receives the inject content as separate context that persists for the entire conversation turn.
+
+Use for rules, constraints, or context that should influence all responses without appearing inline.
+
+Enable in config:
+```jsonc
+{
+  "experimental": {
+    "injectBlocks": true
+  }
+}
+```
+
+### Skill Rendering (Experimental)
+
+Inline OpenCode skills directly into messages using XML tags:
+
+```md
+Create a Jira ticket. <skill>jira</skill>
+<!-- or -->
+<skill name="jira" />
+```
+
+Enable in config:
+```jsonc
+{
+  "experimental": {
+    "skillRendering": true
+  }
+}
+```
+
+Skills are loaded from OpenCode's standard directories (`~/.config/opencode/skill/` and `.opencode/skill/`).
 
 ## Commands
 

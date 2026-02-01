@@ -233,6 +233,70 @@ Use `<prepend>` for content that should appear at the top of your message. Multi
 - Unclosed tags are handled leniently (rest of content becomes the block)
 - Nested blocks are not allowed—the hashtag is left unchanged
 
+### Inject Blocks (Experimental)
+
+Add persistent context that the LLM sees throughout the entire agentic loop, without cluttering your visible message:
+
+```markdown
+---
+aliases: safe
+---
+Think step by step.
+<inject>
+IMPORTANT: Double-check all code for security vulnerabilities.
+Always suggest tests for any implementation.
+</inject>
+```
+
+**Input:** `Review this code #safe`
+
+**What happens:**
+- Your message shows: `Review this code Think step by step.`
+- The LLM also receives the inject content as a separate context message
+- This context persists for the entire conversation turn (agentic loop)
+
+Use inject blocks for rules, constraints, or instructions that should influence all LLM responses without appearing inline in your message.
+
+**Enable in config:**
+
+```jsonc
+{
+  "experimental": {
+    "injectBlocks": true
+  }
+}
+```
+
+### Skill Rendering (Experimental)
+
+Inline OpenCode skills directly into your messages using XML-style tags:
+
+```markdown
+Create a Jira ticket. <skill>jira</skill>
+```
+
+Or use the self-closing format:
+
+```markdown
+<skill name="jira" /> Create a ticket for the bug.
+```
+
+**Enable in config:**
+
+```jsonc
+{
+  "experimental": {
+    "skillRendering": true
+  }
+}
+```
+
+Skills are loaded from OpenCode's standard skill directories:
+- **Global**: `~/.config/opencode/skill/<name>/SKILL.md`
+- **Project**: `.opencode/skill/<name>/SKILL.md`
+
+When a skill tag is found, it's replaced with the skill's content body (frontmatter stripped). Unknown skills leave the tag unchanged.
+
 ## Example Snippets
 
 ### `~/.config/opencode/snippet/context.md`
@@ -297,7 +361,10 @@ A default config file is created automatically on first run.
   "logging": {
     "debug": false // Enable debug logging (logs: ~/.config/opencode/logs/snippets/daily/)
   },
-  "installSkill": true, // Auto-install SKILL.md to ~/.config/opencode/skill/snippets/
+  "experimental": {
+    "injectBlocks": false, // Enable <inject>...</inject> blocks for persistent context
+    "skillRendering": false // Enable <skill>name</skill> tag expansion
+  },
   "hideCommandInOutput": false // Show only output for shell commands (hides "$ cmd\n-->")
 }
 ```
