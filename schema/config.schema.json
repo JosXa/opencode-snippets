@@ -26,6 +26,18 @@
       },
       "additionalProperties": false
     },
+    "experimental": {
+      "type": "object",
+      "description": "Experimental features (may change or be removed in future versions)",
+      "properties": {
+        "skillRendering": {
+          "$ref": "#/definitions/booleanSetting",
+          "default": false,
+          "description": "Enable skill rendering with <skill>name</skill> or <skill name=\"name\" /> syntax. When enabled, skill tags are replaced with the skill's content body. Skills are loaded from OpenCode's standard skill directories."
+        }
+      },
+      "additionalProperties": false
+    },
     "installSkill": {
       "$ref": "#/definitions/booleanSetting",
       "default": true,
