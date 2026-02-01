@@ -37,13 +37,7 @@ Full config example with all options:
     // Logs are written to ~/.config/opencode/logs/snippets/daily/
     // Default: false
     "debug": false
-  },
-
-  // Automatically install SKILL.md to global skill directory
-  // When enabled, the snippets skill is copied to ~/.config/opencode/skill/snippets/
-  // This enables the LLM to understand how to use snippets
-  // Default: true
-  "installSkill": true
+  }
 }
 ```
 

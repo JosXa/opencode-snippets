@@ -64,7 +64,6 @@ describe("config", () => {
       expect(config).toEqual({
         logging: { debug: false },
         experimental: { skillRendering: false },
-        installSkill: true,
         hideCommandInOutput: false,
       });
     });
@@ -82,14 +81,13 @@ describe("config", () => {
     it("should load global config file", () => {
       writeFileSync(
         (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL,
-        JSON.stringify({ logging: { debug: true }, installSkill: false }),
+        JSON.stringify({ logging: { debug: true } }),
         "utf-8",
       );
 
       const config = loadConfig();
 
       expect(config.logging.debug).toBe(true);
-      expect(config.installSkill).toBe(false);
     });
 
     it("should parse JSONC with comments", () => {
@@ -98,15 +96,13 @@ describe("config", () => {
         "logging": {
           /* Block comment */
           "debug": true
-        },
-        "installSkill": false
+        }
       }`;
       writeFileSync((PATHS as Record<string, string>).CONFIG_FILE_GLOBAL, jsoncContent, "utf-8");
 
       const config = loadConfig();
 
       expect(config.logging.debug).toBe(true);
-      expect(config.installSkill).toBe(false);
     });
 
     it("should accept 'enabled' string for debug", () => {
@@ -133,32 +129,8 @@ describe("config", () => {
       expect(config.logging.debug).toBe(false);
     });
 
-    it("should accept 'enabled' string for installSkill", () => {
-      writeFileSync(
-        (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL,
-        JSON.stringify({ installSkill: "enabled" }),
-        "utf-8",
-      );
-
-      const config = loadConfig();
-
-      expect(config.installSkill).toBe(true);
-    });
-
-    it("should accept 'disabled' string for installSkill", () => {
-      writeFileSync(
-        (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL,
-        JSON.stringify({ installSkill: "disabled" }),
-        "utf-8",
-      );
-
-      const config = loadConfig();
-
-      expect(config.installSkill).toBe(false);
-    });
-
     it("should merge partial config with defaults", () => {
-      // Only set debug, installSkill should use default
+      // Only set debug, other options should use default
       writeFileSync(
         (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL,
         JSON.stringify({ logging: { debug: true } }),
@@ -168,14 +140,14 @@ describe("config", () => {
       const config = loadConfig();
 
       expect(config.logging.debug).toBe(true);
-      expect(config.installSkill).toBe(true); // Default value
+      expect(config.hideCommandInOutput).toBe(false); // Default value
     });
 
     it("should merge project config with global config (project has priority)", () => {
       // Global config
       writeFileSync(
         (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL,
-        JSON.stringify({ logging: { debug: true }, installSkill: true }),
+        JSON.stringify({ logging: { debug: true } }),
         "utf-8",
       );
 
@@ -186,7 +158,6 @@ describe("config", () => {
       const config = loadConfig(TEST_PROJECT_DIR);
 
       expect(config.logging.debug).toBe(false); // Overridden by project
-      expect(config.installSkill).toBe(true); // From global
     });
 
     it("should handle malformed JSONC gracefully", () => {
@@ -202,7 +173,6 @@ describe("config", () => {
       expect(config).toEqual({
         logging: { debug: false },
         experimental: { skillRendering: false },
-        installSkill: true,
         hideCommandInOutput: false,
       });
     });
@@ -210,7 +180,7 @@ describe("config", () => {
     it("should ignore invalid config value types", () => {
       writeFileSync(
         (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL,
-        JSON.stringify({ logging: { debug: "yes" }, installSkill: 123 }),
+        JSON.stringify({ logging: { debug: "yes" } }),
         "utf-8",
       );
 
@@ -218,7 +188,6 @@ describe("config", () => {
 
       // Should use defaults for invalid types
       expect(config.logging.debug).toBe(false);
-      expect(config.installSkill).toBe(true);
     });
   });
 

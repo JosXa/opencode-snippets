@@ -38,11 +38,6 @@
       },
       "additionalProperties": false
     },
-    "installSkill": {
-      "$ref": "#/definitions/booleanSetting",
-      "default": true,
-      "description": "Automatically install SKILL.md to global skill directory. When enabled, the snippets skill is copied to ~/.config/opencode/skill/snippets/ so the LLM understands how to use snippets."
-    },
     "hideCommandInOutput": {
       "$ref": "#/definitions/booleanSetting",
       "default": false,
