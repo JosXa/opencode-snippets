@@ -873,6 +873,60 @@ describe("Prepend/Append integration with expandHashtags", () => {
     expect(assembled).toBe("Plain content and Block inline\n\nBlock append");
   });
 
+  it("should expand hashtags inside prepend/append/inject blocks", () => {
+    const registry = createRegistry([
+      ["outer", "Outer inline\n<append>\nAppend with #inner included\n</append>"],
+      ["inner", "Inner content"],
+    ]);
+
+    const result = expandHashtags("Use #outer", registry);
+    const assembled = assembleMessage(result);
+
+    expect(result.text).toBe("Use Outer inline");
+    expect(result.append).toEqual(["Append with Inner content included"]);
+    expect(assembled).toBe("Use Outer inline\n\nAppend with Inner content included");
+  });
+
+  it("should expand hashtags inside prepend blocks", () => {
+    const registry = createRegistry([
+      ["outer", "<prepend>\nBefore: #inner\n</prepend>\nMain"],
+      ["inner", "Expanded"],
+    ]);
+
+    const result = expandHashtags("#outer", registry);
+    const assembled = assembleMessage(result);
+
+    expect(result.prepend).toEqual(["Before: Expanded"]);
+    expect(assembled).toBe("Before: Expanded\n\nMain");
+  });
+
+  it("should expand hashtags inside inject blocks", () => {
+    const registry = createRegistry([
+      ["outer", "Visible\n<inject>\nHidden: #inner\n</inject>"],
+      ["inner", "Secret"],
+    ]);
+
+    const result = expandHashtags("#outer", registry);
+
+    expect(result.text).toBe("Visible");
+    expect(result.inject).toEqual(["Hidden: Secret"]);
+  });
+
+  it("should handle nested blocks from hashtags expanded inside blocks", () => {
+    const registry = createRegistry([
+      ["outer", "<append>\n#inner\n</append>"],
+      ["inner", "<prepend>\nInner prepend\n</prepend>\nInner inline"],
+    ]);
+
+    const result = expandHashtags("#outer", registry);
+    const assembled = assembleMessage(result);
+
+    // #inner inside append expands: inline "Inner inline" goes to append, prepend bubbles up
+    expect(result.prepend).toEqual(["Inner prepend"]);
+    expect(result.append).toEqual(["Inner inline"]);
+    expect(assembled).toBe("Inner prepend\n\nInner inline");
+  });
+
   it("should collect inject blocks and not include them in assembled message", () => {
     const registry = createRegistry([["inj", "Inline\n<inject>\nInjected message\n</inject>"]]);
 

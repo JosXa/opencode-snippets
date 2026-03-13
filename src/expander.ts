@@ -189,10 +189,21 @@ export function expandHashtags(
         return match;
       }
 
-      // Collect prepend/append/inject blocks
-      roundPrepend.push(...parsed.prepend);
-      roundAppend.push(...parsed.append);
-      roundInject.push(...parsed.inject);
+      // Recursively expand hashtags in prepend/append/inject blocks
+      const targets: [string[], string[]][] = [
+        [parsed.prepend, roundPrepend],
+        [parsed.append, roundAppend],
+        [parsed.inject, roundInject],
+      ];
+      for (const [blocks, dest] of targets) {
+        for (const block of blocks) {
+          const r = expandHashtags(block, registry, expansionCounts, options);
+          dest.push(r.text);
+          roundPrepend.push(...r.prepend);
+          roundAppend.push(...r.append);
+          roundInject.push(...r.inject);
+        }
+      }
 
       // Recursively expand any hashtags in the inline content
       const nestedResult = expandHashtags(parsed.inline, registry, expansionCounts, options);

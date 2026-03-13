@@ -1,0 +1,56 @@
+name: Update Schema URLs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
+
+jobs:
+  update-schema-urls:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version from package.json
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Update schema URLs in project files
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          OLD_PATTERN='raw.githubusercontent.com/JosXa/opencode-snippets/v[0-9]\+\.[0-9]\+\.[0-9]\+/schema/config.schema.json'
+          NEW_URL="raw.githubusercontent.com/JosXa/opencode-snippets/v${VERSION}/schema/config.schema.json"
+          
+          # Update all files containing schema URLs
+          for file in README.md src/config.ts skill/snippets/SKILL.md; do
+            if [ -f "$file" ]; then
+              sed -i "s|${OLD_PATTERN}|${NEW_URL}|g" "$file"
+              echo "Updated: $file"
+            fi
+          done
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            git diff
+          fi
+
+      - name: Commit and push changes
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md src/config.ts skill/snippets/SKILL.md
+          git commit -m "chore: update schema URLs to v${{ steps.version.outputs.version }}"
+          git push

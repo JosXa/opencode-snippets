@@ -37,6 +37,8 @@ Execute these steps IN ORDER:
 - Use Edit tool to update package.json with new version
 - Commit: `git add package.json && git commit -m "chore: bump version to vX.Y.Z"`
 
+**Note:** Schema URLs in project files (README.md, src/config.ts, skill/snippets/SKILL.md) are updated automatically by CI when package.json changes.
+
 **Step 2: Push Version Bump**
 - Push to remote: `git push`
 - Wait for CI to pass: `gh run list --limit 3`
