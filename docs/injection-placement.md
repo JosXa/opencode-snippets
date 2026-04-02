@@ -73,22 +73,6 @@ messageCount=16, target = max(0, 16-5) = 11
 The injection maintains a steady distance from the bottom. The model treats it as
 old context rather than a fresh command.
 
-## Why Not "Re-inject When Stale"?
-
-An earlier design tracked when each injection was last placed and "refreshed" it
-(moved it to the current position) after N messages. This created a sawtooth pattern:
-
-```
-         ___         ___         ___
-        /   \       /   \       /   \
-bottom /     \_____/     \_____/     \___
-       refresh     refresh     refresh
-```
-
-Every refresh snapped the injection back to the bottom of the conversation, making
-the model treat it as a fresh instruction again. The fixed-offset approach eliminates
-this entirely. No refresh logic, no sawtooth, just a stable position.
-
 ## Configuration
 
 The `injectRecencyMessages` config value controls the offset distance:
