@@ -15,9 +15,16 @@ type BlockType = "prepend" | "append" | "inject";
 /**
  * Options for snippet expansion
  */
+export interface InjectBlockInfo {
+  snippetName: string;
+  content: string;
+}
+
 export interface ExpandOptions {
   /** Whether to extract inject blocks (default: true). If false, inject tags are left as-is. */
   extractInject?: boolean;
+  /** Optional callback invoked for each expanded inject block with its source snippet name. */
+  onInjectBlock?: (block: InjectBlockInfo) => void;
 }
 
 /**
@@ -139,6 +146,7 @@ export function expandHashtags(
   expansionCounts = new Map<string, number>(),
   options: ExpandOptions = {},
 ): ExpansionResult {
+  const { onInjectBlock } = options;
   const collectedPrepend: string[] = [];
   const collectedAppend: string[] = [];
   const collectedInject: string[] = [];
@@ -202,6 +210,9 @@ export function expandHashtags(
           roundPrepend.push(...r.prepend);
           roundAppend.push(...r.append);
           roundInject.push(...r.inject);
+          if (dest === roundInject && onInjectBlock) {
+            onInjectBlock({ snippetName: snippet.name, content: r.text });
+          }
         }
       }
 

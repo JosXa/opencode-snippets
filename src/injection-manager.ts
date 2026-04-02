@@ -1,40 +1,110 @@
 import { logger } from "./logger.js";
 
+export interface InjectionDescriptor {
+  snippetName: string;
+  content: string;
+}
+
+export interface ActiveInjection extends InjectionDescriptor {
+  key: string;
+  lastInjectedMessageCount: number | null;
+  pendingRefresh: boolean;
+  order: number;
+}
+
+export interface RenderableInjectionsResult {
+  injections: ActiveInjection[];
+  reinjected: ActiveInjection[];
+}
+
 /**
- * Manages injection lifecycle per session.
- * Injections persist for the entire agentic loop until session idle.
+ * Tracks active snippet injections and re-injects them when they become stale.
  */
 export class InjectionManager {
-  private activeInjections = new Map<string, string[]>();
+  private activeInjections = new Map<string, Map<string, ActiveInjection>>();
+  private nextOrder = 0;
 
-  /**
-   * Adds injections to a session without duplicates.
-   */
-  addInjections(sessionID: string, newInjections: string[]): void {
-    if (newInjections.length === 0) return;
+  touchInjections(sessionID: string, injections: InjectionDescriptor[]): void {
+    if (injections.length === 0) return;
 
-    const existing = this.activeInjections.get(sessionID) || [];
-    const uniqueInjections = newInjections.filter((inj) => !existing.includes(inj));
+    const session = this.getOrCreateSession(sessionID);
 
-    if (uniqueInjections.length > 0) {
-      this.activeInjections.set(sessionID, [...existing, ...uniqueInjections]);
+    for (const injection of injections) {
+      const key = this.getInjectionKey(injection);
+      const existing = session.get(key);
+      if (existing) {
+        existing.snippetName = injection.snippetName;
+        existing.content = injection.content;
+        existing.pendingRefresh = true;
+        continue;
+      }
+
+      session.set(key, {
+        ...injection,
+        key,
+        lastInjectedMessageCount: null,
+        pendingRefresh: true,
+        order: this.nextOrder++,
+      });
     }
   }
 
-  /**
-   * Gets active injections for a session without removing them.
-   */
-  getInjections(sessionID: string): string[] | undefined {
-    return this.activeInjections.get(sessionID);
+  getRenderableInjections(
+    sessionID: string,
+    messageCount: number,
+    recencyWindow: number,
+  ): RenderableInjectionsResult {
+    const session = this.activeInjections.get(sessionID);
+    if (!session || session.size === 0) {
+      return { injections: [], reinjected: [] };
+    }
+
+    const reinjected: ActiveInjection[] = [];
+    const normalizedWindow = Math.max(1, recencyWindow);
+
+    for (const injection of session.values()) {
+      const shouldRefresh =
+        injection.pendingRefresh ||
+        injection.lastInjectedMessageCount === null ||
+        messageCount - injection.lastInjectedMessageCount >= normalizedWindow;
+
+      if (shouldRefresh) {
+        injection.lastInjectedMessageCount = messageCount;
+        injection.pendingRefresh = false;
+        reinjected.push({ ...injection });
+      }
+    }
+
+    const injections = [...session.values()]
+      .filter((injection) => injection.lastInjectedMessageCount !== null)
+      .sort((a, b) => {
+        const aPos = a.lastInjectedMessageCount ?? Number.MAX_SAFE_INTEGER;
+        const bPos = b.lastInjectedMessageCount ?? Number.MAX_SAFE_INTEGER;
+        if (aPos !== bPos) return aPos - bPos;
+        return a.order - b.order;
+      })
+      .map((injection) => ({ ...injection }));
+
+    return { injections, reinjected };
   }
 
-  /**
-   * Clears all injections for a session.
-   */
   clearSession(sessionID: string): void {
     if (this.activeInjections.has(sessionID)) {
       this.activeInjections.delete(sessionID);
-      logger.debug("Cleared active injections on session idle", { sessionID });
+      logger.debug("Cleared active injections", { sessionID });
     }
+  }
+
+  private getOrCreateSession(sessionID: string): Map<string, ActiveInjection> {
+    let session = this.activeInjections.get(sessionID);
+    if (!session) {
+      session = new Map();
+      this.activeInjections.set(sessionID, session);
+    }
+    return session;
+  }
+
+  private getInjectionKey(injection: InjectionDescriptor): string {
+    return `${injection.snippetName}\u0000${injection.content}`;
   }
 }

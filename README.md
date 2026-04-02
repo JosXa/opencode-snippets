@@ -257,6 +257,8 @@ Always suggest tests for any implementation.
 
 Use inject blocks for rules, constraints, or instructions that should influence all LLM responses without appearing inline in your message.
 
+Injected snippet context is re-inserted when it becomes stale. By default this happens after **5 conversation messages**. Configure it with `injectRecencyMessages`.
+
 **Enable in config:**
 
 ```jsonc
@@ -365,7 +367,8 @@ A default config file is created automatically on first run.
     "injectBlocks": false, // Enable <inject>...</inject> blocks for persistent context
     "skillRendering": false // Enable <skill>name</skill> tag expansion
   },
-  "hideCommandInOutput": false // Show only output for shell commands (hides "$ cmd\n-->")
+  "hideCommandInOutput": false, // Show only output for shell commands (hides "$ cmd\n-->")
+  "injectRecencyMessages": 5 // Re-inject hidden snippet context after this many messages
 }
 ```
 
@@ -378,6 +381,7 @@ Logs are written to `~/.config/opencode/logs/snippets/daily/` when enabled.
 ## Behavior Notes
 
 - Snippets expand everywhere: regular chat, question responses, skills, and slash commands
+- Injected snippet context is re-inserted after `injectRecencyMessages` conversation messages and shows a visible `↳ Injected #name` indicator when refreshed
 - Snippets are loaded once at plugin startup
 - Hashtag matching is **case-insensitive** (`#Hello` = `#hello`)
 - Unknown hashtags are left unchanged

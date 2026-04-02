@@ -1,6 +1,9 @@
 import { readdir, unlink } from "node:fs/promises";
 import { basename, join } from "node:path";
-import matter from "gray-matter";
+import { importCjs } from "./cjs-interop.js";
+
+const matter = await importCjs<typeof import("gray-matter")>("gray-matter");
+
 import { CONFIG, PATHS } from "./constants.js";
 import { logger } from "./logger.js";
 import type { SnippetFrontmatter, SnippetInfo, SnippetRegistry } from "./types.js";

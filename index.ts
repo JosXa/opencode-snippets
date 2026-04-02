@@ -8,13 +8,13 @@ import { assembleMessage, type ExpandOptions, expandHashtags } from "./src/expan
 import type {
   ChatMessageInput,
   ChatMessageOutput,
-  SessionIdleEvent,
   TransformInput,
   TransformOutput,
 } from "./src/hook-types.js";
 import { InjectionManager } from "./src/injection-manager.js";
 import { loadSnippets } from "./src/loader.js";
 import { logger } from "./src/logger.js";
+import { sendIgnoredMessage } from "./src/notification.js";
 import { executeShellCommands, type ShellContext } from "./src/shell.js";
 import { loadSkills, type SkillRegistry } from "./src/skill-loader.js";
 import { expandSkillTags } from "./src/skill-renderer.js";
@@ -100,20 +100,23 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
 
   /**
    * Processes text parts for snippet expansion, skill rendering, and shell command execution.
-   * Returns collected inject blocks from expanded snippets.
+   * Returns collected inject blocks from expanded snippets with snippet names.
    */
   const processTextParts = async (
     parts: Array<{ type: string; text?: string }>,
-  ): Promise<string[]> => {
+  ): Promise<Array<{ snippetName: string; content: string }>> => {
     const messageStart = performance.now();
     let expandTimeTotal = 0;
     let skillTimeTotal = 0;
     let shellTimeTotal = 0;
     let processedParts = 0;
-    const allInjected: string[] = [];
+    const allInjected: Array<{ snippetName: string; content: string }> = [];
 
     const expandOptions: ExpandOptions = {
       extractInject: config.experimental.injectBlocks,
+      onInjectBlock: (block) => {
+        allInjected.push(block);
+      },
     };
 
     for (const part of parts) {
@@ -129,7 +132,6 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         const expandStart = performance.now();
         const expansionResult = expandHashtags(part.text, snippets, new Map(), expandOptions);
         part.text = assembleMessage(expansionResult);
-        allInjected.push(...expansionResult.inject);
         expandTimeTotal += performance.now() - expandStart;
 
         // 3. Execute shell commands: !`command`
@@ -155,6 +157,56 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     }
 
     return allInjected;
+  };
+
+  const isIgnoredMessage = (message: TransformOutput["messages"][number]): boolean =>
+    message.parts.some((part) => part.ignored);
+
+  const countConversationMessages = (messages: TransformOutput["messages"]): number =>
+    messages.filter((message) => !isIgnoredMessage(message)).length;
+
+  const insertInjectionsIntoMessages = (
+    messages: TransformOutput["messages"],
+    injections: Array<{ lastInjectedMessageCount: number | null; content: string }>,
+  ): TransformOutput["messages"] => {
+    if (injections.length === 0) return messages;
+
+    const totalRealMessages = countConversationMessages(messages);
+    const buckets = new Map<number, string[]>();
+    for (const injection of injections) {
+      const position = Math.max(
+        0,
+        Math.min(totalRealMessages, injection.lastInjectedMessageCount ?? totalRealMessages),
+      );
+      const existing = buckets.get(position) || [];
+      existing.push(injection.content);
+      buckets.set(position, existing);
+    }
+
+    const result: TransformOutput["messages"] = [];
+    const prepend = buckets.get(0) || [];
+    for (const text of prepend) {
+      result.push({
+        info: { role: "user" },
+        parts: [{ type: "text", text }],
+      });
+    }
+
+    let seenRealMessages = 0;
+    messages.forEach((message) => {
+      result.push(message);
+      if (isIgnoredMessage(message)) return;
+      seenRealMessages += 1;
+      const texts = buckets.get(seenRealMessages) || [];
+      for (const text of texts) {
+        result.push({
+          info: { role: "user", sessionID: message.info.sessionID },
+          parts: [{ type: "text", text }],
+        });
+      }
+    });
+
+    return result;
   };
 
   return {
@@ -191,7 +243,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
       });
 
       if (injected.length > 0) {
-        injectionManager.addInjections(input.sessionID, injected);
+        injectionManager.touchInjections(input.sessionID, injected);
       }
     },
 
@@ -216,17 +268,24 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
           const injected = await processTextParts(message.parts);
 
           if (injected.length > 0 && sessionID) {
-            injectionManager.addInjections(sessionID, injected);
+            injectionManager.touchInjections(sessionID, injected);
           }
         }
       }
 
       if (sessionID) {
-        const injections = injectionManager.getInjections(sessionID);
+        const messageCount = countConversationMessages(output.messages);
+        const { injections, reinjected } = injectionManager.getRenderableInjections(
+          sessionID,
+          messageCount,
+          config.injectRecencyMessages,
+        );
+
         logger.debug("Transform hook - checking for injections", {
           sessionID,
-          hasInjections: !!injections,
-          injectionCount: injections?.length || 0,
+          hasInjections: injections.length > 0,
+          injectionCount: injections.length,
+          reinjectedCount: reinjected.length,
           messageTexts: output.messages.map((m) => ({
             role: m.info.role,
             text: m.parts
@@ -236,17 +295,19 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
             snippetsProcessed: m.parts.some((p) => p.snippetsProcessed),
           })),
         });
-        if (injections && injections.length > 0) {
+
+        if (reinjected.length > 0) {
+          const snippetNames = [...new Set(reinjected.map((injection) => injection.snippetName))];
+          await sendIgnoredMessage(
+            ctx.client,
+            sessionID,
+            snippetNames.map((name) => `↳ Injected #${name}`).join("\n"),
+          );
+        }
+
+        if (injections.length > 0) {
           const beforeCount = output.messages.length;
-          for (const injectText of injections) {
-            output.messages.push({
-              info: {
-                role: "user",
-                sessionID: sessionID,
-              },
-              parts: [{ type: "text", text: injectText }],
-            });
-          }
+          output.messages = insertInjectionsIntoMessages(output.messages, injections);
           logger.debug("Injected ephemeral user messages", {
             sessionID,
             injectionCount: injections.length,
@@ -255,10 +316,6 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
           });
         }
       }
-    },
-
-    "session.idle": async (event: SessionIdleEvent) => {
-      injectionManager.clearSession(event.sessionID);
     },
 
     // Process skill tool output to expand snippets and skill tags in skill content

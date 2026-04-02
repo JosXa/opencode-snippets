@@ -65,6 +65,7 @@ describe("config", () => {
         logging: { debug: false },
         experimental: { skillRendering: false, injectBlocks: false },
         hideCommandInOutput: false,
+        injectRecencyMessages: 5,
       });
     });
 
@@ -174,6 +175,7 @@ describe("config", () => {
         logging: { debug: false },
         experimental: { skillRendering: false, injectBlocks: false },
         hideCommandInOutput: false,
+        injectRecencyMessages: 5,
       });
     });
 

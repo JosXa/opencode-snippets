@@ -937,6 +937,17 @@ describe("Prepend/Append integration with expandHashtags", () => {
     expect(result.inject).toEqual(["Injected message"]);
     expect(assembled).toBe("Use Inline"); // assembled message should NOT contain injected content
   });
+
+  it("should report inject block source snippet names via callback", () => {
+    const registry = createRegistry([["safe", "Visible\n<inject>\nHidden message\n</inject>"]]);
+    const blocks: Array<{ snippetName: string; content: string }> = [];
+
+    expandHashtags("Use #safe", registry, new Map(), {
+      onInjectBlock: (block) => blocks.push(block),
+    });
+
+    expect(blocks).toEqual([{ snippetName: "safe", content: "Hidden message" }]);
+  });
 });
 
 describe("Experimental feature flags", () => {

@@ -1,7 +1,10 @@
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import matter from "gray-matter";
+import { importCjs } from "./cjs-interop.js";
+
+const matter = await importCjs<typeof import("gray-matter")>("gray-matter");
+
 import { logger } from "./logger.js";
 
 /**

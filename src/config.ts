@@ -1,7 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { parse as parseJsonc } from "jsonc-parser";
+import { importCjs } from "./cjs-interop.js";
 import { getProjectPaths, PATHS } from "./constants.js";
 import { logger } from "./logger.js";
+
+const { parse: parseJsonc } = await importCjs<typeof import("jsonc-parser")>("jsonc-parser");
 
 /**
  * Boolean setting that can be true/false or "enabled"/"disabled" for flexibility
@@ -38,6 +40,9 @@ export interface SnippetsConfig {
 
   /** Hide shell command in output, showing only the result */
   hideCommandInOutput: boolean;
+
+  /** Re-inject hidden snippet context after this many conversation messages */
+  injectRecencyMessages: number;
 }
 
 /**
@@ -52,6 +57,7 @@ interface RawConfig {
     injectBlocks?: BooleanSetting;
   };
   hideCommandInOutput?: BooleanSetting;
+  injectRecencyMessages?: number | string;
 }
 
 /**
@@ -66,6 +72,7 @@ const DEFAULT_CONFIG: SnippetsConfig = {
     injectBlocks: false,
   },
   hideCommandInOutput: false,
+  injectRecencyMessages: 5,
 };
 
 /**
@@ -99,7 +106,11 @@ const DEFAULT_CONFIG_CONTENT = `{
   // When true, only the output is shown (matching OpenCode's slash command behavior)
   // Values: true, false, "enabled", "disabled"
   // Default: false
-  "hideCommandInOutput": false
+  "hideCommandInOutput": false,
+
+  // Re-inject hidden snippet context after this many conversation messages
+  // Default: 5
+  "injectRecencyMessages": 5
 }
 `;
 
@@ -112,6 +123,13 @@ function normalizeBooleanSetting(value: BooleanSetting | undefined): boolean | u
   if (value === "enabled") return true;
   if (value === "disabled") return false;
   return undefined;
+}
+
+function normalizePositiveInteger(value: number | string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = typeof value === "number" ? value : Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return undefined;
+  return Math.floor(parsed);
 }
 
 /**
@@ -193,6 +211,7 @@ export function loadConfig(projectDir?: string): SnippetsConfig {
     loggingDebug: config.logging.debug,
     experimentalSkillRendering: config.experimental.skillRendering,
     hideCommandInOutput: config.hideCommandInOutput,
+    injectRecencyMessages: config.injectRecencyMessages,
   });
 
   return config;
@@ -206,6 +225,7 @@ function mergeConfig(base: SnippetsConfig, raw: RawConfig): SnippetsConfig {
   const skillRenderingValue = normalizeBooleanSetting(raw.experimental?.skillRendering);
   const injectBlocksValue = normalizeBooleanSetting(raw.experimental?.injectBlocks);
   const hideCommandValue = normalizeBooleanSetting(raw.hideCommandInOutput);
+  const injectRecencyValue = normalizePositiveInteger(raw.injectRecencyMessages);
 
   return {
     logging: {
@@ -219,6 +239,8 @@ function mergeConfig(base: SnippetsConfig, raw: RawConfig): SnippetsConfig {
     },
     hideCommandInOutput:
       hideCommandValue !== undefined ? hideCommandValue : base.hideCommandInOutput,
+    injectRecencyMessages:
+      injectRecencyValue !== undefined ? injectRecencyValue : base.injectRecencyMessages,
   };
 }
 
