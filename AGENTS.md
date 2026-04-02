@@ -24,7 +24,7 @@ After release, MUST update user's global config schema URL:
 
 ## CI Pipeline Quirks
 
-**Tag push auto-creates a draft release.** `gh release create` will 422 with "tag_name already exists". MUST use `gh release edit vX.Y.Z` instead.
+**CI auto-generates release notes from conventional commits** (categorized: features, fixes, docs, chores). Tag push triggers `release.yml` which builds notes and creates/updates a GitHub release. Do NOT write manual release notes unless adding extra context. If you do need to edit, use `gh release edit vX.Y.Z` (not `create`, which 422s because the release already exists).
 
 **Schema URL CI workflow has broken push permissions** (403 on push-back). MUST update schema URLs manually before tagging. Three files contain `raw.githubusercontent.com/JosXa/opencode-snippets/vX.Y.Z/schema/config.schema.json`:
 - `README.md`
