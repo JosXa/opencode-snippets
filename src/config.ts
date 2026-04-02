@@ -41,7 +41,7 @@ export interface SnippetsConfig {
   /** Hide shell command in output, showing only the result */
   hideCommandInOutput: boolean;
 
-  /** Re-inject hidden snippet context after this many conversation messages */
+  /** How many messages from the bottom of the conversation to place injected context */
   injectRecencyMessages: number;
 }
 
@@ -108,7 +108,8 @@ const DEFAULT_CONFIG_CONTENT = `{
   // Default: false
   "hideCommandInOutput": false,
 
-  // Re-inject hidden snippet context after this many conversation messages
+  // How many messages from the bottom of the conversation to place injected context
+  // Higher = injection feels "older" to the model, lower = closer to recent context
   // Default: 5
   "injectRecencyMessages": 5
 }

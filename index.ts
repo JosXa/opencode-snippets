@@ -167,17 +167,14 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
 
   const insertInjectionsIntoMessages = (
     messages: TransformOutput["messages"],
-    injections: Array<{ lastInjectedMessageCount: number | null; content: string }>,
+    injections: Array<{ targetPosition: number; content: string }>,
   ): TransformOutput["messages"] => {
     if (injections.length === 0) return messages;
 
     const totalRealMessages = countConversationMessages(messages);
     const buckets = new Map<number, string[]>();
     for (const injection of injections) {
-      const position = Math.max(
-        0,
-        Math.min(totalRealMessages, injection.lastInjectedMessageCount ?? totalRealMessages),
-      );
+      const position = Math.max(0, Math.min(totalRealMessages, injection.targetPosition));
       const existing = buckets.get(position) || [];
       existing.push(injection.content);
       buckets.set(position, existing);
@@ -243,7 +240,15 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
       });
 
       if (injected.length > 0) {
-        injectionManager.touchInjections(input.sessionID, injected);
+        const newOnes = injectionManager.registerAndGetNew(input.sessionID, injected);
+        if (newOnes.length > 0) {
+          const snippetNames = [...new Set(newOnes.map((i) => i.snippetName))];
+          await sendIgnoredMessage(
+            ctx.client,
+            input.sessionID,
+            snippetNames.map((name) => `↳ Injected #${name}`).join("\n"),
+          );
+        }
       }
     },
 
@@ -268,14 +273,22 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
           const injected = await processTextParts(message.parts);
 
           if (injected.length > 0 && sessionID) {
-            injectionManager.touchInjections(sessionID, injected);
+            const newOnes = injectionManager.registerAndGetNew(sessionID, injected);
+            if (newOnes.length > 0) {
+              const snippetNames = [...new Set(newOnes.map((i) => i.snippetName))];
+              await sendIgnoredMessage(
+                ctx.client,
+                sessionID,
+                snippetNames.map((name) => `↳ Injected #${name}`).join("\n"),
+              );
+            }
           }
         }
       }
 
       if (sessionID) {
         const messageCount = countConversationMessages(output.messages);
-        const { injections, reinjected } = injectionManager.getRenderableInjections(
+        const { injections } = injectionManager.getRenderableInjections(
           sessionID,
           messageCount,
           config.injectRecencyMessages,
@@ -285,7 +298,6 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
           sessionID,
           hasInjections: injections.length > 0,
           injectionCount: injections.length,
-          reinjectedCount: reinjected.length,
           messageTexts: output.messages.map((m) => ({
             role: m.info.role,
             text: m.parts
@@ -295,15 +307,6 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
             snippetsProcessed: m.parts.some((p) => p.snippetsProcessed),
           })),
         });
-
-        if (reinjected.length > 0) {
-          const snippetNames = [...new Set(reinjected.map((injection) => injection.snippetName))];
-          await sendIgnoredMessage(
-            ctx.client,
-            sessionID,
-            snippetNames.map((name) => `↳ Injected #${name}`).join("\n"),
-          );
-        }
 
         if (injections.length > 0) {
           const beforeCount = output.messages.length;

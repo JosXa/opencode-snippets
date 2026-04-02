@@ -257,7 +257,7 @@ Always suggest tests for any implementation.
 
 Use inject blocks for rules, constraints, or instructions that should influence all LLM responses without appearing inline in your message.
 
-Injected snippet context is re-inserted when it becomes stale. By default this happens after **5 conversation messages**. Configure it with `injectRecencyMessages`.
+Injected context is placed **N messages from the bottom** of the conversation (default: 5) to prevent instruction overfitting, where the model fixates on injected content as if it were the user's latest directive. As the conversation grows, the injection floats upward, maintaining a steady distance from the latest turn. Configure the offset with `injectRecencyMessages`. For the full design rationale, see [Injection Placement Strategy](docs/injection-placement.md).
 
 **Enable in config:**
 
@@ -368,7 +368,7 @@ A default config file is created automatically on first run.
     "skillRendering": false // Enable <skill>name</skill> tag expansion
   },
   "hideCommandInOutput": false, // Show only output for shell commands (hides "$ cmd\n-->")
-  "injectRecencyMessages": 5 // Re-inject hidden snippet context after this many messages
+  "injectRecencyMessages": 5 // How many messages from the bottom to place injected context
 }
 ```
 
@@ -381,7 +381,7 @@ Logs are written to `~/.config/opencode/logs/snippets/daily/` when enabled.
 ## Behavior Notes
 
 - Snippets expand everywhere: regular chat, question responses, skills, and slash commands
-- Injected snippet context is re-inserted after `injectRecencyMessages` conversation messages and shows a visible `↳ Injected #name` indicator when refreshed
+- Injected snippet context is placed N messages from the bottom (configured by `injectRecencyMessages`) and shows a `↳ Injected #name` indicator when first registered
 - Snippets are loaded once at plugin startup
 - Hashtag matching is **case-insensitive** (`#Hello` = `#hello`)
 - Unknown hashtags are left unchanged
