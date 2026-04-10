@@ -2,13 +2,16 @@ import { describe, expect, it } from "bun:test";
 import { executeShellCommands } from "./shell.js";
 
 describe("executeShellCommands", () => {
-  it("captures stderr-only command output from opencode help", async () => {
-    const text = await executeShellCommands("Before !`opencode run --help` After", {
-      $: Bun.$,
-    });
+  it("captures stderr-only command output", async () => {
+    const text = await executeShellCommands(
+      "Before !`bun -e \"console.error('stderr-only output')\"` After",
+      {
+        $: Bun.$,
+      },
+    );
 
-    expect(text).not.toContain("!`opencode run --help`");
-    expect(text).toContain("run opencode with a message");
+    expect(text).not.toContain("!`bun -e \"console.error('stderr-only output')\"`");
+    expect(text).toContain("stderr-only output");
     expect(text).toContain("Before");
     expect(text).toContain("After");
   });
@@ -36,14 +39,14 @@ describe("executeShellCommands", () => {
 
   it("hides the command prefix when requested", async () => {
     const text = await executeShellCommands(
-      "!`opencode run --help`",
+      "!`bun -e \"console.error('stderr-only output')\"`",
       { $: Bun.$ },
       {
         hideCommandInOutput: true,
       },
     );
 
-    expect(text).not.toContain("$ opencode run --help");
-    expect(text).toContain("run opencode with a message");
+    expect(text).not.toContain("$ bun -e \"console.error('stderr-only output')\"");
+    expect(text).toContain("stderr-only output");
   });
 });
