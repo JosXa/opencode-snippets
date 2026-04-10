@@ -14,7 +14,12 @@ export type ShellContext = {
     template: TemplateStringsArray,
     ...args: unknown[]
   ) => {
-    quiet: () => { nothrow: () => { text: () => Promise<string> } };
+    quiet: () => {
+      nothrow: () => Promise<{
+        stdout: { toString: () => string };
+        stderr: { toString: () => string };
+      }>;
+    };
   };
 };
 
@@ -43,8 +48,9 @@ export async function executeShellCommands(
     const _placeholder = match[0];
 
     try {
-      const output = await ctx.$`${{ raw: cmd }}`.quiet().nothrow().text();
-      const replacement = hideCommand ? output.trim() : `$ ${cmd}\n--> ${output.trim()}`;
+      const output = await ctx.$`${{ raw: cmd }}`.quiet().nothrow();
+      const text = `${output.stdout.toString()}${output.stderr.toString()}`.trim();
+      const replacement = hideCommand ? text : `$ ${cmd}\n--> ${text}`;
       result = result.replace(_placeholder, replacement);
     } catch (error) {
       // If shell command fails, leave it as-is
