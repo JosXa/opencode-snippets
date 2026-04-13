@@ -98,7 +98,7 @@ Required: add the package to your `opencode.json` plugins array:
 
 ```json
 {
-  "plugins": [
+  "plugin": [
     "opencode-snippets"
   ]
 }
