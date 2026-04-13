@@ -81,7 +81,7 @@ Add to your `opencode.json` plugins array:
 
 ```json
 {
-  "plugins": [
+  "plugin": [
     "opencode-snippets"
   ]
 }
