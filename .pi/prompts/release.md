@@ -52,6 +52,7 @@ Execute these steps IN ORDER:
 **Step 4: Monitor Release Notes**
 - CI auto-generates release notes from conventional commits (categorized: features, fixes, docs, chores)
 - The "Release and Publish" workflow creates/updates the GitHub release automatically
+- Release notes should omit installation instructions. For OpenCode, plugin usage is configured via the `plugin` array rather than a release-note install command
 - Do NOT write manual release notes unless user wants to add extra context
 - If editing is needed: `gh release edit vX.Y.Z --notes-file <file>` (not `create`, which 422s)
 
@@ -78,6 +79,7 @@ Then:
 
 - Publishing to npm is AUTOMATED via CI on tag push
 - DO NOT manually publish to npm
+- Leave installation instructions out of release notes
 - Version format: X.Y.Z (no 'v' prefix in package.json, but 'v' prefix in git tags)
 - Repository: https://github.com/JosXa/opencode-snippets
 

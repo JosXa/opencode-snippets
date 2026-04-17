@@ -77,6 +77,21 @@ Compose base snippets into higher-level ones. Type `#full-review` to inject all 
 
 ## Installation
 
+`opencode-snippets` now ships both OpenCode targets:
+
+- the normal server plugin
+- the TUI snippet picker plugin
+
+If you install it through OpenCode's install flow, OpenCode will register both automatically:
+
+```bash
+opencode plug add opencode-snippets
+```
+
+That works because the package exposes both `./server` and `./tui`, and OpenCode's installer patches both `opencode.json` and `tui.json` for packages with both targets.
+
+If you edit config manually, the configurations are still separate, so you need both entries yourself.
+
 Add to your `opencode.json` plugins array:
 
 ```json
@@ -86,6 +101,40 @@ Add to your `opencode.json` plugins array:
   ]
 }
 ```
+
+If you want the TUI snippet picker too, add the same package to `tui.json`:
+
+```json
+{
+  "plugin": [
+    "opencode-snippets"
+  ]
+}
+```
+
+With the TUI plugin enabled, typing `#` at the beginning of the prompt or right after whitespace opens a snippet picker. It uses the same boundary rule as `@`, so `@file.ts#12-20` line ranges are left alone. There is also an `Insert snippet` command in the command palette.
+
+For local development with a `file:///` plugin path, point OpenCode at the package directory:
+
+```json
+{
+  "plugins": [
+    "file:///D:/projects/opencode-snippets"
+  ]
+}
+```
+
+and, if you are wiring TUI config by hand:
+
+```json
+{
+  "plugin": [
+    "file:///D:/projects/opencode-snippets"
+  ]
+}
+```
+
+Using the directory lets OpenCode read the package manifest and discover both targets.
 
 ## Quick Start
 

@@ -73,12 +73,6 @@ jobs:
             CHANGELOG+=$'\n'"### Other Changes"$'\n'"$OTHERS"$'\n'
           fi
           
-          # Add installation instructions
-          CHANGELOG+=$'\n'"## Installation"$'\n'
-          CHANGELOG+='```bash'$'\n'
-          CHANGELOG+="npm install opencode-snippets@${{ github.ref_name }}"$'\n'
-          CHANGELOG+='```'$'\n'
-          
           # Add full changelog link if there's a previous tag
           if [ -n "$PREV_TAG" ]; then
             CHANGELOG+=$'\n'"**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${{ github.ref_name }}"
