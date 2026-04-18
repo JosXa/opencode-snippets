@@ -112,7 +112,7 @@ If you want the TUI snippet picker too, add the same package to `tui.json`:
 }
 ```
 
-With the TUI plugin enabled, typing `#` at the beginning of the prompt or right after whitespace opens a snippet picker. It uses the same boundary rule as `@`, so `@file.ts#12-20` line ranges are left alone. There is also an `Insert snippet` command in the command palette.
+With the TUI plugin enabled, typing `#` at the beginning of the prompt or right after whitespace opens an inline snippet dropdown above the prompt. It uses the same boundary rule as `@`, so `@file.ts#12-20` line ranges are left alone.
 
 For local development with a `file:///` plugin path, point OpenCode at the package directory:
 

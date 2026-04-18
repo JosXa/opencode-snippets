@@ -39,6 +39,15 @@ export function insertSnippetTag(input: string, name: string): string {
   return `${input} #${name} `;
 }
 
+export function insertSnippetTrigger(input: string): string {
+  if (findTrailingHashtagTrigger(input)) return input;
+
+  if (!input) return "#";
+  if (/\s$/.test(input)) return `${input}#`;
+
+  return `${input} #`;
+}
+
 export function truncateSnippetPreview(input: string, max = 140): string {
   const text = input.replace(/\s+/g, " ").trim();
   if (text.length <= max) return text;

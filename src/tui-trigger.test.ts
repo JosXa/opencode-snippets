@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   findTrailingHashtagTrigger,
   insertSnippetTag,
+  insertSnippetTrigger,
   replaceTrailingHashtag,
   truncateSnippetPreview,
 } from "./tui-trigger.js";
@@ -64,6 +65,20 @@ describe("insertSnippetTag", () => {
 
   test("appends with a separating space when needed", () => {
     expect(insertSnippetTag("please review", "checklist")).toBe("please review #checklist ");
+  });
+});
+
+describe("insertSnippetTrigger", () => {
+  test("returns the existing active trigger unchanged", () => {
+    expect(insertSnippetTrigger("please #rev")).toBe("please #rev");
+  });
+
+  test("appends a bare trigger to an empty prompt", () => {
+    expect(insertSnippetTrigger("")).toBe("#");
+  });
+
+  test("appends a bare trigger with spacing when needed", () => {
+    expect(insertSnippetTrigger("please review")).toBe("please review #");
   });
 });
 
