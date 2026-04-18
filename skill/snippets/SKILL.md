@@ -10,14 +10,16 @@ Reusable text blocks expanded via `#hashtag` in messages.
 ## Locations
 
 ### Snippets
-- **Global directory**: `~/.config/opencode/snippet/`
-- **Project directory**: `.opencode/snippet/` (overrides global)
+- **Global directories**: `~/.config/opencode/snippet/` and `~/.config/opencode/snippets/`
+- **Project directories**: `.opencode/snippet/` and `.opencode/snippets/` (project overrides global, `snippet/` wins over `snippets/`)
 
 ### Configuration
 - **Global file**: `~/.config/opencode/snippet/config.jsonc`
 - **Project file**: `.opencode/snippet/config.jsonc` (merges with global, project takes priority)
 
-IMPORTANT: Snippets live only in those two snippet directories. Check those exact locations. Do not glob anywhere else in the repo or workspace.
+IMPORTANT: Snippets live only in those four snippet directories. Check those exact locations. Do not glob anywhere else in the repo or workspace.
+
+IMPORTANT: Config files stay under `snippet/config.jsonc`. The plural `snippets/` support is for snippet markdown files only.
 
 IMPORTANT: When modifying snippet configuration:
 1. Check BOTH locations for existing config files

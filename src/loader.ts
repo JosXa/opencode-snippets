@@ -1,12 +1,45 @@
-import { readdir, unlink } from "node:fs/promises";
+import { access, mkdir, readdir, unlink } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { importCjs } from "./cjs-interop.js";
 
 const matter = await importCjs<typeof import("gray-matter")>("gray-matter");
 
-import { CONFIG, PATHS } from "./constants.js";
+import { CONFIG, getProjectPaths, PATHS } from "./constants.js";
 import { logger } from "./logger.js";
 import type { SnippetFrontmatter, SnippetInfo, SnippetRegistry } from "./types.js";
+
+function getGlobalSnippetDirs(globalDir?: string): string[] {
+  if (globalDir) return [globalDir];
+
+  return [PATHS.SNIPPETS_DIR_ALT, PATHS.SNIPPETS_DIR];
+}
+
+function getProjectSnippetDirs(projectDir: string): string[] {
+  const paths = getProjectPaths(projectDir);
+  return [paths.SNIPPETS_DIR_ALT, paths.SNIPPETS_DIR];
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveWritableSnippetDir(projectDir?: string): Promise<string> {
+  const paths = projectDir
+    ? getProjectPaths(projectDir)
+    : { SNIPPETS_DIR: PATHS.SNIPPETS_DIR, SNIPPETS_DIR_ALT: PATHS.SNIPPETS_DIR_ALT };
+
+  // Support both snippet/ and snippets/. Reuse an existing directory first, then default to snippet/.
+  for (const dir of [paths.SNIPPETS_DIR, paths.SNIPPETS_DIR_ALT]) {
+    if (await pathExists(dir)) return dir;
+  }
+
+  return paths.SNIPPETS_DIR;
+}
 
 /**
  * Loads all snippets from global and project directories
@@ -21,14 +54,16 @@ export async function loadSnippets(
 ): Promise<SnippetRegistry> {
   const snippets: SnippetRegistry = new Map();
 
-  // Load from global directory first (use provided or default)
-  const globalSnippetsDir = globalDir ?? PATHS.SNIPPETS_DIR;
-  await loadFromDirectory(globalSnippetsDir, snippets, "global");
+  // Support both snippet/ and snippets/. Load plural first so existing snippet/ files still win.
+  for (const dir of getGlobalSnippetDirs(globalDir)) {
+    await loadFromDirectory(dir, snippets, "global");
+  }
 
   // Load from project directory if provided (overrides global)
   if (projectDir) {
-    const projectSnippetsDir = join(projectDir, ".opencode", "snippet");
-    await loadFromDirectory(projectSnippetsDir, snippets, "project");
+    for (const dir of getProjectSnippetDirs(projectDir)) {
+      await loadFromDirectory(dir, snippets, "project");
+    }
   }
 
   return snippets;
@@ -173,8 +208,7 @@ export function listSnippets(registry: SnippetRegistry): SnippetInfo[] {
  * Ensures the snippets directory exists
  */
 export async function ensureSnippetsDir(projectDir?: string): Promise<string> {
-  const dir = projectDir ? join(projectDir, ".opencode", "snippet") : PATHS.SNIPPETS_DIR;
-  const { mkdir } = await import("node:fs/promises");
+  const dir = await resolveWritableSnippetDir(projectDir);
   await mkdir(dir, { recursive: true });
   return dir;
 }
@@ -230,31 +264,33 @@ export async function createSnippet(
 export async function deleteSnippet(name: string, projectDir?: string): Promise<string | null> {
   // Try project directory first if provided
   if (projectDir) {
-    const projectPath = join(
-      projectDir,
-      ".opencode",
-      "snippet",
-      `${name}${CONFIG.SNIPPET_EXTENSION}`,
-    );
-    try {
-      await unlink(projectPath);
-      logger.info("Deleted project snippet", { name, path: projectPath });
-      return projectPath;
-    } catch {
-      // Not found in project, try global
+    const paths = getProjectPaths(projectDir);
+    for (const dir of [paths.SNIPPETS_DIR, paths.SNIPPETS_DIR_ALT]) {
+      const filePath = join(dir, `${name}${CONFIG.SNIPPET_EXTENSION}`);
+      try {
+        await unlink(filePath);
+        logger.info("Deleted project snippet", { name, path: filePath });
+        return filePath;
+      } catch {
+        // Not found in this project directory, keep looking.
+      }
     }
   }
 
   // Try global directory
-  const globalPath = join(PATHS.SNIPPETS_DIR, `${name}${CONFIG.SNIPPET_EXTENSION}`);
-  try {
-    await unlink(globalPath);
-    logger.info("Deleted global snippet", { name, path: globalPath });
-    return globalPath;
-  } catch {
-    logger.warn("Snippet not found for deletion", { name });
-    return null;
+  for (const dir of [PATHS.SNIPPETS_DIR, PATHS.SNIPPETS_DIR_ALT]) {
+    const filePath = join(dir, `${name}${CONFIG.SNIPPET_EXTENSION}`);
+    try {
+      await unlink(filePath);
+      logger.info("Deleted global snippet", { name, path: filePath });
+      return filePath;
+    } catch {
+      // Not found in this global directory, keep looking.
+    }
   }
+
+  logger.warn("Snippet not found for deletion", { name });
+  return null;
 }
 
 /**

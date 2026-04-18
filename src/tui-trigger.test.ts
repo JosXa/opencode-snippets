@@ -3,6 +3,7 @@ import {
   findTrailingHashtagTrigger,
   insertSnippetTag,
   insertSnippetTrigger,
+  preferredSnippetTag,
   replaceTrailingHashtag,
   truncateSnippetPreview,
 } from "./tui-trigger.js";
@@ -65,6 +66,35 @@ describe("insertSnippetTag", () => {
 
   test("appends with a separating space when needed", () => {
     expect(insertSnippetTag("please review", "checklist")).toBe("please review #checklist ");
+  });
+});
+
+describe("preferredSnippetTag", () => {
+  test("returns the exact matching alias for the active query", () => {
+    expect(
+      preferredSnippetTag("please #occ", {
+        name: "opencode-config-path",
+        aliases: ["occ", "occonf"],
+      }),
+    ).toBe("occ");
+  });
+
+  test("falls back to the snippet name when the query is only a partial alias match", () => {
+    expect(
+      preferredSnippetTag("please #oc", {
+        name: "opencode-config-path",
+        aliases: ["occ", "occonf"],
+      }),
+    ).toBe("opencode-config-path");
+  });
+
+  test("falls back to the snippet name when there is no active trailing hashtag", () => {
+    expect(
+      preferredSnippetTag("please review", {
+        name: "opencode-config-path",
+        aliases: ["occ", "occonf"],
+      }),
+    ).toBe("opencode-config-path");
   });
 });
 

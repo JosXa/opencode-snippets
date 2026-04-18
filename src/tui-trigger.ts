@@ -1,3 +1,5 @@
+import type { SnippetInfo } from "./types.js";
+
 export interface HashtagTriggerMatch {
   start: number;
   end: number;
@@ -37,6 +39,16 @@ export function insertSnippetTag(input: string, name: string): string {
   if (/\s$/.test(input)) return `${input}#${name} `;
 
   return `${input} #${name} `;
+}
+
+export function preferredSnippetTag(
+  input: string,
+  item: Pick<SnippetInfo, "name" | "aliases">,
+): string {
+  const query = findTrailingHashtagTrigger(input)?.query.trim();
+  if (!query) return item.name;
+
+  return item.aliases.find((alias) => alias === query) ?? item.name;
 }
 
 export function insertSnippetTrigger(input: string): string {

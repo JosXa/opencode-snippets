@@ -30,6 +30,7 @@ import {
   findTrailingHashtagTrigger,
   insertSnippetTag,
   insertSnippetTrigger,
+  preferredSnippetTag,
 } from "./src/tui-trigger.js";
 import type { SnippetInfo } from "./src/types.js";
 
@@ -311,7 +312,10 @@ function PromptWithSnippetAutocomplete(props: {
     const ref = prompt();
     if (!ref) return;
 
-    const nextInput = insertSnippetTag(ref.current.input, item.name);
+    const nextInput = insertSnippetTag(
+      ref.current.input,
+      preferredSnippetTag(ref.current.input, item),
+    );
     syncPromptInput(ref, nextInput);
     ref.focus();
 

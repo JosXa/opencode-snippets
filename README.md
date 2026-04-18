@@ -151,6 +151,8 @@ Using the directory lets OpenCode read the package manifest and discover both ta
 mkdir -p ~/.config/opencode/snippet
 ```
 
+The plugin also loads `~/.config/opencode/snippets/` if you already use the plural form.
+
 **2. Add your first snippet:**
 
 `~/.config/opencode/snippet/careful.md`:
@@ -168,7 +170,7 @@ https://github.com/user-attachments/assets/ebb303b5-d41b-4d87-8f08-eb1d730db5c8
 
 ## Where to Store Snippets
 
-Snippets can be global (`~/.config/opencode/snippet/*.md`) or project-specific (`.opencode/snippet/*.md`). Both directories are loaded automatically. Project snippets override global ones with the same name, just like OpenCode's slash commands.
+Snippets can be global (`~/.config/opencode/snippet/*.md` or `~/.config/opencode/snippets/*.md`) or project-specific (`.opencode/snippet/*.md` or `.opencode/snippets/*.md`). Both singular and plural directory names are loaded automatically. Project snippets override global ones with the same name, and `snippet/` wins over `snippets/` within the same scope.
 
 ## Features
 
@@ -408,6 +410,8 @@ The plugin can be configured via `config.jsonc` files:
 
 - **Global**: `~/.config/opencode/snippet/config.jsonc`
 - **Project**: `.opencode/snippet/config.jsonc` (overrides global settings)
+
+Snippet markdown files are loaded from both `snippet/` and `snippets/`, but config files stay in `snippet/config.jsonc`.
 
 A default config file is created automatically on first run.
 

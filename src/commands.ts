@@ -1,5 +1,5 @@
 import { parseCommandArgs } from "./arg-parser.js";
-import { PATHS } from "./constants.js";
+import { getProjectPaths, PATHS } from "./constants.js";
 import { createSnippet, deleteSnippet, listSnippets, reloadSnippets } from "./loader.js";
 import { logger } from "./logger.js";
 import { sendIgnoredMessage } from "./notification.js";
@@ -319,6 +319,15 @@ function formatAliases(aliases: string[]): string {
   return ` (aliases: ${truncated} +${aliases.length})`;
 }
 
+function globalSnippetLocations(): string {
+  return `${PATHS.SNIPPETS_DIR}/ or ${PATHS.SNIPPETS_DIR_ALT}/`;
+}
+
+function projectSnippetLocations(projectDir: string): string {
+  const paths = getProjectPaths(projectDir);
+  return `${paths.SNIPPETS_DIR}/ or ${paths.SNIPPETS_DIR_ALT}/`;
+}
+
 /**
  * Format a single snippet for display
  */
@@ -342,9 +351,9 @@ async function handleListCommand(ctx: CommandContext): Promise<void> {
       client,
       sessionId,
       "No snippets found.\n\n" +
-        `Global snippets: ${PATHS.SNIPPETS_DIR}\n` +
+        `Global snippets: ${globalSnippetLocations()}\n` +
         (projectDir
-          ? `Project snippets: ${projectDir}/.opencode/snippet/`
+          ? `Project snippets: ${projectSnippetLocations(projectDir)}`
           : "No project directory detected.") +
         "\n\nUse /snippet add <name> to add a new snippet.",
     );
@@ -358,14 +367,14 @@ async function handleListCommand(ctx: CommandContext): Promise<void> {
   const projectSnippets = snippetList.filter((s) => s.source === "project");
 
   if (globalSnippets.length > 0) {
-    lines.push(`── Global (${PATHS.SNIPPETS_DIR}) ──`, "");
+    lines.push(`── Global (${globalSnippetLocations()}) ──`, "");
     for (const s of globalSnippets) {
       lines.push(formatSnippetEntry(s), "");
     }
   }
 
-  if (projectSnippets.length > 0) {
-    lines.push(`── Project (${projectDir}/.opencode/snippet/) ──`, "");
+  if (projectSnippets.length > 0 && projectDir) {
+    lines.push(`── Project (${projectSnippetLocations(projectDir)}) ──`, "");
     for (const s of projectSnippets) {
       lines.push(formatSnippetEntry(s), "");
     }
@@ -395,8 +404,8 @@ Commands:
   help                      Show this help message
 
 Snippet Locations:
-  Global:  ~/.config/opencode/snippet/
-  Project: <project>/.opencode/snippet/
+  Global:  ~/.config/opencode/snippet/ or ~/.config/opencode/snippets/
+  Project: <project>/.opencode/snippet/ or <project>/.opencode/snippets/
 
 Usage in messages:
   Type #snippet-name to expand a snippet inline.

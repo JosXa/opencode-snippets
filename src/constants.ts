@@ -27,8 +27,11 @@ export const PATHS = {
   /** OpenCode configuration directory */
   CONFIG_DIR: join(homedir(), ".config", "opencode"),
 
-  /** Snippets directory */
+  /** Preferred global snippets directory */
   SNIPPETS_DIR: join(homedir(), ".config", "opencode", "snippet"),
+
+  /** Alternate global snippets directory */
+  SNIPPETS_DIR_ALT: join(homedir(), ".config", "opencode", "snippets"),
 
   /** Global config file */
   CONFIG_FILE_GLOBAL: join(homedir(), ".config", "opencode", "snippet", "config.jsonc"),
@@ -41,6 +44,7 @@ export function getProjectPaths(projectDir: string) {
   const snippetDir = join(projectDir, ".opencode", "snippet");
   return {
     SNIPPETS_DIR: snippetDir,
+    SNIPPETS_DIR_ALT: join(projectDir, ".opencode", "snippets"),
     CONFIG_FILE: join(snippetDir, "config.jsonc"),
   };
 }

@@ -1,23 +1,55 @@
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { loadSnippets } from "../src/loader.js";
+import { PATHS } from "../src/constants.js";
+import { createSnippet, deleteSnippet, ensureSnippetsDir, loadSnippets } from "../src/loader.js";
 
 describe("loadSnippets - Dual Path Support", () => {
   let tempDir: string;
   let globalSnippetDir: string;
+  let globalSnippetsDir: string;
+  let projectDir: string;
   let projectSnippetDir: string;
+  let projectSnippetsDir: string;
+  const originalGlobalSnippetDir = PATHS.SNIPPETS_DIR;
+  const originalGlobalSnippetsDir = PATHS.SNIPPETS_DIR_ALT;
 
   beforeEach(async () => {
     // Create temporary directories for testing
     tempDir = join(process.cwd(), ".test-temp");
-    globalSnippetDir = join(tempDir, "global-snippet");
-    projectSnippetDir = join(tempDir, "project", ".opencode", "snippet");
+    globalSnippetDir = join(tempDir, "global", "snippet");
+    globalSnippetsDir = join(tempDir, "global", "snippets");
+    projectDir = join(tempDir, "project");
+    projectSnippetDir = join(projectDir, ".opencode", "snippet");
+    projectSnippetsDir = join(projectDir, ".opencode", "snippets");
 
     await mkdir(globalSnippetDir, { recursive: true });
     await mkdir(projectSnippetDir, { recursive: true });
+
+    Object.defineProperty(PATHS, "SNIPPETS_DIR", {
+      value: globalSnippetDir,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(PATHS, "SNIPPETS_DIR_ALT", {
+      value: globalSnippetsDir,
+      writable: true,
+      configurable: true,
+    });
   });
 
   afterEach(async () => {
+    Object.defineProperty(PATHS, "SNIPPETS_DIR", {
+      value: originalGlobalSnippetDir,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(PATHS, "SNIPPETS_DIR_ALT", {
+      value: originalGlobalSnippetsDir,
+      writable: true,
+      configurable: true,
+    });
+
     // Clean up temporary directories
     await rm(tempDir, { recursive: true, force: true });
   });
@@ -59,7 +91,6 @@ Think step by step. Double-check your work.`,
       );
 
       // Load with project directory
-      const projectDir = join(tempDir, "project");
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       expect(snippets.size).toBe(1);
@@ -70,7 +101,6 @@ Think step by step. Double-check your work.`,
       await writeFile(join(projectSnippetDir, "team-rule.md"), "Team rule 1");
       await writeFile(join(projectSnippetDir, "domain-knowledge.md"), "Domain knowledge");
 
-      const projectDir = join(tempDir, "project");
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       expect(snippets.size).toBe(2);
@@ -87,7 +117,6 @@ Think step by step. Double-check your work.`,
       // Create project snippet
       await writeFile(join(projectSnippetDir, "project.md"), "Project snippet content");
 
-      const projectDir = join(tempDir, "project");
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       expect(snippets.size).toBe(2);
@@ -102,7 +131,6 @@ Think step by step. Double-check your work.`,
       // Create project snippet with same name
       await writeFile(join(projectSnippetDir, "careful.md"), "Project-specific careful content");
 
-      const projectDir = join(tempDir, "project");
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       // Project snippet should override global
@@ -135,7 +163,6 @@ aliases:
 Project test guidelines`,
       );
 
-      const projectDir = join(tempDir, "project");
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       expect(snippets.size).toBe(6); // review, pr, check, test, tdd, testing
@@ -168,7 +195,6 @@ aliases: safe
 Project careful`,
       );
 
-      const projectDir = join(tempDir, "project");
       const snippets = await loadSnippets(projectDir, globalSnippetDir);
 
       // Project should override with its aliases
@@ -244,6 +270,32 @@ Content`,
     it("should handle non-existent directories gracefully", async () => {
       const snippets = await loadSnippets(undefined, "/nonexistent/path");
       expect(snippets.size).toBe(0);
+    });
+
+    it("should load snippets from plural directories too", async () => {
+      await mkdir(globalSnippetsDir, { recursive: true });
+      await mkdir(projectSnippetsDir, { recursive: true });
+      await writeFile(join(globalSnippetsDir, "global-plural.md"), "Global plural content");
+      await writeFile(join(projectSnippetsDir, "project-plural.md"), "Project plural content");
+
+      const snippets = await loadSnippets(projectDir);
+
+      expect(snippets.get("global-plural")?.content).toBe("Global plural content");
+      expect(snippets.get("project-plural")?.content).toBe("Project plural content");
+    });
+
+    it("should keep snippet directory precedence within each scope", async () => {
+      await mkdir(globalSnippetsDir, { recursive: true });
+      await mkdir(projectSnippetsDir, { recursive: true });
+      await writeFile(join(globalSnippetsDir, "careful.md"), "Global plural careful");
+      await writeFile(join(globalSnippetDir, "careful.md"), "Global singular careful");
+      await writeFile(join(projectSnippetsDir, "review.md"), "Project plural review");
+      await writeFile(join(projectSnippetDir, "review.md"), "Project singular review");
+
+      const snippets = await loadSnippets(projectDir);
+
+      expect(snippets.get("careful")?.content).toBe("Global singular careful");
+      expect(snippets.get("review")?.content).toBe("Project singular review");
     });
   });
 
@@ -347,6 +399,50 @@ Hello there!`,
       expect(snippets.get("greeting")?.content).toBe("Hello there!");
       expect(snippets.get("used")?.content).toBe("Hello there!");
       expect(snippets.has("ignored")).toBe(false);
+    });
+  });
+
+  describe("write paths", () => {
+    it("reuses an existing plural global directory", async () => {
+      await rm(globalSnippetDir, { recursive: true, force: true });
+      await mkdir(globalSnippetsDir, { recursive: true });
+
+      const filePath = await createSnippet("plural-global", "Plural global content");
+
+      expect(filePath).toBe(join(globalSnippetsDir, "plural-global.md"));
+    });
+
+    it("reuses an existing plural project directory", async () => {
+      await rm(projectSnippetDir, { recursive: true, force: true });
+      await mkdir(projectSnippetsDir, { recursive: true });
+
+      const filePath = await createSnippet(
+        "plural-project",
+        "Plural project content",
+        {},
+        projectDir,
+      );
+
+      expect(filePath).toBe(join(projectSnippetsDir, "plural-project.md"));
+    });
+
+    it("defaults to snippet directory when creating a new one", async () => {
+      await rm(projectSnippetDir, { recursive: true, force: true });
+      await rm(projectSnippetsDir, { recursive: true, force: true });
+
+      const dir = await ensureSnippetsDir(projectDir);
+
+      expect(dir).toBe(projectSnippetDir);
+    });
+
+    it("deletes snippets from plural directories too", async () => {
+      await rm(projectSnippetDir, { recursive: true, force: true });
+      await mkdir(projectSnippetsDir, { recursive: true });
+      await writeFile(join(projectSnippetsDir, "cleanup.md"), "Delete me");
+
+      const deleted = await deleteSnippet("cleanup", projectDir);
+
+      expect(deleted).toBe(join(projectSnippetsDir, "cleanup.md"));
     });
   });
 });
