@@ -160,13 +160,13 @@ mkdir -p ~/.config/opencode/snippet
 ---
 aliases: safe
 ---
-Think step by step. Double-check your work before making changes.
+Think step by step. Double-check your work before committing changes.
 Ask clarifying questions if anything is ambiguous.
 ```
 
 **3. Use it anywhere:**
 
-https://github.com/user-attachments/assets/d31b69b5-cc7a-4208-9f6e-71c1a278536a
+https://github.com/user-attachments/assets/ebb303b5-d41b-4d87-8f08-eb1d730db5c8
 
 ## Where to Store Snippets
 
