@@ -82,7 +82,7 @@ Build `/commit #conventional-commits #project-context` for context-aware commits
 ## Installation
 
 ```bash
-opencode plug add opencode-snippets
+opencode plugin opencode-snippets -gf
 ```
 
 This installs the package and wires up both the server plugin and the TUI plugin for autocompletion automatically.
