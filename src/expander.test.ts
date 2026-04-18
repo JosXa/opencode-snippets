@@ -12,6 +12,22 @@ function createRegistry(entries: [string, string][]): SnippetRegistry {
   return new Map(entries.map(([key, content]) => [key, snippet(content, key)]));
 }
 
+function createAliasedRegistry(
+  name: string,
+  content: string,
+  aliases: string[],
+  extraEntries: [string, string][] = [],
+): SnippetRegistry {
+  const s = snippet(content, name);
+  s.aliases = aliases;
+
+  return new Map([
+    [name, s],
+    ...aliases.map((alias) => [alias, s] as [string, SnippetInfo]),
+    ...extraEntries.map(([key, value]) => [key, snippet(value, key)] as [string, SnippetInfo]),
+  ]);
+}
+
 describe("expandHashtags - Recursive Includes and Loop Detection", () => {
   describe("Basic expansion", () => {
     it("should expand a single hashtag", () => {
@@ -936,6 +952,61 @@ describe("Prepend/Append integration with expandHashtags", () => {
     expect(result.text).toBe("Use Inline");
     expect(result.inject).toEqual(["Injected message"]);
     expect(assembled).toBe("Use Inline"); // assembled message should NOT contain injected content
+  });
+
+  it("should replace inline text for every alias while deduplicating append blocks", () => {
+    const registry = createAliasedRegistry(
+      "learn",
+      "learn\n<append>\nReference material\n</append>",
+      ["learnings"],
+    );
+
+    const result = expandHashtags("#learn and #learnings", registry);
+
+    expect(result.text).toBe("learn and learn");
+    expect(result.append).toEqual(["Reference material"]);
+  });
+
+  it("should deduplicate prepend blocks for repeated aliases", () => {
+    const registry = createAliasedRegistry(
+      "learn",
+      "<prepend>\nShared context\n</prepend>\nlearn",
+      ["learnings"],
+    );
+
+    const result = expandHashtags("#learn then #learnings", registry);
+
+    expect(result.text).toBe("learn then learn");
+    expect(result.prepend).toEqual(["Shared context"]);
+  });
+
+  it("should deduplicate inject blocks and callbacks for repeated aliases", () => {
+    const registry = createAliasedRegistry("learn", "learn\n<inject>\nHidden guidance\n</inject>", [
+      "learnings",
+    ]);
+    const blocks: Array<{ snippetName: string; content: string }> = [];
+
+    const result = expandHashtags("#learn and #learnings", registry, new Map(), {
+      onInjectBlock: (block) => blocks.push(block),
+    });
+
+    expect(result.text).toBe("learn and learn");
+    expect(result.inject).toEqual(["Hidden guidance"]);
+    expect(blocks).toEqual([{ snippetName: "learn", content: "Hidden guidance" }]);
+  });
+
+  it("should deduplicate blocks when the same snippet is reached through nested aliases", () => {
+    const registry = createAliasedRegistry(
+      "learn",
+      "learn\n<append>\nReference material\n</append>",
+      ["learnings"],
+      [["outer", "#learn and #learnings"]],
+    );
+
+    const result = expandHashtags("Use #outer", registry);
+
+    expect(result.text).toBe("Use learn and learn");
+    expect(result.append).toEqual(["Reference material"]);
   });
 
   it("should report inject block source snippet names via callback", () => {
