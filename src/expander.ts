@@ -27,6 +27,115 @@ export interface ExpandOptions {
   onInjectBlock?: (block: InjectBlockInfo) => void;
 }
 
+interface BlockCollector {
+  prepend: string[];
+  append: string[];
+  inject: string[];
+  seen: Set<string>;
+}
+
+function addBlock(
+  collector: BlockCollector,
+  type: BlockType,
+  snippetName: string,
+  content: string,
+  onInjectBlock?: (block: InjectBlockInfo) => void,
+): void {
+  if (!content) return;
+
+  const key = `${type}\u0000${snippetName.toLowerCase()}\u0000${content}`;
+  if (collector.seen.has(key)) return;
+
+  collector.seen.add(key);
+  collector[type].push(content);
+
+  if (type === "inject") {
+    onInjectBlock?.({ snippetName, content });
+  }
+}
+
+function expandText(
+  text: string,
+  registry: SnippetRegistry,
+  expansionCounts: Map<string, number>,
+  collector: BlockCollector,
+  options: ExpandOptions,
+): string {
+  const { onInjectBlock } = options;
+  let expanded = text;
+  let hasChanges = true;
+
+  while (hasChanges) {
+    const previous = expanded;
+    let loopDetected = false;
+
+    PATTERNS.HASHTAG.lastIndex = 0;
+
+    expanded = expanded.replace(PATTERNS.HASHTAG, (match, name) => {
+      const snippet = registry.get(name.toLowerCase());
+      if (snippet === undefined) {
+        return match;
+      }
+
+      const key = snippet.name.toLowerCase();
+      const count = (expansionCounts.get(key) || 0) + 1;
+      if (count > MAX_EXPANSION_COUNT) {
+        logger.warn(
+          `Loop detected: snippet '#${key}' expanded ${count} times (max: ${MAX_EXPANSION_COUNT})`,
+        );
+        loopDetected = true;
+        return match;
+      }
+
+      expansionCounts.set(key, count);
+
+      const parsed = parseSnippetBlocks(snippet.content, options);
+      if (parsed === null) {
+        logger.warn(`Failed to parse snippet '${key}', leaving hashtag unchanged`);
+        return match;
+      }
+
+      // User requirement: inline snippet text should replace every hashtag occurrence,
+      // but prepend/append/inject side effects should only be inserted once per snippet block.
+      for (const block of parsed.prepend) {
+        addBlock(
+          collector,
+          "prepend",
+          snippet.name,
+          expandText(block, registry, expansionCounts, collector, options),
+          onInjectBlock,
+        );
+      }
+
+      for (const block of parsed.append) {
+        addBlock(
+          collector,
+          "append",
+          snippet.name,
+          expandText(block, registry, expansionCounts, collector, options),
+          onInjectBlock,
+        );
+      }
+
+      for (const block of parsed.inject) {
+        addBlock(
+          collector,
+          "inject",
+          snippet.name,
+          expandText(block, registry, expansionCounts, collector, options),
+          onInjectBlock,
+        );
+      }
+
+      return expandText(parsed.inline, registry, expansionCounts, collector, options);
+    });
+
+    hasChanges = expanded !== previous && !loopDetected;
+  }
+
+  return expanded;
+}
+
 /**
  * Parses snippet content to extract inline text and prepend/append/inject blocks
  *
@@ -146,101 +255,20 @@ export function expandHashtags(
   expansionCounts = new Map<string, number>(),
   options: ExpandOptions = {},
 ): ExpansionResult {
-  const { onInjectBlock } = options;
-  const collectedPrepend: string[] = [];
-  const collectedAppend: string[] = [];
-  const collectedInject: string[] = [];
+  const collector: BlockCollector = {
+    prepend: [],
+    append: [],
+    inject: [],
+    seen: new Set<string>(),
+  };
 
-  let expanded = text;
-  let hasChanges = true;
-
-  // Keep expanding until no more hashtags are found
-  while (hasChanges) {
-    const previous = expanded;
-    let loopDetected = false;
-
-    // Reset regex state (global flag requires this)
-    PATTERNS.HASHTAG.lastIndex = 0;
-
-    // We need to collect blocks during replacement, so we track them here
-    const roundPrepend: string[] = [];
-    const roundAppend: string[] = [];
-    const roundInject: string[] = [];
-
-    expanded = expanded.replace(PATTERNS.HASHTAG, (match, name) => {
-      const key = name.toLowerCase();
-
-      const snippet = registry.get(key);
-      if (snippet === undefined) {
-        // Unknown snippet - leave as-is
-        return match;
-      }
-
-      // Track expansion count to prevent infinite loops
-      const count = (expansionCounts.get(key) || 0) + 1;
-      if (count > MAX_EXPANSION_COUNT) {
-        // Loop detected! Leave the hashtag as-is and stop expanding
-        logger.warn(
-          `Loop detected: snippet '#${key}' expanded ${count} times (max: ${MAX_EXPANSION_COUNT})`,
-        );
-        loopDetected = true;
-        return match; // Leave as-is instead of error message
-      }
-
-      expansionCounts.set(key, count);
-
-      // Parse the snippet content for blocks
-      const parsed = parseSnippetBlocks(snippet.content, options);
-      if (parsed === null) {
-        // Parse error - leave hashtag unchanged
-        logger.warn(`Failed to parse snippet '${key}', leaving hashtag unchanged`);
-        return match;
-      }
-
-      // Recursively expand hashtags in prepend/append/inject blocks
-      const targets: [string[], string[]][] = [
-        [parsed.prepend, roundPrepend],
-        [parsed.append, roundAppend],
-        [parsed.inject, roundInject],
-      ];
-      for (const [blocks, dest] of targets) {
-        for (const block of blocks) {
-          const r = expandHashtags(block, registry, expansionCounts, options);
-          dest.push(r.text);
-          roundPrepend.push(...r.prepend);
-          roundAppend.push(...r.append);
-          roundInject.push(...r.inject);
-          if (dest === roundInject && onInjectBlock) {
-            onInjectBlock({ snippetName: snippet.name, content: r.text });
-          }
-        }
-      }
-
-      // Recursively expand any hashtags in the inline content
-      const nestedResult = expandHashtags(parsed.inline, registry, expansionCounts, options);
-
-      // Collect blocks from nested expansion
-      roundPrepend.push(...nestedResult.prepend);
-      roundAppend.push(...nestedResult.append);
-      roundInject.push(...nestedResult.inject);
-
-      return nestedResult.text;
-    });
-
-    // Add this round's blocks to collected blocks
-    collectedPrepend.push(...roundPrepend);
-    collectedAppend.push(...roundAppend);
-    collectedInject.push(...roundInject);
-
-    // Only continue if the text actually changed AND no loop was detected
-    hasChanges = expanded !== previous && !loopDetected;
-  }
+  const expanded = expandText(text, registry, expansionCounts, collector, options);
 
   return {
     text: expanded,
-    prepend: collectedPrepend,
-    append: collectedAppend,
-    inject: collectedInject,
+    prepend: collector.prepend,
+    append: collector.append,
+    inject: collector.inject,
   };
 }
 
