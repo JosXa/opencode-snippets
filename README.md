@@ -77,24 +77,26 @@ Compose base snippets into higher-level ones. Type `#full-review` to inject all 
 
 ## Installation
 
-`opencode-snippets` now ships both OpenCode targets:
-
-- the normal server plugin
-- the TUI snippet picker plugin
-
-The server plugin is enough to expand snippets at send time.
-
-The TUI plugin is technically optional, but strongly recommended. It gives users the inline `#` dropdown, snippet discovery, keyboard selection, and snippet creation flow that make the feature feel built-in instead of hidden.
-
-If you install it through OpenCode's install flow, OpenCode will register both automatically:
+Recommended:
 
 ```bash
 opencode plug add opencode-snippets
 ```
 
-This is the recommended setup. It is the most seamless path because the package exposes both `./server` and `./tui`, and OpenCode's installer patches both `opencode.json` and `tui.json` for packages with both targets.
+This is the default setup to recommend to users. OpenCode will install the package and wire up both the server plugin and the TUI plugin automatically.
 
-If you edit config manually, the configurations are still separate, so you need both entries yourself.
+The server plugin is enough to expand snippets at send time.
+
+The TUI plugin is technically optional, but strongly recommended. It gives users the inline `#` dropdown, snippet discovery, keyboard selection, and snippet creation flow that make the feature feel built-in instead of hidden.
+
+With the TUI plugin enabled, typing `#` at the beginning of the prompt or right after whitespace opens an inline snippet dropdown above the prompt. It uses the same boundary rule as `@`, so `@file.ts#12-20` line ranges are left alone.
+
+If you skip the TUI plugin, snippet expansion still works, but users lose the discoverability and fast selection flow. Treat the TUI plugin as optional in the strict technical sense and recommended in the practical product sense.
+
+<details>
+<summary>Manual Installation (or for AI agents)</summary>
+
+If you edit config manually, the configurations are separate, so you need both entries yourself.
 
 Required: add the package to your `opencode.json` plugins array:
 
@@ -116,9 +118,8 @@ Strongly recommended: add the same package to `tui.json` too:
 }
 ```
 
-With the TUI plugin enabled, typing `#` at the beginning of the prompt or right after whitespace opens an inline snippet dropdown above the prompt. It uses the same boundary rule as `@`, so `@file.ts#12-20` line ranges are left alone.
-
-If you skip the TUI plugin, snippet expansion still works, but users lose the discoverability and fast selection flow. For rollout, treat `tui.json` as optional in the strict technical sense and recommended in the practical product sense.
+<details>
+<summary>Local Development</summary>
 
 For local development with a `file:///` plugin path, point OpenCode at the package directory:
 
@@ -130,7 +131,7 @@ For local development with a `file:///` plugin path, point OpenCode at the packa
 }
 ```
 
-and, strongly recommended for local TUI testing too, wire the same package directory into `tui.json`:
+Strongly recommended for local TUI testing too, wire the same package directory into `tui.json`:
 
 ```json
 {
@@ -141,6 +142,10 @@ and, strongly recommended for local TUI testing too, wire the same package direc
 ```
 
 Using the directory lets OpenCode read the package manifest and discover both targets.
+
+</details>
+
+</details>
 
 ## Quick Start
 
