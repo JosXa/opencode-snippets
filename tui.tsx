@@ -7,7 +7,7 @@ import type {
   TuiPromptInfo,
   TuiPromptRef,
 } from "@opencode-ai/plugin/tui";
-import { RGBA } from "@opentui/core";
+import { RGBA, type ScrollBoxRenderable } from "@opentui/core";
 import { useKeyboard } from "@opentui/solid";
 import {
   createEffect,
@@ -16,7 +16,6 @@ import {
   createSignal,
   Index,
   onCleanup,
-  onMount,
   Show,
 } from "solid-js";
 import { CONFIG } from "./src/constants.js";
@@ -36,6 +35,8 @@ import type { SnippetInfo } from "./src/types.js";
 
 const id = "opencode-snippets:tui";
 const PROMPT_SYNC_MS = 50;
+const MENU_MAX_HEIGHT = 10;
+const MOUSE_HOVER_SUPPRESS_MS = 150;
 const HOME_PLACEHOLDERS = {
   normal: [
     "Fix a TODO in the codebase",
@@ -185,6 +186,7 @@ function PromptWithSnippetAutocomplete(props: {
   const [dismissed, setDismissed] = createSignal<string>();
   const [selected, setSelected] = createSignal(0);
   const [inputMode, setInputMode] = createSignal<"keyboard" | "mouse">("keyboard");
+  const [ignoreMouseUntil, setIgnoreMouseUntil] = createSignal(0);
   const [input, setInput] = createSignal("");
   const [creating, setCreating] = createSignal(false);
   const [snippets, { refetch: refetchSnippets }] = createResource(
@@ -200,6 +202,13 @@ function PromptWithSnippetAutocomplete(props: {
     props.bindPrompt(ref);
     props.hostRef?.(ref);
   };
+
+  const lockKeyboardSelection = () => {
+    setInputMode("keyboard");
+    setIgnoreMouseUntil(Date.now() + MOUSE_HOVER_SUPPRESS_MS);
+  };
+
+  const allowMouseHover = () => Date.now() >= ignoreMouseUntil();
 
   const syncPromptInput = (ref: TuiPromptRef, nextInput: string) => {
     setPromptInput(ref, nextInput);
@@ -254,6 +263,15 @@ function PromptWithSnippetAutocomplete(props: {
       .map((item) => item.name)
       .join("\n"),
   );
+  const menuHeight = createMemo(() =>
+    Math.min(MENU_MAX_HEIGHT, Math.max(1, options().length || 1)),
+  );
+  const activeRowId = createMemo(() => {
+    if (options().length > 0) return options()[selected()]?.name;
+    if (canCreate()) return "create-snippet";
+    return undefined;
+  });
+  let scroll: ScrollBoxRenderable | undefined;
 
   createEffect((prev?: string) => {
     const next = match();
@@ -265,41 +283,33 @@ function PromptWithSnippetAutocomplete(props: {
     const key = `${next.token}\n${optionKey()}`;
     if (key !== prev) {
       setSelected(0);
-      setInputMode("keyboard");
+      // Keep filtered keyboard navigation from getting stolen by synthetic mouse events.
+      lockKeyboardSelection();
+      setTimeout(() => {
+        scroll?.scrollTo(0);
+      }, 0);
     }
     return key;
   });
 
-  onMount(() => {
-    const dispose = props.api.command.register(() => [
-      {
-        title: "Accept snippet autocomplete",
-        value: "snippets.accept",
-        keybind: "input_submit",
-        category: "Prompt",
-        hidden: true,
-        enabled: visible(),
-        onSelect() {
-          const total = options().length;
-          if (total > 0) {
-            choose(selected());
-            return;
-          }
+  createEffect(() => {
+    const row = activeRowId();
+    if (!visible() || !row) return;
 
-          if (canCreate()) {
-            void createSnippetDraft();
-          }
-        },
-      },
-    ]);
-
-    onCleanup(dispose);
+    setTimeout(() => {
+      scroll?.scrollChildIntoView(row);
+    }, 0);
   });
 
   const choose = (index = selected()) => {
-    const ref = prompt();
     const item = options()[index];
-    if (!ref || !item) return;
+    if (!item) return;
+    chooseItem(item);
+  };
+
+  const chooseItem = (item: SnippetInfo) => {
+    const ref = prompt();
+    if (!ref) return;
 
     const nextInput = insertSnippetTag(ref.current.input, item.name);
     syncPromptInput(ref, nextInput);
@@ -307,6 +317,52 @@ function PromptWithSnippetAutocomplete(props: {
 
     setDismissed(undefined);
   };
+
+  createEffect(() => {
+    const ref = prompt();
+    if (!ref) return;
+
+    let dispose: (() => void) | undefined;
+    const timer = setTimeout(() => {
+      dispose = props.api.command.register(() => [
+        {
+          title: "Accept snippet autocomplete",
+          value: "snippets.accept",
+          keybind: "input_submit",
+          category: "Prompt",
+          hidden: true,
+          enabled: ref.focused,
+          onSelect() {
+            const current = findTrailingHashtagTrigger(ref.current.input);
+            if (!current || dismissed() === current.token) {
+              ref.submit();
+              return;
+            }
+
+            const query = current.query.trim();
+            const live = filterSnippets(snippets(), query);
+            if (live.length > 0) {
+              const index = Math.min(selected(), live.length - 1);
+              chooseItem(live[index] ?? live[0]);
+              return;
+            }
+
+            if (normalizeSnippetName(query)) {
+              void createSnippetDraft();
+              return;
+            }
+
+            ref.submit();
+          },
+        },
+      ]);
+    }, 0);
+
+    onCleanup(() => {
+      clearTimeout(timer);
+      dispose?.();
+    });
+  });
 
   const createSnippetDraft = async () => {
     const ref = prompt();
@@ -356,12 +412,13 @@ function PromptWithSnippetAutocomplete(props: {
 
     const name = evt.name?.toLowerCase();
     const total = options().length;
-    const ctrlOnly = evt.ctrl && !evt.meta && !evt.shift;
-    const isNavUp = name === "up" || (ctrlOnly && name === "p");
-    const isNavDown = name === "down" || (ctrlOnly && name === "n");
+    const actionable = total > 0 || canCreate();
+    const isNavUp = name === "up";
+    const isNavDown = name === "down";
 
     if (isNavUp) {
-      setInputMode("keyboard");
+      if (!actionable) return;
+      lockKeyboardSelection();
       if (total > 0) {
         setSelected((selected() - 1 + total) % total);
       }
@@ -371,7 +428,8 @@ function PromptWithSnippetAutocomplete(props: {
     }
 
     if (isNavDown) {
-      setInputMode("keyboard");
+      if (!actionable) return;
+      lockKeyboardSelection();
       if (total > 0) {
         setSelected((selected() + 1) % total);
       }
@@ -388,6 +446,7 @@ function PromptWithSnippetAutocomplete(props: {
     }
 
     if (name === "tab") {
+      if (!actionable) return;
       if (total > 0) {
         choose(selected());
       } else if (canCreate()) {
@@ -414,13 +473,15 @@ function PromptWithSnippetAutocomplete(props: {
   return (
     <box flexDirection="column">
       <Show when={visible()}>
-        <box
-          width="100%"
-          backgroundColor={props.api.theme.current.backgroundMenu}
-          borderColor={props.api.theme.current.border}
-          {...INLINE_BORDER}
-        >
-          <box flexDirection="column" width="100%">
+        <box width="100%" borderColor={props.api.theme.current.border} {...INLINE_BORDER}>
+          <scrollbox
+            ref={(r: ScrollBoxRenderable) => {
+              scroll = r;
+            }}
+            backgroundColor={props.api.theme.current.backgroundMenu}
+            height={menuHeight()}
+            scrollbarOptions={{ visible: false }}
+          >
             <Index
               each={options()}
               fallback={
@@ -434,10 +495,12 @@ function PromptWithSnippetAutocomplete(props: {
                 >
                   {/* biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI rows intentionally handle mouse selection. */}
                   <box
+                    id="create-snippet"
                     paddingLeft={1}
                     paddingRight={1}
                     backgroundColor={props.api.theme.current.primary}
                     onMouseMove={() => {
+                      if (!allowMouseHover()) return;
                       setInputMode("mouse");
                     }}
                     onMouseDown={() => {
@@ -456,6 +519,7 @@ function PromptWithSnippetAutocomplete(props: {
                 // biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI rows intentionally handle mouse selection.
                 // biome-ignore lint/a11y/useKeyWithMouseEvents: Keyboard navigation is handled by the prompt-level key handler above.
                 <box
+                  id={option().name}
                   paddingLeft={1}
                   paddingRight={1}
                   backgroundColor={
@@ -463,10 +527,11 @@ function PromptWithSnippetAutocomplete(props: {
                   }
                   flexDirection="row"
                   onMouseMove={() => {
+                    if (!allowMouseHover()) return;
                     setInputMode("mouse");
                   }}
                   onMouseOver={() => {
-                    if (inputMode() !== "mouse") return;
+                    if (inputMode() !== "mouse" || !allowMouseHover()) return;
                     setSelected(index);
                   }}
                   onMouseDown={() => {
@@ -478,6 +543,7 @@ function PromptWithSnippetAutocomplete(props: {
                   <text
                     fg={index === selected() ? selectedFg() : props.api.theme.current.text}
                     flexShrink={0}
+                    wrapMode="none"
                   >
                     {renderHighlighted(
                       `#${option().name}`,
@@ -513,7 +579,7 @@ function PromptWithSnippetAutocomplete(props: {
                 </box>
               )}
             </Index>
-          </box>
+          </scrollbox>
         </box>
       </Show>
       <props.api.ui.Prompt

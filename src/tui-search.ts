@@ -1,7 +1,5 @@
 import type { SnippetInfo } from "./types.js";
 
-const MAX_OPTIONS = 10;
-
 export interface HighlightPart {
   text: string;
   match: boolean;
@@ -46,7 +44,6 @@ export function filterSnippets(snippets: SnippetInfo[], query: string): SnippetI
 
       return a.snippet.name.localeCompare(b.snippet.name);
     })
-    .slice(0, MAX_OPTIONS)
     .map((item) => item.snippet);
 }
 

@@ -67,6 +67,17 @@ describe("filterSnippets", () => {
 
     expect(result.map((item) => item.name)).toEqual(["abc-project", "abc-global"]);
   });
+
+  test("returns all matches instead of truncating to a fixed top slice", () => {
+    const result = filterSnippets(
+      Array.from({ length: 12 }, (_, index) =>
+        snippet({ name: `match-${index.toString().padStart(2, "0")}`, content: "x" }),
+      ),
+      "match",
+    );
+
+    expect(result).toHaveLength(12);
+  });
 });
 
 describe("snippetDescription", () => {
