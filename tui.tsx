@@ -490,9 +490,17 @@ function PromptWithSnippetAutocomplete(props: {
   const selectedFg = createMemo(() => selectedText(props.api.theme.current));
 
   return (
-    <box flexDirection="column">
+    <box>
       <Show when={visible()}>
-        <box width="100%" borderColor={props.api.theme.current.border} {...INLINE_BORDER}>
+        <box
+          position="absolute"
+          top={-menuHeight()}
+          left={0}
+          right={0}
+          zIndex={100}
+          borderColor={props.api.theme.current.border}
+          {...INLINE_BORDER}
+        >
           <scrollbox
             ref={(r: ScrollBoxRenderable) => {
               scroll = r;
