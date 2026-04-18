@@ -75,9 +75,9 @@ https://github.com/user-attachments/assets/76975a9e-e326-431e-8be5-39a9f6572851
 
 Compose base snippets into higher-level ones. Type `#full-review` to inject all standards at once, keeping each concern in its own maintainable file.
 
+**The power:** Mix and match. Type `#tdd #careful` for test-driven development with extra caution. 
+Build `/commit #conventional-commits #project-context` for context-aware commits. Create layered prompts from small, reusable pieces.  
 <img width="708" height="185" alt="image" src="https://github.com/user-attachments/assets/2c537c4b-6afe-4bb1-9fb4-484034f9ce8b" />
-
-**The power:** Mix and match. Type `#tdd #careful` for test-driven development with extra caution. Build `/commit #conventional-commits #project-context` for context-aware commits. Create layered prompts from small, reusable pieces.
 
 ## Installation
 
