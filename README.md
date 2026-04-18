@@ -81,8 +81,6 @@ Build `/commit #conventional-commits #project-context` for context-aware commits
 
 ## Installation
 
-Recommended:
-
 ```bash
 opencode plug add opencode-snippets
 ```
