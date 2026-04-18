@@ -15,6 +15,7 @@ Non-obvious learnings from debugging `opencode-snippets` through spawned OpenCod
 - Rebuild before relaunching TUI with `bun run build`. The local plugin is referenced as `file:///D:/projects/opencode-snippets`, but the package exports point at `dist`, so stale build output gives fake negatives.
 - Use `opencode run "..."` for cheap plugin/config smoke tests. Reserve full TUI launches for layout, key handling, and autocomplete behavior.
 - In OpenCode `Prompt`, `onSubmit` is a post-submit callback, not a submit interceptor. If Enter still leaks through, do not try to "fix" it in wrapper `onSubmit`.
+- If Enter handling can see different state than the dropdown the user is looking at, prefer the rendered dropdown snapshot first. Re-reading `ref.current.input` can disagree with the visible menu long enough to take the wrong branch.
 - When the visible hit count looks wrong, verify matcher output directly in-process:
 
 ```bash

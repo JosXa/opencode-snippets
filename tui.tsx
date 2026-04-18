@@ -339,6 +339,25 @@ function PromptWithSnippetAutocomplete(props: {
               return;
             }
 
+            // Prefer the rendered dropdown state so Enter follows what the user can see.
+            if (visible()) {
+              const rendered = options();
+              if (rendered.length > 0) {
+                const index = Math.min(selected(), rendered.length - 1);
+                chooseItem(rendered[index] ?? rendered[0]);
+                return;
+              }
+
+              if (canCreate()) {
+                void createSnippetDraft();
+                return;
+              }
+            }
+
+            if (snippets.loading) {
+              return;
+            }
+
             const query = current.query.trim();
             const live = filterSnippets(snippets(), query);
             if (live.length > 0) {
