@@ -64,6 +64,8 @@ You could also make "current git status and staged changes" a shell-enabled snip
 #testing-requirements
 ```
 
+https://github.com/user-attachments/assets/76975a9e-e326-431e-8be5-39a9f6572851
+
 `~/.config/opencode/snippet/full-review.md`:
 ```markdown
 #code-standards
