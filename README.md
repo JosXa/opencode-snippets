@@ -83,15 +83,9 @@ Recommended:
 opencode plug add opencode-snippets
 ```
 
-This is the default setup to recommend to users. OpenCode will install the package and wire up both the server plugin and the TUI plugin automatically.
+This installs the package and wires up both the server plugin and the TUI plugin for autocompletion automatically.
 
-The server plugin is enough to expand snippets at send time.
 
-The TUI plugin is technically optional, but strongly recommended. It gives users the inline `#` dropdown, snippet discovery, keyboard selection, and snippet creation flow that make the feature feel built-in instead of hidden.
-
-With the TUI plugin enabled, typing `#` at the beginning of the prompt or right after whitespace opens an inline snippet dropdown above the prompt. It uses the same boundary rule as `@`, so `@file.ts#12-20` line ranges are left alone.
-
-If you skip the TUI plugin, snippet expansion still works, but users lose the discoverability and fast selection flow. Treat the TUI plugin as optional in the strict technical sense and recommended in the practical product sense.
 
 <details>
 <summary>Manual Installation (or for AI agents)</summary>
