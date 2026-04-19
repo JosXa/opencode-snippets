@@ -9,6 +9,7 @@ import { SnippetsPlugin } from "./index.js";
 let tempDir: string;
 let _globalSnippetDir: string;
 let projectSnippetDir: string;
+let projectSkillDir: string;
 
 /** Mock OpenCode plugin context */
 function createMockContext(snippetsDir?: string): PluginInput {
@@ -17,11 +18,12 @@ function createMockContext(snippetsDir?: string): PluginInput {
     project: {
       id: "test-project",
       worktree: "/test/worktree",
-      time: { created: new Date().toISOString() },
+      time: { created: Date.now() },
     },
     directory: snippetsDir || "/test/project",
     worktree: "/test/worktree",
     serverUrl: new URL("http://localhost:3000"),
+    experimental_workspace: {} as PluginInput["experimental_workspace"],
     $: {} as PluginInput["$"],
   };
 }
@@ -33,13 +35,18 @@ function createMockContextWithSnippets(): PluginInput {
     project: {
       id: "test-project",
       worktree: join(tempDir, "project"),
-      time: { created: new Date().toISOString() },
+      time: { created: Date.now() },
     },
     directory: join(tempDir, "project"),
     worktree: join(tempDir, "project"),
     serverUrl: new URL("http://localhost:3000"),
+    experimental_workspace: {} as PluginInput["experimental_workspace"],
     $: {} as PluginInput["$"],
   };
+}
+
+function textOf(part: Part): string | undefined {
+  return (part as { text?: string }).text;
 }
 
 describe("SnippetsPlugin - Hook Integration", () => {
@@ -62,10 +69,10 @@ describe("SnippetsPlugin - Hook Integration", () => {
       const ctx = createMockContextWithSnippets();
       const hooks = await SnippetsPlugin(ctx);
 
-      const userMessage: UserMessage = {
+      const userMessage = {
         role: "user",
         content: "Test message",
-      };
+      } as unknown as UserMessage;
 
       const output = {
         message: userMessage,
@@ -80,7 +87,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
       );
 
       // Snippet should be expanded
-      expect(output.parts[0].text).toBe("Say Hello, I am a test snippet! please");
+      expect(textOf(output.parts[0])).toBe("Say Hello, I am a test snippet! please");
     });
 
     it("should not process assistant messages", async () => {
@@ -105,17 +112,17 @@ describe("SnippetsPlugin - Hook Integration", () => {
       );
 
       // Should not modify assistant messages - text should remain unchanged
-      expect(output.parts[0].text).toBe("#test hashtag");
+      expect(textOf(output.parts[0])).toBe("#test hashtag");
     });
 
     it("should not process ignored messages (command output)", async () => {
       const ctx = createMockContextWithSnippets();
       const hooks = await SnippetsPlugin(ctx);
 
-      const userMessage: UserMessage = {
+      const userMessage = {
         role: "user",
         content: "Command output",
-      };
+      } as unknown as UserMessage;
 
       const output = {
         message: userMessage,
@@ -132,7 +139,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
       );
 
       // Should not process ignored messages - commands and hashtags should not be expanded
-      expect(output.parts[0].text).toBe("Snippet content: !`echo test` and #greeting");
+      expect(textOf(output.parts[0])).toBe("Snippet content: !`echo test` and #greeting");
     });
   });
 
@@ -174,12 +181,12 @@ describe("SnippetsPlugin - Hook Integration", () => {
       await hooks["experimental.chat.messages.transform"]?.({}, output);
 
       // User message should be expanded
-      expect(messages[0].parts[0].text).toBe(
+      expect(textOf(messages[0].parts[0])).toBe(
         "Please provide detailed information. Answer my query",
       );
 
       // Assistant message should remain unchanged
-      expect(messages[1].parts[0].text).toBe("#question-hint should not expand");
+      expect(textOf(messages[1].parts[0])).toBe("#question-hint should not expand");
     });
 
     it("should handle empty messages array", async () => {
@@ -217,7 +224,102 @@ describe("SnippetsPlugin - Hook Integration", () => {
       await hooks["experimental.chat.messages.transform"]?.({}, output);
 
       // Ignored message should not be processed
-      expect(messages[0].parts[0].text).toBe("Command output: !`echo test` and #question-hint");
+      expect(textOf(messages[0].parts[0])).toBe("Command output: !`echo test` and #question-hint");
+    });
+  });
+
+  describe("experimental skill loading", () => {
+    beforeEach(async () => {
+      tempDir = join(import.meta.dir, `.test-skill-loading-${Date.now()}`);
+      projectSnippetDir = join(tempDir, "project", ".opencode", "snippet");
+      projectSkillDir = join(tempDir, "project", ".opencode", "skill");
+      await mkdir(projectSnippetDir, { recursive: true });
+      await mkdir(join(projectSkillDir, "caveman"), { recursive: true });
+      await mkdir(join(projectSkillDir, "careful"), { recursive: true });
+
+      await writeFile(
+        join(projectSnippetDir, "config.jsonc"),
+        JSON.stringify({ experimental: { skillLoading: true } }),
+      );
+      await writeFile(join(projectSkillDir, "caveman", "SKILL.md"), "Use caveman mode.");
+      await writeFile(join(projectSkillDir, "careful", "SKILL.md"), "Be careful.");
+    });
+
+    afterEach(async () => {
+      await rm(tempDir, { recursive: true, force: true });
+    });
+
+    it("should replace visible skill load syntax with placeholders", async () => {
+      const ctx = createMockContextWithSnippets();
+      const hooks = await SnippetsPlugin(ctx);
+
+      const output = {
+        message: { role: "user", content: "Test" } as unknown as UserMessage,
+        parts: [
+          {
+            type: "text",
+            text: 'Load !skill(caveman) and !skill("careful")',
+          },
+        ] as Part[],
+      };
+
+      await hooks["chat.message"]?.(
+        {
+          sessionID: "test-session",
+          messageID: "message-1",
+        },
+        output,
+      );
+
+      expect(textOf(output.parts[0])).toBe(
+        "Load [caveman skill loaded] and [careful skill loaded]",
+      );
+    });
+
+    it("should inject hidden skill payloads before the visible user message", async () => {
+      const ctx = createMockContextWithSnippets();
+      const hooks = await SnippetsPlugin(ctx);
+
+      const chatOutput = {
+        message: { role: "user", content: "Test" } as unknown as UserMessage,
+        parts: [
+          {
+            type: "text",
+            text: 'Load !skill(caveman) and !skill("careful")',
+          },
+        ] as Part[],
+      };
+
+      await hooks["chat.message"]?.(
+        {
+          sessionID: "test-session",
+          messageID: "message-1",
+        },
+        chatOutput,
+      );
+
+      const output = {
+        messages: [
+          {
+            info: { id: "message-1", role: "user", sessionID: "test-session" } as Message,
+            parts: chatOutput.parts,
+          },
+        ],
+      };
+
+      await hooks["experimental.chat.messages.transform"]?.({ sessionID: "test-session" }, output);
+
+      expect(output.messages).toHaveLength(2);
+      expect(textOf(output.messages[0].parts[0])).toContain('<skill_content name="caveman">');
+      expect(textOf(output.messages[0].parts[0])).toContain('<skill_content name="careful">');
+      expect(
+        textOf(output.messages[0].parts[0])?.indexOf('<skill_content name="caveman">'),
+      ).toBeLessThan(
+        textOf(output.messages[0].parts[0])?.indexOf('<skill_content name="careful">') || 0,
+      );
+      expect(textOf(output.messages[1].parts[0])).toBe(
+        "Load [caveman skill loaded] and [careful skill loaded]",
+      );
     });
   });
 
@@ -227,6 +329,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
       tool: string;
       sessionID: string;
       callID: string;
+      args: unknown;
     };
 
     /** Type for tool.execute.after hook output */
@@ -261,6 +364,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
         tool: "skill",
         sessionID: "test-session",
         callID: "call-123",
+        args: {},
       };
 
       const output: ToolExecuteOutput = {
@@ -285,6 +389,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
         tool: "bash",
         sessionID: "test-session",
         callID: "call-123",
+        args: {},
       };
 
       const originalOutput = "Command output with #skill-helper";
@@ -308,6 +413,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
         tool: "skill",
         sessionID: "test-session",
         callID: "call-123",
+        args: {},
       };
 
       const output: ToolExecuteOutput = {
@@ -330,6 +436,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
         tool: "skill",
         sessionID: "test-session",
         callID: "call-123",
+        args: {},
       };
 
       const output: ToolExecuteOutput = {

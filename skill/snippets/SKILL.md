@@ -156,6 +156,27 @@ Enable in config:
 
 Skills are loaded from OpenCode's standard directories (`~/.config/opencode/skill/` and `.opencode/skill/`).
 
+### Skill Loading (Experimental)
+
+Load OpenCode skills with command-style syntax while keeping the visible message compact:
+
+```md
+Use caveman mode. !skill(caveman)
+<!-- or -->
+!skill("opencode-config")
+```
+
+Enable in config:
+```jsonc
+{
+  "experimental": {
+    "skillLoading": true
+  }
+}
+```
+
+Visible transcript text becomes `[name skill loaded]`. The model receives the full OpenCode-style `<skill_content>` wrapper above that message.
+
 ## Commands
 
 - `/snippet add <name> [content]` - create global snippet

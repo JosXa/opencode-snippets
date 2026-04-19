@@ -8,6 +8,7 @@ import { assembleMessage, type ExpandOptions, expandHashtags } from "./src/expan
 import type {
   ChatMessageInput,
   ChatMessageOutput,
+  MessagePart,
   TransformInput,
   TransformOutput,
 } from "./src/hook-types.js";
@@ -16,7 +17,9 @@ import { loadSnippets } from "./src/loader.js";
 import { logger } from "./src/logger.js";
 import { sendIgnoredMessage } from "./src/notification.js";
 import { executeShellCommands, type ShellContext } from "./src/shell.js";
+import { SkillLoadManager } from "./src/skill-load-manager.js";
 import { loadSkills, type SkillRegistry } from "./src/skill-loader.js";
+import { expandSkillLoads } from "./src/skill-loading.js";
 import { expandSkillTags } from "./src/skill-renderer.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -76,9 +79,9 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   const startupStart = performance.now();
   const snippets = await loadSnippets(ctx.directory);
 
-  // Load skills if skill rendering is enabled
+  // Load skills if either skill feature is enabled
   let skills: SkillRegistry = new Map();
-  if (config.experimental.skillRendering) {
+  if (config.experimental.skillRendering || config.experimental.skillLoading) {
     skills = await loadSkills(ctx.directory);
   }
 
@@ -89,6 +92,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     snippetCount: snippets.size,
     skillCount: skills.size,
     skillRenderingEnabled: config.experimental.skillRendering,
+    skillLoadingEnabled: config.experimental.skillLoading,
     injectBlocksEnabled: config.experimental.injectBlocks,
     debugLogging: config.logging.debug,
   });
@@ -97,13 +101,14 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   const commandHandler = createCommandExecuteHandler(ctx.client, snippets, ctx.directory);
 
   const injectionManager = new InjectionManager();
+  const skillLoadManager = new SkillLoadManager();
 
   /**
    * Processes text parts for snippet expansion, skill rendering, and shell command execution.
    * Returns collected inject blocks from expanded snippets with snippet names.
    */
   const processTextParts = async (
-    parts: Array<{ type: string; text?: string }>,
+    parts: MessagePart[],
   ): Promise<Array<{ snippetName: string; content: string }>> => {
     const messageStart = performance.now();
     let expandTimeTotal = 0;
@@ -133,6 +138,19 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         const expansionResult = expandHashtags(part.text, snippets, new Map(), expandOptions);
         part.text = assembleMessage(expansionResult);
         expandTimeTotal += performance.now() - expandStart;
+
+        // User requirement: keep a visible inline placeholder, but inject the
+        // OpenCode-shaped skill payload above the message for the model.
+        if (config.experimental.skillLoading && skills.size > 0) {
+          const skillStart = performance.now();
+          const skillLoadResult = await expandSkillLoads(part.text, skills, snippets, {
+            expandSkillTagsInContent: config.experimental.skillRendering,
+            extractInject: config.experimental.injectBlocks,
+          });
+          part.text = skillLoadResult.text;
+          part.skillLoads = skillLoadResult.payloads;
+          skillTimeTotal += performance.now() - skillStart;
+        }
 
         // 3. Execute shell commands: !`command`
         const shellStart = performance.now();
@@ -206,6 +224,43 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     return result;
   };
 
+  const getPartSkillLoads = (parts: MessagePart[]): string[] =>
+    parts.flatMap((part) => part.skillLoads || []);
+
+  const getMessageSkillLoads = (
+    sessionID: string,
+    message: TransformOutput["messages"][number],
+  ): string[] => {
+    const direct = getPartSkillLoads(message.parts);
+    if (direct.length > 0) return direct;
+
+    if (!message.info.id) return [];
+    return skillLoadManager.get(sessionID, message.info.id);
+  };
+
+  const insertSkillLoadsIntoMessages = (
+    sessionID: string,
+    messages: TransformOutput["messages"],
+  ): TransformOutput["messages"] => {
+    const result: TransformOutput["messages"] = [];
+
+    for (const message of messages) {
+      if (message.info.role === "user" && !isIgnoredMessage(message)) {
+        const payloads = getMessageSkillLoads(sessionID, message);
+        if (payloads.length > 0) {
+          result.push({
+            info: { role: "user", sessionID: message.info.sessionID || sessionID },
+            parts: [{ type: "text", text: payloads.join("\n\n") }],
+          });
+        }
+      }
+
+      result.push(message);
+    }
+
+    return result;
+  };
+
   return {
     // Register /snippet command and skill path
     config: async (opencodeConfig) => {
@@ -238,6 +293,13 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
           part.snippetsProcessed = true;
         }
       });
+
+      if (input.messageID) {
+        const payloads = getPartSkillLoads(output.parts);
+        if (payloads.length > 0) {
+          skillLoadManager.register(input.sessionID, input.messageID, payloads);
+        }
+      }
 
       if (injected.length > 0) {
         const newOnes = injectionManager.registerAndGetNew(input.sessionID, injected);
@@ -283,6 +345,13 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
               );
             }
           }
+
+          if (sessionID && message.info.id) {
+            const payloads = getPartSkillLoads(message.parts);
+            if (payloads.length > 0) {
+              skillLoadManager.register(sessionID, message.info.id, payloads);
+            }
+          }
         }
       }
 
@@ -317,6 +386,18 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
             messagesBefore: beforeCount,
             messagesAfter: output.messages.length,
           });
+        }
+
+        if (config.experimental.skillLoading) {
+          const beforeSkillLoads = output.messages.length;
+          output.messages = insertSkillLoadsIntoMessages(sessionID, output.messages);
+          if (output.messages.length > beforeSkillLoads) {
+            logger.debug("Injected skill load context messages", {
+              sessionID,
+              messagesBefore: beforeSkillLoads,
+              messagesAfter: output.messages.length,
+            });
+          }
         }
       }
     },

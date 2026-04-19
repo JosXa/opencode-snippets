@@ -357,6 +357,32 @@ Skills are loaded from OpenCode's standard skill directories:
 
 When a skill tag is found, it's replaced with the skill's content body (frontmatter stripped). Unknown skills leave the tag unchanged.
 
+### Skill Loading (Experimental)
+
+Load a skill with OpenCode-style wrapper content without showing the full skill body inline:
+
+```markdown
+Write this in caveman mode. !skill(caveman)
+```
+
+Quoted names are also supported:
+
+```markdown
+!skill("opencode-config")
+```
+
+**Enable in config:**
+
+```jsonc
+{
+  "experimental": {
+    "skillLoading": true
+  }
+}
+```
+
+When enabled, the user-visible message shows `[name skill loaded]`, while the model receives an injected OpenCode-style `<skill_content>` payload immediately above that message. Multiple `!skill(...)` calls in one message are injected in source order.
+
 ## Example Snippets
 
 ### `~/.config/opencode/snippet/context.md`
@@ -425,7 +451,8 @@ A default config file is created automatically on first run.
   },
   "experimental": {
     "injectBlocks": false, // Enable <inject>...</inject> blocks for persistent context
-    "skillRendering": false // Enable <skill>name</skill> tag expansion
+    "skillRendering": false, // Enable <skill>name</skill> tag expansion
+    "skillLoading": false // Enable !skill(name) OpenCode-style loading
   },
   "hideCommandInOutput": false, // Show only output for shell commands (hides "$ cmd\n-->")
   "injectRecencyMessages": 5 // How many messages from the bottom to place injected context
@@ -442,6 +469,7 @@ Logs are written to `~/.config/opencode/logs/snippets/daily/` when enabled.
 
 - Snippets expand everywhere: regular chat, question responses, skills, and slash commands
 - Injected snippet context is placed N messages from the bottom (configured by `injectRecencyMessages`) and shows a `↳ Injected #name` indicator when first registered
+- `!skill(name)` inserts OpenCode-style skill payload text above the visible user message while keeping the transcript inline placeholder compact
 - Snippets are loaded once at plugin startup
 - Hashtag matching is **case-insensitive** (`#Hello` = `#hello`)
 - Unknown hashtags are left unchanged

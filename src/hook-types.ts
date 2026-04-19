@@ -7,10 +7,12 @@ export interface MessagePart {
   text?: string;
   ignored?: boolean;
   snippetsProcessed?: boolean;
+  skillLoads?: string[];
 }
 
 export interface ChatMessageInput {
   sessionID: string;
+  messageID?: string;
 }
 
 export interface ChatMessageOutput {
@@ -21,6 +23,7 @@ export interface ChatMessageOutput {
 }
 
 export interface TransformMessageInfo {
+  id?: string;
   role: string;
   sessionID?: string;
 }

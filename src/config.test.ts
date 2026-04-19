@@ -63,7 +63,7 @@ describe("config", () => {
 
       expect(config).toEqual({
         logging: { debug: false },
-        experimental: { skillRendering: false, injectBlocks: false },
+        experimental: { skillRendering: false, skillLoading: false, injectBlocks: false },
         hideCommandInOutput: false,
         injectRecencyMessages: 5,
       });
@@ -173,10 +173,22 @@ describe("config", () => {
       // Should return defaults when config is invalid
       expect(config).toEqual({
         logging: { debug: false },
-        experimental: { skillRendering: false, injectBlocks: false },
+        experimental: { skillRendering: false, skillLoading: false, injectBlocks: false },
         hideCommandInOutput: false,
         injectRecencyMessages: 5,
       });
+    });
+
+    it("should load experimental skill loading config", () => {
+      writeFileSync(
+        (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL,
+        JSON.stringify({ experimental: { skillLoading: true } }),
+        "utf-8",
+      );
+
+      const config = loadConfig();
+
+      expect(config.experimental.skillLoading).toBe(true);
     });
 
     it("should ignore invalid config value types", () => {

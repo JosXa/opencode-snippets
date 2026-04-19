@@ -24,6 +24,8 @@ export interface LoggingConfig {
 export interface ExperimentalConfig {
   /** Enable skill rendering with <skill>name</skill> or <skill name="name" /> syntax */
   skillRendering: boolean;
+  /** Enable !skill(name) syntax that injects OpenCode-style skill payloads above the message */
+  skillLoading: boolean;
   /** Enable <inject>...</inject> blocks for persistent context messages */
   injectBlocks: boolean;
 }
@@ -54,6 +56,7 @@ interface RawConfig {
   };
   experimental?: {
     skillRendering?: BooleanSetting;
+    skillLoading?: BooleanSetting;
     injectBlocks?: BooleanSetting;
   };
   hideCommandInOutput?: BooleanSetting;
@@ -69,6 +72,7 @@ const DEFAULT_CONFIG: SnippetsConfig = {
   },
   experimental: {
     skillRendering: false,
+    skillLoading: false,
     injectBlocks: false,
   },
   hideCommandInOutput: false,
@@ -98,7 +102,13 @@ const DEFAULT_CONFIG_CONTENT = `{
     // Skills are loaded from OpenCode's standard skill directories
     // Values: true, false, "enabled", "disabled"
     // Default: false
-    "skillRendering": false
+    "skillRendering": false,
+
+    // Enable !skill(name) syntax that shows a placeholder inline while injecting
+    // the OpenCode-style <skill_content> payload to the model above the message
+    // Values: true, false, "enabled", "disabled"
+    // Default: false
+    "skillLoading": false
   },
 
   // Hide shell command in snippet output
@@ -211,6 +221,7 @@ export function loadConfig(projectDir?: string): SnippetsConfig {
   logger.debug("Final config", {
     loggingDebug: config.logging.debug,
     experimentalSkillRendering: config.experimental.skillRendering,
+    experimentalSkillLoading: config.experimental.skillLoading,
     hideCommandInOutput: config.hideCommandInOutput,
     injectRecencyMessages: config.injectRecencyMessages,
   });
@@ -224,6 +235,7 @@ export function loadConfig(projectDir?: string): SnippetsConfig {
 function mergeConfig(base: SnippetsConfig, raw: RawConfig): SnippetsConfig {
   const debugValue = normalizeBooleanSetting(raw.logging?.debug);
   const skillRenderingValue = normalizeBooleanSetting(raw.experimental?.skillRendering);
+  const skillLoadingValue = normalizeBooleanSetting(raw.experimental?.skillLoading);
   const injectBlocksValue = normalizeBooleanSetting(raw.experimental?.injectBlocks);
   const hideCommandValue = normalizeBooleanSetting(raw.hideCommandInOutput);
   const injectRecencyValue = normalizePositiveInteger(raw.injectRecencyMessages);
@@ -235,6 +247,8 @@ function mergeConfig(base: SnippetsConfig, raw: RawConfig): SnippetsConfig {
     experimental: {
       skillRendering:
         skillRenderingValue !== undefined ? skillRenderingValue : base.experimental.skillRendering,
+      skillLoading:
+        skillLoadingValue !== undefined ? skillLoadingValue : base.experimental.skillLoading,
       injectBlocks:
         injectBlocksValue !== undefined ? injectBlocksValue : base.experimental.injectBlocks,
     },
