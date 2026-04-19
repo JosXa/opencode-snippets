@@ -34,7 +34,7 @@ import {
 } from "./src/tui-trigger.js";
 import type { SnippetInfo } from "./src/types.js";
 
-const id = "opencode-snippets:tui";
+const id = "opencode-snippets:autocomplete";
 const PROMPT_SYNC_MS = 50;
 const MENU_MAX_HEIGHT = 10;
 const MOUSE_HOVER_SUPPRESS_MS = 150;
