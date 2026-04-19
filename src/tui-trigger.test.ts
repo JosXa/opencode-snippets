@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   findTrailingHashtagTrigger,
+  insertSkillLoad,
   insertSnippetTag,
   insertSnippetTrigger,
   preferredSnippetTag,
@@ -66,6 +67,16 @@ describe("insertSnippetTag", () => {
 
   test("appends with a separating space when needed", () => {
     expect(insertSnippetTag("please review", "checklist")).toBe("please review #checklist ");
+  });
+});
+
+describe("insertSkillLoad", () => {
+  test("replaces the active trailing hashtag with a skill load", () => {
+    expect(insertSkillLoad("please #sn", "caveman")).toBe("please #skill(caveman) ");
+  });
+
+  test("appends a skill load with spacing when needed", () => {
+    expect(insertSkillLoad("please review", "caveman")).toBe("please review #skill(caveman) ");
   });
 });
 

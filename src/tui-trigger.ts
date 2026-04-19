@@ -41,6 +41,19 @@ export function insertSnippetTag(input: string, name: string): string {
   return `${input} #${name} `;
 }
 
+export function insertSkillLoad(input: string, name: string): string {
+  const match = findTrailingHashtagTrigger(input);
+  const load = `#skill(${name}) `;
+  if (match) {
+    return `${input.slice(0, match.start)}${load}`;
+  }
+
+  if (!input) return load;
+  if (/\s$/.test(input)) return `${input}${load}`;
+
+  return `${input} ${load}`;
+}
+
 export function preferredSnippetTag(
   input: string,
   item: Pick<SnippetInfo, "name" | "aliases">,

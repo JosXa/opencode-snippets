@@ -133,22 +133,39 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
           skillTimeTotal += performance.now() - skillStart;
         }
 
+        const skillPayloads: string[] = [];
+        const loadSkills = async (): Promise<void> => {
+          if (!config.experimental.skillLoading || skills.size === 0) return;
+
+          const skillLoadResult = await expandSkillLoads(part.text || "", skills, snippets, {
+            expandSkillTagsInContent: config.experimental.skillRendering,
+            extractInject: config.experimental.injectBlocks,
+          });
+          part.text = skillLoadResult.text;
+          skillPayloads.push(...skillLoadResult.payloads);
+        };
+
+        if (config.experimental.skillLoading && skills.size > 0) {
+          const skillStart = performance.now();
+
+          // User requirement: reserve explicit #skill(...) syntax even if a plain
+          // #skill snippet also exists.
+          await loadSkills();
+          skillTimeTotal += performance.now() - skillStart;
+        }
+
         // 2. Expand hashtags recursively with loop detection
         const expandStart = performance.now();
         const expansionResult = expandHashtags(part.text, snippets, new Map(), expandOptions);
         part.text = assembleMessage(expansionResult);
         expandTimeTotal += performance.now() - expandStart;
 
-        // User requirement: keep a visible inline placeholder, but inject the
-        // OpenCode-shaped skill payload above the message for the model.
+        // User requirement: snippet-expanded text can also contain #skill(...),
+        // so run skill loading again after hashtag expansion.
         if (config.experimental.skillLoading && skills.size > 0) {
           const skillStart = performance.now();
-          const skillLoadResult = await expandSkillLoads(part.text, skills, snippets, {
-            expandSkillTagsInContent: config.experimental.skillRendering,
-            extractInject: config.experimental.injectBlocks,
-          });
-          part.text = skillLoadResult.text;
-          part.skillLoads = skillLoadResult.payloads;
+          await loadSkills();
+          part.skillLoads = skillPayloads;
           skillTimeTotal += performance.now() - skillStart;
         }
 
@@ -242,11 +259,26 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     sessionID: string,
     messages: TransformOutput["messages"],
   ): TransformOutput["messages"] => {
+    const pending = skillLoadManager.drainPending(sessionID);
     const result: TransformOutput["messages"] = [];
 
-    for (const message of messages) {
+    const fallbackByIndex = new Map<number, string[]>();
+    if (pending.length > 0) {
+      for (let i = messages.length - 1; i >= 0; i -= 1) {
+        const message = messages[i];
+        if (message.info.role !== "user" || isIgnoredMessage(message)) continue;
+        if (getMessageSkillLoads(sessionID, message).length > 0) continue;
+
+        const payloads = pending.pop();
+        if (!payloads) break;
+        fallbackByIndex.set(i, payloads);
+      }
+    }
+
+    for (const [i, message] of messages.entries()) {
       if (message.info.role === "user" && !isIgnoredMessage(message)) {
-        const payloads = getMessageSkillLoads(sessionID, message);
+        const direct = getMessageSkillLoads(sessionID, message);
+        const payloads = direct.length > 0 ? direct : fallbackByIndex.get(i) || [];
         if (payloads.length > 0) {
           result.push({
             info: { role: "user", sessionID: message.info.sessionID || sessionID },
@@ -298,6 +330,11 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         const payloads = getPartSkillLoads(output.parts);
         if (payloads.length > 0) {
           skillLoadManager.register(input.sessionID, input.messageID, payloads);
+        }
+      } else {
+        const payloads = getPartSkillLoads(output.parts);
+        if (payloads.length > 0) {
+          skillLoadManager.queue(input.sessionID, payloads);
         }
       }
 

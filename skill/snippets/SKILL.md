@@ -56,7 +56,10 @@ Full config example with all options:
     "injectBlocks": false,
     // Enable skill rendering with <skill>name</skill> syntax
     // Default: false
-    "skillRendering": false
+    "skillRendering": false,
+    // Enable #skill(name) syntax
+    // Default: false
+    "skillLoading": false
   },
 
   // Hide shell command in output, showing only the result
@@ -161,9 +164,9 @@ Skills are loaded from OpenCode's standard directories (`~/.config/opencode/skil
 Load OpenCode skills with command-style syntax while keeping the visible message compact:
 
 ```md
-Use caveman mode. !skill(caveman)
+Use caveman mode. #skill(caveman)
 <!-- or -->
-!skill("opencode-config")
+#skill("opencode-config")
 ```
 
 Enable in config:
@@ -175,7 +178,11 @@ Enable in config:
 }
 ```
 
-Visible transcript text becomes `[name skill loaded]`. The model receives the full OpenCode-style `<skill_content>` wrapper above that message.
+Visible transcript text becomes `↳ Loaded name`. The model receives the full OpenCode-style `<skill_content>` wrapper above that message.
+
+Treat `#skill(...)` as hidden context injection, not inline expansion. User usually sees compact placeholder text, while the model receives an extra injected user message containing the full `<skill_content>` payload. Do not assume one visible bubble can hold different hidden text. The implementation achieves this by inserting an additional hidden message before the visible one.
+
+`#skill(...)` also works when produced by snippet expansion, not only when the user types it directly.
 
 ## Commands
 

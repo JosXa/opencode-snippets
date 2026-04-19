@@ -20,7 +20,9 @@ import {
 } from "solid-js";
 import { CONFIG } from "./src/constants.js";
 import { ensureSnippetsDir, listSnippets, loadSnippets } from "./src/loader.js";
+import { loadSkills, type SkillInfo } from "./src/skill-loader.js";
 import {
+  filterSkills,
   filterSnippets,
   highlightMatches,
   matchedAliases,
@@ -28,6 +30,7 @@ import {
 } from "./src/tui-search.js";
 import {
   findTrailingHashtagTrigger,
+  insertSkillLoad,
   insertSnippetTag,
   insertSnippetTrigger,
   preferredSnippetTag,
@@ -71,6 +74,17 @@ const INLINE_BORDER = {
 
 function sortSnippets(snippets: SnippetInfo[]): SnippetInfo[] {
   return [...snippets].sort((a, b) => {
+    if (a.source !== b.source) {
+      if (a.source === "project") return -1;
+      return 1;
+    }
+
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function sortSkills(skills: SkillInfo[]): SkillInfo[] {
+  return [...skills].sort((a, b) => {
     if (a.source !== b.source) {
       if (a.source === "project") return -1;
       return 1;
@@ -168,6 +182,33 @@ async function getSnippets(api: TuiPluginApi): Promise<SnippetInfo[]> {
   return sortSnippets(listSnippets(registry));
 }
 
+async function getSkills(api: TuiPluginApi): Promise<SkillInfo[]> {
+  const registry = await loadSkills(api.state.path.directory);
+  return sortSkills([...registry.values()]);
+}
+
+function skillDescription(skill: SkillInfo): string {
+  return (skill.description || skill.content).replace(/\s+/g, " ").trim();
+}
+
+type AutocompleteItem =
+  | {
+      kind: "snippet";
+      id: string;
+      label: string;
+      description: string;
+      aliases: string[];
+      snippet: SnippetInfo;
+    }
+  | {
+      kind: "skill";
+      id: string;
+      label: string;
+      description: string;
+      aliases: string[];
+      skill: SkillInfo;
+    };
+
 function PromptWithSnippetAutocomplete(props: {
   api: TuiPluginApi;
   bindPrompt: (ref: TuiPromptRef | undefined) => void;
@@ -186,7 +227,7 @@ function PromptWithSnippetAutocomplete(props: {
   const [prompt, setPrompt] = createSignal<TuiPromptRef>();
   const [dismissed, setDismissed] = createSignal<string>();
   const [selected, setSelected] = createSignal(0);
-  const [inputMode, setInputMode] = createSignal<"keyboard" | "mouse">("keyboard");
+  const [, setInputMode] = createSignal<"keyboard" | "mouse">("keyboard");
   const [ignoreMouseUntil, setIgnoreMouseUntil] = createSignal(0);
   const [input, setInput] = createSignal("");
   const [creating, setCreating] = createSignal(false);
@@ -195,6 +236,13 @@ function PromptWithSnippetAutocomplete(props: {
     () => getSnippets(props.api),
     {
       initialValue: [] as SnippetInfo[],
+    },
+  );
+  const [skills] = createResource(
+    () => props.api.state.path.directory,
+    () => getSkills(props.api),
+    {
+      initialValue: [] as SkillInfo[],
     },
   );
 
@@ -238,13 +286,31 @@ function PromptWithSnippetAutocomplete(props: {
     if (props.disabled || props.visible === false) return;
     return findTrailingHashtagTrigger(input());
   });
+  const query = createMemo(() => match()?.query.trim() || "");
 
-  const options = createMemo(() => {
+  const options = createMemo<AutocompleteItem[]>(() => {
     const next = match();
     if (!next) return [];
-    return filterSnippets(snippets(), next.query.trim());
+
+    const snippetOptions = filterSnippets(snippets(), next.query.trim()).map((snippet) => ({
+      kind: "snippet" as const,
+      id: `snippet:${snippet.name}`,
+      label: `#${snippet.name}`,
+      description: snippetDescription(snippet),
+      aliases: matchedAliases(snippet, next.query.trim()),
+      snippet,
+    }));
+    const skillOptions = filterSkills(skills(), next.query.trim()).map((skill) => ({
+      kind: "skill" as const,
+      id: `skill:${skill.name}`,
+      label: `#skill(${skill.name})`,
+      description: skillDescription(skill),
+      aliases: [],
+      skill,
+    }));
+
+    return [...snippetOptions, ...skillOptions];
   });
-  const query = createMemo(() => match()?.query.trim() || "");
   const draftName = createMemo(() => normalizeSnippetName(query()));
 
   const visible = createMemo(() => {
@@ -254,21 +320,21 @@ function PromptWithSnippetAutocomplete(props: {
   });
 
   const canCreate = createMemo(() => {
-    if (snippets.loading) return false;
+    if (snippets.loading || skills.loading) return false;
     if (options().length > 0) return false;
     return !!query() && !!draftName();
   });
 
   const optionKey = createMemo(() =>
     options()
-      .map((item) => item.name)
+      .map((item) => item.id)
       .join("\n"),
   );
   const menuHeight = createMemo(() =>
     Math.min(MENU_MAX_HEIGHT, Math.max(1, options().length || 1)),
   );
   const activeRowId = createMemo(() => {
-    if (options().length > 0) return options()[selected()]?.name;
+    if (options().length > 0) return options()[selected()]?.id;
     if (canCreate()) return "create-snippet";
     return undefined;
   });
@@ -288,6 +354,11 @@ function PromptWithSnippetAutocomplete(props: {
       lockKeyboardSelection();
       setTimeout(() => {
         scroll?.scrollTo(0);
+        const first = options()[0]?.id;
+        if (first) {
+          // Query changes can keep the same first row id, so force the scrollbox back to top.
+          scroll?.scrollChildIntoView(first);
+        }
       }, 0);
     }
     return key;
@@ -308,14 +379,14 @@ function PromptWithSnippetAutocomplete(props: {
     chooseItem(item);
   };
 
-  const chooseItem = (item: SnippetInfo) => {
+  const chooseItem = (item: AutocompleteItem) => {
     const ref = prompt();
     if (!ref) return;
 
-    const nextInput = insertSnippetTag(
-      ref.current.input,
-      preferredSnippetTag(ref.current.input, item),
-    );
+    const nextInput =
+      item.kind === "skill"
+        ? insertSkillLoad(ref.current.input, item.skill.name)
+        : insertSnippetTag(ref.current.input, preferredSnippetTag(ref.current.input, item.snippet));
     syncPromptInput(ref, nextInput);
     ref.focus();
 
@@ -358,18 +429,18 @@ function PromptWithSnippetAutocomplete(props: {
               }
             }
 
-            if (snippets.loading) {
+            if (snippets.loading || skills.loading) {
               return;
             }
 
-            const query = current.query.trim();
-            const live = filterSnippets(snippets(), query);
+            const live = options();
             if (live.length > 0) {
               const index = Math.min(selected(), live.length - 1);
               chooseItem(live[index] ?? live[0]);
               return;
             }
 
+            const query = current.query.trim();
             if (normalizeSnippetName(query)) {
               void createSnippetDraft();
               return;
@@ -481,9 +552,12 @@ function PromptWithSnippetAutocomplete(props: {
   });
 
   const emptyLabel = createMemo(() => {
-    if (snippets.loading && snippets().length === 0) return "Loading snippets...";
-    if (snippets().length === 0) return "No snippets found";
-    return "No matching snippets";
+    if ((snippets.loading || skills.loading) && options().length === 0) {
+      return "Loading snippets and skills...";
+    }
+
+    if (snippets().length === 0 && skills().length === 0) return "No snippets or skills found";
+    return "No matching snippets or skills";
   });
 
   const addSnippetLabel = createMemo(() => {
@@ -548,9 +622,8 @@ function PromptWithSnippetAutocomplete(props: {
             >
               {(option, index) => (
                 // biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI rows intentionally handle mouse selection.
-                // biome-ignore lint/a11y/useKeyWithMouseEvents: Keyboard navigation is handled by the prompt-level key handler above.
                 <box
-                  id={option().name}
+                  id={option().id}
                   paddingLeft={1}
                   paddingRight={1}
                   backgroundColor={
@@ -560,9 +633,6 @@ function PromptWithSnippetAutocomplete(props: {
                   onMouseMove={() => {
                     if (!allowMouseHover()) return;
                     setInputMode("mouse");
-                  }}
-                  onMouseOver={() => {
-                    if (inputMode() !== "mouse" || !allowMouseHover()) return;
                     setSelected(index);
                   }}
                   onMouseDown={() => {
@@ -577,31 +647,31 @@ function PromptWithSnippetAutocomplete(props: {
                     wrapMode="none"
                   >
                     {renderHighlighted(
-                      `#${option().name}`,
+                      option().label,
                       query(),
                       index === selected() ? selectedFg() : props.api.theme.current.text,
                     )}
                   </text>
-                  <Show when={matchedAliases(option(), query()).length > 0}>
+                  <Show when={option().aliases.length > 0}>
                     <text
                       fg={index === selected() ? selectedFg() : props.api.theme.current.textMuted}
                       wrapMode="none"
                       flexShrink={0}
                     >
                       {renderHighlighted(
-                        `  ${matchedAliases(option(), query()).length === 1 ? "alias" : "aliases"}: ${matchedAliases(option(), query()).join(", ")}`,
+                        `  ${option().aliases.length === 1 ? "alias" : "aliases"}: ${option().aliases.join(", ")}`,
                         query(),
                         index === selected() ? selectedFg() : props.api.theme.current.textMuted,
                       )}
                     </text>
                   </Show>
-                  <Show when={snippetDescription(option())}>
+                  <Show when={option().description}>
                     <text
                       fg={index === selected() ? selectedFg() : props.api.theme.current.textMuted}
                       wrapMode="none"
                     >
                       {renderHighlighted(
-                        `  ${snippetDescription(option())}`,
+                        `  ${option().description}`,
                         query(),
                         index === selected() ? selectedFg() : props.api.theme.current.textMuted,
                       )}

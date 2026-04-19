@@ -71,7 +71,11 @@ function expandText(
 
     PATTERNS.HASHTAG.lastIndex = 0;
 
-    expanded = expanded.replace(PATTERNS.HASHTAG, (match, name) => {
+    expanded = expanded.replace(PATTERNS.HASHTAG, (match, name, offset, input) => {
+      if (name.toLowerCase() === "skill" && input[offset + match.length] === "(") {
+        return match;
+      }
+
       const snippet = registry.get(name.toLowerCase());
       if (snippet === undefined) {
         return match;

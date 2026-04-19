@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import type { SkillInfo } from "./skill-loader.js";
 import {
+  filterSkills,
   filterSnippets,
   highlightMatches,
   matchedAliases,
@@ -15,6 +17,15 @@ function snippet(
     source: "global",
     description: undefined,
     filePath: `/tmp/${overrides.name}.md`,
+    ...overrides,
+  };
+}
+
+function skill(overrides: Partial<SkillInfo> & Pick<SkillInfo, "name" | "content">): SkillInfo {
+  return {
+    source: "global",
+    description: undefined,
+    filePath: `/tmp/${overrides.name}/SKILL.md`,
     ...overrides,
   };
 }
@@ -77,6 +88,35 @@ describe("filterSnippets", () => {
     );
 
     expect(result).toHaveLength(12);
+  });
+});
+
+describe("filterSkills", () => {
+  test("matches skill names directly", () => {
+    const result = filterSkills(
+      [skill({ name: "caveman", content: "smart caveman mode" })],
+      "caveman",
+    );
+
+    expect(result.map((item) => item.name)).toEqual(["caveman"]);
+  });
+
+  test("matches skill(tag) text so users can type skill(caveman)", () => {
+    const result = filterSkills(
+      [skill({ name: "caveman", content: "smart caveman mode" })],
+      "skill(cave",
+    );
+
+    expect(result.map((item) => item.name)).toEqual(["caveman"]);
+  });
+
+  test("returns all skills for an empty query", () => {
+    const result = filterSkills(
+      [skill({ name: "caveman", content: "x" }), skill({ name: "opencode-config", content: "x" })],
+      "",
+    );
+
+    expect(result).toHaveLength(2);
   });
 });
 

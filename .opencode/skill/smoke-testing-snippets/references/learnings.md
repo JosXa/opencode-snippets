@@ -14,6 +14,7 @@ Non-obvious learnings from debugging `opencode-snippets` through spawned OpenCod
 
 - Rebuild before relaunching TUI with `bun run build`. The local plugin is referenced as `file:///D:/projects/opencode-snippets`, but the package exports point at `dist`, so stale build output gives fake negatives.
 - Use `opencode run "..."` for cheap plugin/config smoke tests. Reserve full TUI launches for layout, key handling, and autocomplete behavior.
+- For `#skill(...)` smoke tests, export the session after `opencode run` too. In this repo, exported user parts showed visible placeholder text plus `skillLoads` metadata, but that alone did not prove the model saw an injected `<skill_content>` message because the assistant still answered in normal style.
 - In OpenCode `Prompt`, `onSubmit` is a post-submit callback, not a submit interceptor. If Enter still leaks through, do not try to "fix" it in wrapper `onSubmit`.
 - If Enter handling can see different state than the dropdown the user is looking at, prefer the rendered dropdown snapshot first. Re-reading `ref.current.input` can disagree with the visible menu long enough to take the wrong branch.
 - When the visible hit count looks wrong, verify matcher output directly in-process:
@@ -27,6 +28,7 @@ bun -e "import { loadSnippets, listSnippets } from './src/loader.js'; import { f
 ## TUI Control Details
 
 - `pty_write` escapes are enough for core navigation: `\b` for backspace, `\u001b[B` for down, `\u001b[A` for up.
+- Test both direct `#skill(...)` usage and snippets that expand into `#skill(...)`. This repo supports both paths, and the snippet-expanded path is worth verifying because it depends on skill loading after hashtag expansion too.
 - PTY cannot exercise real mouse hover behavior. If keyboard navigation is only broken in your desktop session, suspect hover-state or synthetic mouse events, not the arrow key handler itself.
 - Native `input_submit` can be beaten by plugin commands, but only if your command registers after `Prompt` mounts. OpenCode prepends newer command registrations, so delayed registration changes keybind priority.
 - `PromptRef.submit()` is a safe fallback when you intercept `input_submit` yourself and decide there is no snippet action to consume.

@@ -7,7 +7,6 @@ import { SnippetsPlugin } from "./index.js";
 
 /** Temp directory for test snippets */
 let tempDir: string;
-let _globalSnippetDir: string;
 let projectSnippetDir: string;
 let projectSkillDir: string;
 
@@ -241,6 +240,8 @@ describe("SnippetsPlugin - Hook Integration", () => {
         join(projectSnippetDir, "config.jsonc"),
         JSON.stringify({ experimental: { skillLoading: true } }),
       );
+      await writeFile(join(projectSnippetDir, "skill.md"), "general skill snippet");
+      await writeFile(join(projectSnippetDir, "demo-load.md"), "Use demo voice. #skill(caveman)");
       await writeFile(join(projectSkillDir, "caveman", "SKILL.md"), "Use caveman mode.");
       await writeFile(join(projectSkillDir, "careful", "SKILL.md"), "Be careful.");
     });
@@ -258,7 +259,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
         parts: [
           {
             type: "text",
-            text: 'Load !skill(caveman) and !skill("careful")',
+            text: 'Load #skill(caveman) and #skill("careful")',
           },
         ] as Part[],
       };
@@ -271,9 +272,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
         output,
       );
 
-      expect(textOf(output.parts[0])).toBe(
-        "Load [caveman skill loaded] and [careful skill loaded]",
-      );
+      expect(textOf(output.parts[0])).toBe("Load ↳ Loaded caveman and ↳ Loaded careful");
     });
 
     it("should inject hidden skill payloads before the visible user message", async () => {
@@ -285,7 +284,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
         parts: [
           {
             type: "text",
-            text: 'Load !skill(caveman) and !skill("careful")',
+            text: 'Load #skill(caveman) and #skill("careful")',
           },
         ] as Part[],
       };
@@ -318,7 +317,87 @@ describe("SnippetsPlugin - Hook Integration", () => {
         textOf(output.messages[0].parts[0])?.indexOf('<skill_content name="careful">') || 0,
       );
       expect(textOf(output.messages[1].parts[0])).toBe(
-        "Load [caveman skill loaded] and [careful skill loaded]",
+        "Load ↳ Loaded caveman and ↳ Loaded careful",
+      );
+    });
+
+    it("should inject hidden skill payloads when chat.message has no message id", async () => {
+      const ctx = createMockContextWithSnippets();
+      const hooks = await SnippetsPlugin(ctx);
+
+      const chatOutput = {
+        message: { role: "user", content: "Test" } as unknown as UserMessage,
+        parts: [
+          {
+            type: "text",
+            text: "Load #skill(caveman)",
+          },
+        ] as Part[],
+      };
+
+      await hooks["chat.message"]?.(
+        {
+          sessionID: "test-session",
+        },
+        chatOutput,
+      );
+
+      const output = {
+        messages: [
+          {
+            info: { role: "user", sessionID: "test-session" } as Message,
+            parts: [{ type: "text", text: "Load ↳ Loaded caveman" }] as Part[],
+          },
+        ],
+      };
+
+      await hooks["experimental.chat.messages.transform"]?.({ sessionID: "test-session" }, output);
+
+      expect(output.messages).toHaveLength(2);
+      expect(textOf(output.messages[0].parts[0])).toContain('<skill_content name="caveman">');
+      expect(textOf(output.messages[1].parts[0])).toBe("Load ↳ Loaded caveman");
+    });
+
+    it("should keep plain #skill snippets working alongside #skill(name)", async () => {
+      const ctx = createMockContextWithSnippets();
+      const hooks = await SnippetsPlugin(ctx);
+
+      const output = {
+        message: { role: "user", content: "Test" } as unknown as UserMessage,
+        parts: [{ type: "text", text: "Use #skill and #skill(caveman)" }] as Part[],
+      };
+
+      await hooks["chat.message"]?.(
+        {
+          sessionID: "test-session",
+          messageID: "message-1",
+        },
+        output,
+      );
+
+      expect(textOf(output.parts[0])).toBe("Use general skill snippet and ↳ Loaded caveman");
+    });
+
+    it("should load skills from snippet-expanded #skill(name) syntax", async () => {
+      const ctx = createMockContextWithSnippets();
+      const hooks = await SnippetsPlugin(ctx);
+
+      const output = {
+        message: { role: "user", content: "Test" } as unknown as UserMessage,
+        parts: [{ type: "text", text: "#demo-load Explain arrays." }] as Part[],
+      };
+
+      await hooks["chat.message"]?.(
+        {
+          sessionID: "test-session",
+          messageID: "message-1",
+        },
+        output,
+      );
+
+      expect(textOf(output.parts[0])).toBe("Use demo voice. ↳ Loaded caveman Explain arrays.");
+      expect((output.parts[0] as Part & { skillLoads?: string[] }).skillLoads?.[0]).toContain(
+        '<skill_content name="caveman">',
       );
     });
   });

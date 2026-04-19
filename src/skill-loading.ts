@@ -15,6 +15,10 @@ export interface SkillLoadResult {
   payloads: string[];
 }
 
+function visibleSkillLoad(skill: SkillInfo): string {
+  return `↳ Loaded ${skill.name}`;
+}
+
 export async function expandSkillLoads(
   text: string,
   registry: SkillRegistry,
@@ -55,7 +59,7 @@ export async function expandSkillLoads(
     }
 
     payloads.push(await buildSkillPayload(skill, registry, snippets, options));
-    result += `[${skill.name} skill loaded]`;
+    result += visibleSkillLoad(skill);
   }
 
   result += text.slice(lastIndex);
