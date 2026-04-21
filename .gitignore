@@ -4,6 +4,5 @@ dist/
 .DS_Store
 
 # Added by dotagent: ignore exported AI rule files
-AGENTS.md
 .roo/rules/**
 .pi/snippets/

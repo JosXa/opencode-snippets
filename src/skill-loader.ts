@@ -1,6 +1,6 @@
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { importCjs } from "./cjs-interop.js";
 
 const matter = await importCjs<typeof import("gray-matter")>("gray-matter");
@@ -29,48 +29,113 @@ export interface SkillInfo {
 export type SkillRegistry = Map<string, SkillInfo>;
 
 /**
- * OpenCode skill directory patterns (in order of priority)
- *
- * Global paths:
- * - ~/.config/opencode/skill/<name>/SKILL.md
- * - ~/.config/opencode/skills/<name>/SKILL.md
- *
- * Project paths (higher priority):
- * - .opencode/skill/<name>/SKILL.md
- * - .opencode/skills/<name>/SKILL.md
- * - .claude/skills/<name>/SKILL.md (Claude Code compatibility)
+ * Loader options used by tests to point skill discovery at temp homes.
  */
-const GLOBAL_SKILL_DIRS = [
-  join(homedir(), ".config", "opencode", "skill"),
-  join(homedir(), ".config", "opencode", "skills"),
-];
+export interface LoadSkillsOptions {
+  homeDir?: string;
+}
+
+/**
+ * OpenCode skill directory patterns.
+ *
+ * User requirement: keep behavior aligned with current OpenCode skill discovery.
+ * During the 2026-04 parity audit, the archived `opencode-ai/opencode` repo did not
+ * contain the modern skill loader, so the authoritative reference was the live docs:
+ * https://opencode.ai/docs/skills/
+ *
+ * Official paths from current OpenCode docs:
+ * - ~/.config/opencode/skills/<name>/SKILL.md
+ * - ~/.claude/skills/<name>/SKILL.md
+ * - ~/.agents/skills/<name>/SKILL.md
+ * - .opencode/skills/<name>/SKILL.md
+ * - .claude/skills/<name>/SKILL.md
+ * - .agents/skills/<name>/SKILL.md
+ *
+ * Compatibility paths we intentionally keep because this repo and local setup still use them:
+ * - ~/.config/opencode/skill/<name>/SKILL.md
+ * - .opencode/skill/<name>/SKILL.md
+ *
+ * Compatibility paths are loaded before the official `.opencode/skills` variants so the
+ * documented OpenCode locations still win if both singular and plural exist side by side.
+ */
+function getGlobalSkillDirs(homeDir = homedir()): string[] {
+  return [
+    join(homeDir, ".config", "opencode", "skill"),
+    join(homeDir, ".config", "opencode", "skills"),
+    join(homeDir, ".claude", "skills"),
+    join(homeDir, ".agents", "skills"),
+  ];
+}
 
 function getProjectSkillDirs(projectDir: string): string[] {
   return [
     join(projectDir, ".opencode", "skill"),
     join(projectDir, ".opencode", "skills"),
     join(projectDir, ".claude", "skills"),
+    join(projectDir, ".agents", "skills"),
   ];
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * OpenCode walks upward from the current working directory until the git worktree.
+ * We mirror that so nested apps can inherit repo-root skills while still allowing
+ * closer directories to override farther ones.
+ */
+async function getProjectSearchRoots(projectDir: string): Promise<string[]> {
+  const roots: string[] = [];
+  let dir = resolve(projectDir);
+
+  while (true) {
+    roots.push(dir);
+
+    if (await exists(join(dir, ".git"))) {
+      break;
+    }
+
+    const parent = dirname(dir);
+    if (parent === dir) {
+      break;
+    }
+
+    dir = parent;
+  }
+
+  return roots.reverse();
 }
 
 /**
  * Loads all skills from global and project directories
  *
  * @param projectDir - Optional project directory path
+ * @param options - Test-only overrides for discovery roots
  * @returns A map of skill names (lowercase) to their SkillInfo
  */
-export async function loadSkills(projectDir?: string): Promise<SkillRegistry> {
+export async function loadSkills(
+  projectDir?: string,
+  options: LoadSkillsOptions = {},
+): Promise<SkillRegistry> {
   const skills: SkillRegistry = new Map();
 
   // Load from global directories first
-  for (const dir of GLOBAL_SKILL_DIRS) {
+  for (const dir of getGlobalSkillDirs(options.homeDir)) {
     await loadFromDirectory(dir, skills, "global");
   }
 
-  // Load from project directories (overrides global)
+  // Load from project directories from git root -> cwd so nearer paths override farther ones.
   if (projectDir) {
-    for (const dir of getProjectSkillDirs(projectDir)) {
-      await loadFromDirectory(dir, skills, "project");
+    for (const root of await getProjectSearchRoots(projectDir)) {
+      for (const dir of getProjectSkillDirs(root)) {
+        await loadFromDirectory(dir, skills, "project");
+      }
     }
   }
 

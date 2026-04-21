@@ -73,6 +73,16 @@ export function insertSnippetTrigger(input: string): string {
   return `${input} #`;
 }
 
+export function stepSelection(current: number, total: number, delta: -1 | 1): number {
+  if (total <= 0) return 0;
+
+  const next = current + delta;
+  if (next < 0) return 0;
+  if (next >= total) return total - 1;
+
+  return next;
+}
+
 export function truncateSnippetPreview(input: string, max = 140): string {
   const text = input.replace(/\s+/g, " ").trim();
   if (text.length <= max) return text;

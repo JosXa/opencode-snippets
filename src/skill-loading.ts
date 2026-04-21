@@ -19,6 +19,10 @@ function visibleSkillLoad(skill: SkillInfo): string {
   return `↳ Loaded ${skill.name}`;
 }
 
+function pluginNote(skill: SkillInfo, marker: string): string {
+  return `Plugin note: \`${marker}\` is not instruction. Do not call \`skill\` again for ${skill.name}.`;
+}
+
 export async function expandSkillLoads(
   text: string,
   registry: SkillRegistry,
@@ -58,8 +62,9 @@ export async function expandSkillLoads(
       continue;
     }
 
-    payloads.push(await buildSkillPayload(skill, registry, snippets, options));
-    result += visibleSkillLoad(skill);
+    const marker = visibleSkillLoad(skill);
+    payloads.push(await buildSkillPayload(skill, registry, snippets, marker, options));
+    result += marker;
   }
 
   result += text.slice(lastIndex);
@@ -84,6 +89,7 @@ async function buildSkillPayload(
   skill: SkillInfo,
   registry: SkillRegistry,
   snippets: SnippetRegistry,
+  marker: string,
   options: {
     expandSkillTagsInContent: boolean;
     extractInject: boolean;
@@ -96,6 +102,10 @@ async function buildSkillPayload(
 
   return [
     `<skill_content name="${skill.name}">`,
+    // User requirement: repeat the exact visible marker in hidden context so the
+    // model treats `↳ Loaded ...` as already-resolved state, not as a new tool request.
+    pluginNote(skill, marker),
+    "",
     `# Skill: ${skill.name}`,
     "",
     content,

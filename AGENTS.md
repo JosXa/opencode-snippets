@@ -35,6 +35,8 @@ After release, MUST update user's global config schema URL:
 
 **Commit authorship.** Pre-commit hook sets author to repo owner (JosXa), not the AI agent. Amend safety check ("verify HEAD was created by you") will always fail. Create new commits instead.
 
+**Dirty worktrees on explicit git/release requests.** If user explicitly asks to commit, push, or release, proceed with relevant changes. Do NOT refuse only because the worktree is dirty. Leave unrelated dirty files from other authors/sessions untouched unless user explicitly asks. For explicit release requests, create needed commit(s) first, then continue the release flow.
+
 ## Recovery: Tag Pushed While CI Failing
 
 MUST delete tag immediately:

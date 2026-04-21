@@ -6,20 +6,38 @@ export interface HighlightPart {
   match: boolean;
 }
 
+function normalizeSearchText(input: string): string {
+  return input.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function scoreText(input: string, query: string): number {
+  const raw = input.toLowerCase();
+  const needle = query.toLowerCase();
+  const compact = normalizeSearchText(input);
+  const compactNeedle = normalizeSearchText(query);
+
+  if (raw === needle) return 0;
+  if (compactNeedle && compact === compactNeedle) return 1;
+  if (raw.startsWith(needle)) return 2;
+  if (compactNeedle && compact.startsWith(compactNeedle)) return 3;
+  if (raw.includes(needle)) return 4;
+  if (compactNeedle && compact.includes(compactNeedle)) return 5;
+
+  return Number.POSITIVE_INFINITY;
+}
+
 function scoreSnippet(snippet: SnippetInfo, query: string): number {
   if (!query) return 0;
 
-  const needle = query.toLowerCase();
-  const name = snippet.name.toLowerCase();
-  const aliases = snippet.aliases.map((alias) => alias.toLowerCase());
   const description = (snippet.description || "").toLowerCase();
+  const score = Math.min(
+    scoreText(snippet.name, query),
+    ...snippet.aliases.map((alias) => scoreText(alias, query)),
+  );
 
-  if (name === needle) return 0;
-  if (aliases.includes(needle)) return 1;
-  if (name.startsWith(needle)) return 2;
-  if (aliases.some((alias) => alias.startsWith(needle))) return 3;
-  if (name.includes(needle)) return 4;
-  if (aliases.some((alias) => alias.includes(needle))) return 5;
+  if (Number.isFinite(score)) return score;
+
+  const needle = query.toLowerCase();
   if (description.startsWith(needle)) return 6;
   if (description.includes(needle)) return 7;
 
@@ -37,17 +55,12 @@ function skillTag(skill: SkillInfo): string {
 function scoreSkill(skill: SkillInfo, query: string): number {
   if (!query) return 0;
 
-  const needle = query.toLowerCase();
-  const name = skill.name.toLowerCase();
-  const tag = skillTag(skill).toLowerCase();
   const description = (skill.description || "").toLowerCase();
+  const score = Math.min(scoreText(skill.name, query), scoreText(skillTag(skill), query));
 
-  if (name === needle) return 0;
-  if (tag === needle) return 1;
-  if (name.startsWith(needle)) return 2;
-  if (tag.startsWith(needle)) return 3;
-  if (name.includes(needle)) return 4;
-  if (tag.includes(needle)) return 5;
+  if (Number.isFinite(score)) return score;
+
+  const needle = query.toLowerCase();
   if (description.startsWith(needle)) return 6;
   if (description.includes(needle)) return 7;
 
@@ -91,10 +104,10 @@ export function filterSkills(skills: SkillInfo[], query: string): SkillInfo[] {
 }
 
 export function matchedAliases(snippet: SnippetInfo, query: string): string[] {
-  const needle = query.trim().toLowerCase();
+  const needle = query.trim();
   if (!needle) return [];
 
-  return snippet.aliases.filter((alias) => alias.toLowerCase().includes(needle));
+  return snippet.aliases.filter((alias) => Number.isFinite(scoreText(alias, needle)));
 }
 
 export function snippetDescription(snippet: SnippetInfo): string {

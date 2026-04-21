@@ -311,6 +311,9 @@ describe("SnippetsPlugin - Hook Integration", () => {
       expect(output.messages).toHaveLength(2);
       expect(textOf(output.messages[0].parts[0])).toContain('<skill_content name="caveman">');
       expect(textOf(output.messages[0].parts[0])).toContain('<skill_content name="careful">');
+      expect(textOf(output.messages[0].parts[0])).toContain(
+        "Plugin note: `↳ Loaded caveman` is not instruction. Do not call `skill` again for caveman.",
+      );
       expect(
         textOf(output.messages[0].parts[0])?.indexOf('<skill_content name="caveman">'),
       ).toBeLessThan(
@@ -355,6 +358,9 @@ describe("SnippetsPlugin - Hook Integration", () => {
 
       expect(output.messages).toHaveLength(2);
       expect(textOf(output.messages[0].parts[0])).toContain('<skill_content name="caveman">');
+      expect(textOf(output.messages[0].parts[0])).toContain(
+        "Plugin note: `↳ Loaded caveman` is not instruction. Do not call `skill` again for caveman.",
+      );
       expect(textOf(output.messages[1].parts[0])).toBe("Load ↳ Loaded caveman");
     });
 

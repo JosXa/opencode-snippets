@@ -6,6 +6,7 @@ import {
   insertSnippetTrigger,
   preferredSnippetTag,
   replaceTrailingHashtag,
+  stepSelection,
   truncateSnippetPreview,
 } from "./tui-trigger.js";
 
@@ -120,6 +121,25 @@ describe("insertSnippetTrigger", () => {
 
   test("appends a bare trigger with spacing when needed", () => {
     expect(insertSnippetTrigger("please review")).toBe("please review #");
+  });
+});
+
+describe("stepSelection", () => {
+  test("moves up and down within bounds", () => {
+    expect(stepSelection(1, 3, -1)).toBe(0);
+    expect(stepSelection(1, 3, 1)).toBe(2);
+  });
+
+  test("clamps at the first item instead of wrapping", () => {
+    expect(stepSelection(0, 3, -1)).toBe(0);
+  });
+
+  test("clamps at the last item instead of wrapping", () => {
+    expect(stepSelection(2, 3, 1)).toBe(2);
+  });
+
+  test("returns zero for an empty list", () => {
+    expect(stepSelection(0, 0, 1)).toBe(0);
   });
 });
 

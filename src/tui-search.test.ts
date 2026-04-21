@@ -89,6 +89,18 @@ describe("filterSnippets", () => {
 
     expect(result).toHaveLength(12);
   });
+
+  test("matches compact queries against hyphenated snippet names and aliases", () => {
+    const result = filterSnippets(
+      [
+        snippet({ name: "skill-smoke", aliases: ["skill smoke"], content: "x" }),
+        snippet({ name: "other", content: "x" }),
+      ],
+      "skillsmoke",
+    );
+
+    expect(result.map((item) => item.name)).toEqual(["skill-smoke"]);
+  });
 });
 
 describe("filterSkills", () => {
@@ -117,6 +129,21 @@ describe("filterSkills", () => {
     );
 
     expect(result).toHaveLength(2);
+  });
+
+  test("matches compact queries against skill(tag) text", () => {
+    const result = filterSkills(
+      [skill({ name: "smoke-testing-snippets", content: "x" })],
+      "skillsmoke",
+    );
+
+    expect(result.map((item) => item.name)).toEqual(["smoke-testing-snippets"]);
+  });
+
+  test("keeps matching when compact query shrinks during deletion", () => {
+    const result = filterSkills([skill({ name: "demo-voice", content: "x" })], "demovoic");
+
+    expect(result.map((item) => item.name)).toEqual(["demo-voice"]);
   });
 });
 
@@ -173,6 +200,15 @@ describe("matchedAliases", () => {
     expect(
       matchedAliases(snippet({ name: "review", aliases: ["rvw"], content: "body" }), "zz"),
     ).toEqual([]);
+  });
+
+  test("matches aliases even when the query drops separators", () => {
+    expect(
+      matchedAliases(
+        snippet({ name: "skill-smoke", aliases: ["skill smoke"], content: "body" }),
+        "skillsmoke",
+      ),
+    ).toEqual(["skill smoke"]);
   });
 });
 

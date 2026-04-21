@@ -34,6 +34,7 @@ import {
   insertSnippetTag,
   insertSnippetTrigger,
   preferredSnippetTag,
+  stepSelection,
 } from "./src/tui-trigger.js";
 import type { SnippetInfo } from "./src/types.js";
 
@@ -229,6 +230,7 @@ function PromptWithSnippetAutocomplete(props: {
   const [selected, setSelected] = createSignal(0);
   const [, setInputMode] = createSignal<"keyboard" | "mouse">("keyboard");
   const [ignoreMouseUntil, setIgnoreMouseUntil] = createSignal(0);
+  const [lastMousePos, setLastMousePos] = createSignal<{ x: number; y: number }>();
   const [input, setInput] = createSignal("");
   const [creating, setCreating] = createSignal(false);
   const [snippets, { refetch: refetchSnippets }] = createResource(
@@ -258,6 +260,16 @@ function PromptWithSnippetAutocomplete(props: {
   };
 
   const allowMouseHover = () => Date.now() >= ignoreMouseUntil();
+
+  const recordMouseMove = (x: number, y: number) => {
+    const last = lastMousePos();
+    if (last?.x === x && last.y === y) {
+      return false;
+    }
+
+    setLastMousePos({ x, y });
+    return true;
+  };
 
   const syncPromptInput = (ref: TuiPromptRef, nextInput: string) => {
     setPromptInput(ref, nextInput);
@@ -514,7 +526,7 @@ function PromptWithSnippetAutocomplete(props: {
       if (!actionable) return;
       lockKeyboardSelection();
       if (total > 0) {
-        setSelected((selected() - 1 + total) % total);
+        setSelected(stepSelection(selected(), total, -1));
       }
       evt.preventDefault();
       evt.stopPropagation();
@@ -525,7 +537,7 @@ function PromptWithSnippetAutocomplete(props: {
       if (!actionable) return;
       lockKeyboardSelection();
       if (total > 0) {
-        setSelected((selected() + 1) % total);
+        setSelected(stepSelection(selected(), total, 1));
       }
       evt.preventDefault();
       evt.stopPropagation();
@@ -610,6 +622,7 @@ function PromptWithSnippetAutocomplete(props: {
                     }}
                     onMouseDown={() => {
                       setInputMode("mouse");
+                      setLastMousePos(undefined);
                     }}
                     onMouseUp={() => {
                       void createSnippetDraft();
@@ -630,13 +643,16 @@ function PromptWithSnippetAutocomplete(props: {
                     index === selected() ? props.api.theme.current.primary : undefined
                   }
                   flexDirection="row"
-                  onMouseMove={() => {
+                  onMouseMove={(event) => {
                     if (!allowMouseHover()) return;
+                    // User requirement: ignore synthetic hover churn when the list scrolls under a stationary mouse.
+                    if (!recordMouseMove(event.x, event.y)) return;
                     setInputMode("mouse");
                     setSelected(index);
                   }}
                   onMouseDown={() => {
                     setInputMode("mouse");
+                    setLastMousePos(undefined);
                     setSelected(index);
                   }}
                   onMouseUp={() => choose(index)}
