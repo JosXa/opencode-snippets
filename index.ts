@@ -276,18 +276,24 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     }
 
     for (const [i, message] of messages.entries()) {
-      if (message.info.role === "user" && !isIgnoredMessage(message)) {
-        const direct = getMessageSkillLoads(sessionID, message);
-        const payloads = direct.length > 0 ? direct : fallbackByIndex.get(i) || [];
-        if (payloads.length > 0) {
-          result.push({
-            info: { role: "user", sessionID: message.info.sessionID || sessionID },
-            parts: [{ type: "text", text: payloads.join("\n\n") }],
-          });
-        }
+      result.push(message);
+
+      if (message.info.role !== "user" || isIgnoredMessage(message)) {
+        continue;
       }
 
-      result.push(message);
+      const direct = getMessageSkillLoads(sessionID, message);
+      const payloads = direct.length > 0 ? direct : fallbackByIndex.get(i) || [];
+      if (payloads.length === 0) {
+        continue;
+      }
+
+      // User requirement: try placing hidden skill context immediately after the
+      // visible user message so OpenCode sees the visible marker first.
+      result.push({
+        info: { role: "user", sessionID: message.info.sessionID || sessionID },
+        parts: [{ type: "text", text: payloads.join("\n\n") }],
+      });
     }
 
     return result;

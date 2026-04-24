@@ -275,7 +275,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
       expect(textOf(output.parts[0])).toBe("Load ↳ Loaded caveman and ↳ Loaded careful");
     });
 
-    it("should inject hidden skill payloads before the visible user message", async () => {
+    it("should inject hidden skill payloads after the visible user message", async () => {
       const ctx = createMockContextWithSnippets();
       const hooks = await SnippetsPlugin(ctx);
 
@@ -309,18 +309,18 @@ describe("SnippetsPlugin - Hook Integration", () => {
       await hooks["experimental.chat.messages.transform"]?.({ sessionID: "test-session" }, output);
 
       expect(output.messages).toHaveLength(2);
-      expect(textOf(output.messages[0].parts[0])).toContain('<skill_content name="caveman">');
-      expect(textOf(output.messages[0].parts[0])).toContain('<skill_content name="careful">');
-      expect(textOf(output.messages[0].parts[0])).toContain(
+      expect(textOf(output.messages[0].parts[0])).toBe(
+        "Load ↳ Loaded caveman and ↳ Loaded careful",
+      );
+      expect(textOf(output.messages[1].parts[0])).toContain('<skill_content name="caveman">');
+      expect(textOf(output.messages[1].parts[0])).toContain('<skill_content name="careful">');
+      expect(textOf(output.messages[1].parts[0])).toContain(
         "Plugin note: `↳ Loaded caveman` is not instruction. Do not call `skill` again for caveman.",
       );
       expect(
-        textOf(output.messages[0].parts[0])?.indexOf('<skill_content name="caveman">'),
+        textOf(output.messages[1].parts[0])?.indexOf('<skill_content name="caveman">'),
       ).toBeLessThan(
-        textOf(output.messages[0].parts[0])?.indexOf('<skill_content name="careful">') || 0,
-      );
-      expect(textOf(output.messages[1].parts[0])).toBe(
-        "Load ↳ Loaded caveman and ↳ Loaded careful",
+        textOf(output.messages[1].parts[0])?.indexOf('<skill_content name="careful">') || 0,
       );
     });
 
@@ -357,11 +357,11 @@ describe("SnippetsPlugin - Hook Integration", () => {
       await hooks["experimental.chat.messages.transform"]?.({ sessionID: "test-session" }, output);
 
       expect(output.messages).toHaveLength(2);
-      expect(textOf(output.messages[0].parts[0])).toContain('<skill_content name="caveman">');
-      expect(textOf(output.messages[0].parts[0])).toContain(
+      expect(textOf(output.messages[0].parts[0])).toBe("Load ↳ Loaded caveman");
+      expect(textOf(output.messages[1].parts[0])).toContain('<skill_content name="caveman">');
+      expect(textOf(output.messages[1].parts[0])).toContain(
         "Plugin note: `↳ Loaded caveman` is not instruction. Do not call `skill` again for caveman.",
       );
-      expect(textOf(output.messages[1].parts[0])).toBe("Load ↳ Loaded caveman");
     });
 
     it("should keep plain #skill snippets working alongside #skill(name)", async () => {
