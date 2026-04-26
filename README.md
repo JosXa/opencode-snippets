@@ -397,6 +397,14 @@ Or use the included snippet that expands into `#skill(...)`:
 
 Demo files live at `.opencode/skill/demo-voice/SKILL.md` and `.opencode/snippet/demo-skill.md`.
 
+## Commands
+
+- `/snippets add <name> [content]` creates a global snippet
+- `/snippets add --project <name>` creates a project snippet
+- `/snippets list` shows available snippets
+- `/snippets delete <name>` removes a snippet
+- `/snippets:reload` reloads snippet files from disk without restarting OpenCode
+
 ## Example Snippets
 
 ### `~/.config/opencode/snippet/context.md`

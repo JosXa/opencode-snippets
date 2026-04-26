@@ -186,10 +186,11 @@ Treat `#skill(...)` as hidden context injection, not inline expansion. User usua
 
 ## Commands
 
-- `/snippet add <name> [content]` - create global snippet
-- `/snippet add --project <name>` - create project snippet
-- `/snippet list` - show all available
-- `/snippet delete <name>` - remove snippet
+- `/snippets add <name> [content]` - create global snippet
+- `/snippets add --project <name>` - create project snippet
+- `/snippets list` - show all available
+- `/snippets delete <name>` - remove snippet
+- `/snippets:reload` - reload snippet files from disk
 
 ## Good Snippets
 

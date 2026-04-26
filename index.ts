@@ -62,7 +62,7 @@ async function cleanupLegacySkillInstall(): Promise<void> {
  * Snippets Plugin for OpenCode
  *
  * Expands hashtag-based shortcuts in user messages into predefined text snippets.
- * Also provides /snippet command for managing snippets.
+ * Also provides /snippets commands for managing snippets.
  *
  * @see https://github.com/JosXa/opencode-snippets for full documentation
  */
@@ -309,7 +309,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   };
 
   return {
-    // Register /snippet command and skill path
+    // Register /snippets commands and skill path
     config: async (opencodeConfig) => {
       // Register skill folder path for automatic discovery
       const cfg = opencodeConfig as typeof opencodeConfig & {
@@ -319,11 +319,15 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
       cfg.skills.paths ??= [];
       cfg.skills.paths.push(SKILL_DIR);
 
-      // Register /snippet command
+      // Register /snippets commands
       opencodeConfig.command ??= {};
-      opencodeConfig.command.snippet = {
+      opencodeConfig.command.snippets = {
         template: "",
         description: "Manage text snippets (add, delete, list, help)",
+      };
+      opencodeConfig.command["snippets:reload"] = {
+        template: "",
+        description: "Reload snippet files from disk",
       };
     },
 
