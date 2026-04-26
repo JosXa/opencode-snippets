@@ -99,6 +99,15 @@ function expandText(
         return match;
       }
 
+      if (
+        parsed.inline === "" &&
+        parsed.prepend.length === 0 &&
+        parsed.append.length === 0 &&
+        parsed.inject.length === 0
+      ) {
+        return match;
+      }
+
       // User requirement: inline snippet text should replace every hashtag occurrence,
       // but prepend/append/inject side effects should only be inserted once per snippet block.
       for (const block of parsed.prepend) {

@@ -16,6 +16,7 @@ import { InjectionManager } from "./src/injection-manager.js";
 import { loadSnippets } from "./src/loader.js";
 import { logger } from "./src/logger.js";
 import { sendIgnoredMessage } from "./src/notification.js";
+import { refreshPendingDraftsForText } from "./src/pending-drafts.js";
 import { executeShellCommands, type ShellContext } from "./src/shell.js";
 import { SkillLoadManager } from "./src/skill-load-manager.js";
 import { loadSkills, type SkillRegistry } from "./src/skill-loader.js";
@@ -156,6 +157,14 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
 
         // 2. Expand hashtags recursively with loop detection
         const expandStart = performance.now();
+        await refreshPendingDraftsForText(part.text, snippets, ctx.directory, async () => {
+          await loadSnippets(ctx.directory).then((fresh) => {
+            snippets.clear();
+            for (const [key, value] of fresh) {
+              snippets.set(key, value);
+            }
+          });
+        });
         const expansionResult = expandHashtags(part.text, snippets, new Map(), expandOptions);
         part.text = assembleMessage(expansionResult);
         expandTimeTotal += performance.now() - expandStart;

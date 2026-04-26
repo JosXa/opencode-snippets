@@ -285,12 +285,20 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
       expect(result.text).toBe("#anything");
     });
 
-    it("should handle snippet with empty content", () => {
+    it("should leave hashtag unchanged for snippet with empty content", () => {
       const registry = createRegistry([["empty", ""]]);
 
       const result = expandHashtags("Before #empty After", registry);
 
-      expect(result.text).toBe("Before  After");
+      expect(result.text).toBe("Before #empty After");
+    });
+
+    it("should leave hashtag unchanged for snippet with whitespace-only content", () => {
+      const registry = createRegistry([["empty", "   \n\t  "]]);
+
+      const result = expandHashtags("Before #empty After", registry);
+
+      expect(result.text).toBe("Before #empty After");
     });
 
     it("should handle snippet containing only hashtags", () => {

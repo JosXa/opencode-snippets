@@ -101,6 +101,15 @@ describe("filterSnippets", () => {
 
     expect(result.map((item) => item.name)).toEqual(["skill-smoke"]);
   });
+
+  test("does not keep stale matches for unrelated garbage queries", () => {
+    const result = filterSnippets(
+      [snippet({ name: "git-context", aliases: ["ctx", "warmup"], content: "x" })],
+      "abaaaaaaasdfjoiwj",
+    );
+
+    expect(result).toEqual([]);
+  });
 });
 
 describe("filterSkills", () => {
