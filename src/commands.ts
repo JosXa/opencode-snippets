@@ -120,7 +120,19 @@ export function createCommandExecuteHandler(
   projectDir?: string,
 ) {
   return async (input: { command: string; sessionID: string; arguments: string }) => {
-    if (input.command !== "snippet") return;
+    if (input.command === "snippets:reload") {
+      await handleReloadCommand({
+        client,
+        sessionId: input.sessionID,
+        args: [],
+        rawArguments: input.arguments,
+        snippets,
+        projectDir,
+      });
+      throw new Error(COMMAND_HANDLED_MARKER);
+    }
+
+    if (input.command !== "snippets") return;
 
     // Use shell-like argument parsing to handle quoted strings correctly
     const args = parseCommandArgs(input.arguments);
@@ -176,7 +188,7 @@ export function createCommandExecuteHandler(
 }
 
 /**
- * Handle /snippet add <name> ["content"] [--project] [--alias=<alias>] [--desc=<description>]
+ * Handle /snippets add <name> ["content"] [--project] [--alias=<alias>] [--desc=<description>]
  */
 async function handleAddCommand(ctx: CommandContext): Promise<void> {
   const { client, sessionId, args, snippets, projectDir } = ctx;
@@ -185,13 +197,13 @@ async function handleAddCommand(ctx: CommandContext): Promise<void> {
     await sendIgnoredMessage(
       client,
       sessionId,
-      'Usage: /snippet add <name> ["content"] [options]\n\n' +
+      'Usage: /snippets add <name> ["content"] [options]\n\n' +
         "Adds a new snippet. Defaults to global directory.\n\n" +
         "Examples:\n" +
-        "  /snippet add greeting\n" +
-        '  /snippet add bye "see you later"\n' +
-        '  /snippet add hi "hello there" --aliases hello,hey\n' +
-        '  /snippet add fix "fix imports" --project\n\n' +
+        "  /snippets add greeting\n" +
+        '  /snippets add bye "see you later"\n' +
+        '  /snippets add hi "hello there" --aliases hello,hey\n' +
+        '  /snippets add fix "fix imports" --project\n\n' +
         "Options:\n" +
         "  --project             Add to project directory (.opencode/snippet/)\n" +
         "  --aliases X,Y,Z       Add aliases (comma-separated)\n" +
@@ -251,7 +263,7 @@ async function handleAddCommand(ctx: CommandContext): Promise<void> {
 }
 
 /**
- * Handle /snippet delete <name>
+ * Handle /snippets delete <name>
  */
 async function handleDeleteCommand(ctx: CommandContext): Promise<void> {
   const { client, sessionId, args, snippets, projectDir } = ctx;
@@ -260,7 +272,7 @@ async function handleDeleteCommand(ctx: CommandContext): Promise<void> {
     await sendIgnoredMessage(
       client,
       sessionId,
-      "Usage: /snippet delete <name>\n\nDeletes a snippet by name. " +
+      "Usage: /snippets delete <name>\n\nDeletes a snippet by name. " +
         "Project snippets are checked first, then global.",
     );
     return;
@@ -283,9 +295,25 @@ async function handleDeleteCommand(ctx: CommandContext): Promise<void> {
     await sendIgnoredMessage(
       client,
       sessionId,
-      `Snippet not found: #${name}\n\nUse /snippet list to see available snippets.`,
+      `Snippet not found: #${name}\n\nUse /snippets list to see available snippets.`,
     );
   }
+}
+
+/**
+ * Handle /snippets:reload
+ */
+async function handleReloadCommand(ctx: CommandContext): Promise<void> {
+  const { client, sessionId, snippets, projectDir } = ctx;
+
+  await reloadSnippets(snippets, projectDir);
+
+  const count = listSnippets(snippets).length;
+  await sendIgnoredMessage(
+    client,
+    sessionId,
+    `Reloaded ${count} snippet${count === 1 ? "" : "s"}.`,
+  );
 }
 
 /** Maximum characters for snippet content preview */
@@ -339,7 +367,7 @@ function formatSnippetEntry(s: { name: string; content: string; aliases: string[
 }
 
 /**
- * Handle /snippet list
+ * Handle /snippets list
  */
 async function handleListCommand(ctx: CommandContext): Promise<void> {
   const { client, sessionId, snippets, projectDir } = ctx;
@@ -355,7 +383,7 @@ async function handleListCommand(ctx: CommandContext): Promise<void> {
         (projectDir
           ? `Project snippets: ${projectSnippetLocations(projectDir)}`
           : "No project directory detected.") +
-        "\n\nUse /snippet add <name> to add a new snippet.",
+        "\n\nUse /snippets add <name> to add a new snippet.",
     );
     return;
   }
@@ -384,14 +412,14 @@ async function handleListCommand(ctx: CommandContext): Promise<void> {
 }
 
 /**
- * Handle /snippet help
+ * Handle /snippets help
  */
 async function handleHelpCommand(ctx: CommandContext): Promise<void> {
   const { client, sessionId } = ctx;
 
   const helpText = `Snippets Command - Manage text snippets
 
-Usage: /snippet <command> [options]
+Usage: /snippets <command> [options]
 
 Commands:
   add <name> ["content"] [options]
@@ -401,6 +429,7 @@ Commands:
 
   delete <name>             Delete a snippet
   list                      List all available snippets
+  /snippets:reload          Reload snippet files from disk
   help                      Show this help message
 
 Snippet Locations:
@@ -412,12 +441,13 @@ Usage in messages:
   Snippets can reference other snippets recursively.
 
 Examples:
-  /snippet add greeting
-  /snippet add bye "see you later"
-  /snippet add hi "hello there" --aliases hello,hey
-  /snippet add fix "fix imports" --project
-  /snippet delete old-snippet
-  /snippet list`;
+  /snippets add greeting
+  /snippets add bye "see you later"
+  /snippets add hi "hello there" --aliases hello,hey
+  /snippets add fix "fix imports" --project
+  /snippets delete old-snippet
+  /snippets list
+  /snippets:reload`;
 
   await sendIgnoredMessage(client, sessionId, helpText);
 }

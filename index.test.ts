@@ -13,7 +13,11 @@ let projectSkillDir: string;
 /** Mock OpenCode plugin context */
 function createMockContext(snippetsDir?: string): PluginInput {
   return {
-    client: {} as PluginInput["client"],
+    client: {
+      session: {
+        prompt: async () => undefined,
+      },
+    } as PluginInput["client"],
     project: {
       id: "test-project",
       worktree: "/test/worktree",
@@ -30,7 +34,11 @@ function createMockContext(snippetsDir?: string): PluginInput {
 /** Create a mock context that uses temp snippet directory */
 function createMockContextWithSnippets(): PluginInput {
   return {
-    client: {} as PluginInput["client"],
+    client: {
+      session: {
+        prompt: async () => undefined,
+      },
+    } as PluginInput["client"],
     project: {
       id: "test-project",
       worktree: join(tempDir, "project"),
@@ -538,7 +546,7 @@ describe("SnippetsPlugin - Hook Integration", () => {
   });
 
   describe("config hook", () => {
-    it("should register /snippet command", async () => {
+    it("should register /snippets commands", async () => {
       const ctx = createMockContext();
       const hooks = await SnippetsPlugin(ctx);
 
@@ -546,8 +554,69 @@ describe("SnippetsPlugin - Hook Integration", () => {
       await hooks.config?.(config as Config);
 
       expect(config.command).toBeDefined();
-      expect(config.command?.snippet).toBeDefined();
-      expect(config.command?.snippet?.description).toContain("snippet");
+      expect(config.command?.snippets).toBeDefined();
+      expect(config.command?.snippets?.description).toContain("snippet");
+      expect(config.command?.["snippets:reload"]).toBeDefined();
+    });
+
+    it("should reload snippets from disk with /snippets:reload", async () => {
+      tempDir = join(import.meta.dir, `.test-snippets-reload-${Date.now()}`);
+      projectSnippetDir = join(tempDir, "project", ".opencode", "snippet");
+      await mkdir(projectSnippetDir, { recursive: true });
+      await writeFile(join(projectSnippetDir, "greeting.md"), "hello");
+
+      const promptCalls: Array<{
+        path: { id: string };
+        body: { noReply: boolean; parts: Part[] };
+      }> = [];
+      const ctx = createMockContextWithSnippets();
+      ctx.client = {
+        session: {
+          prompt: async (input) => {
+            promptCalls.push(
+              input as { path: { id: string }; body: { noReply: boolean; parts: Part[] } },
+            );
+          },
+        },
+      } as PluginInput["client"];
+
+      const hooks = await SnippetsPlugin(ctx);
+      const run = hooks["command.execute.before"];
+      expect(run).toBeDefined();
+
+      await writeFile(join(projectSnippetDir, "new-one.md"), "fresh");
+
+      await expect(
+        run?.({ command: "snippets:reload", sessionID: "test-session", arguments: "" }),
+      ).rejects.toThrow("__SNIPPETS_COMMAND_HANDLED__");
+
+      expect(promptCalls).toHaveLength(1);
+      expect(promptCalls[0]?.path.id).toBe("test-session");
+      expect(promptCalls[0]?.body.parts[0]).toMatchObject({
+        type: "text",
+        ignored: true,
+      });
+
+      const userMessage = {
+        role: "user",
+        content: "Test message",
+      } as unknown as UserMessage;
+
+      const output = {
+        message: userMessage,
+        parts: [{ type: "text", text: "Use #new-one now" }] as Part[],
+      };
+
+      await hooks["chat.message"]?.(
+        {
+          sessionID: "test-session",
+        },
+        output,
+      );
+
+      expect(textOf(output.parts[0])).toBe("Use fresh now");
+
+      await rm(tempDir, { recursive: true, force: true });
     });
   });
 });
