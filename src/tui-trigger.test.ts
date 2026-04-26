@@ -45,6 +45,15 @@ describe("findTrailingHashtagTrigger", () => {
   test("does not match when the hashtag is not at the cursor end", () => {
     expect(findTrailingHashtagTrigger("#review later")).toBeUndefined();
   });
+
+  test("preserves typo queries so submit can pass through normally", () => {
+    expect(findTrailingHashtagTrigger("#reivew")).toEqual({
+      start: 0,
+      end: 7,
+      query: "reivew",
+      token: "#reivew",
+    });
+  });
 });
 
 describe("replaceTrailingHashtag", () => {

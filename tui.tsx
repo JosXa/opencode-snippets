@@ -434,11 +434,6 @@ function PromptWithSnippetAutocomplete(props: {
                 chooseItem(rendered[index] ?? rendered[0]);
                 return;
               }
-
-              if (canCreate()) {
-                void createSnippetDraft();
-                return;
-              }
             }
 
             if (snippets.loading || skills.loading) {
@@ -449,12 +444,6 @@ function PromptWithSnippetAutocomplete(props: {
             if (live.length > 0) {
               const index = Math.min(selected(), live.length - 1);
               chooseItem(live[index] ?? live[0]);
-              return;
-            }
-
-            const query = current.query.trim();
-            if (normalizeSnippetName(query)) {
-              void createSnippetDraft();
               return;
             }
 
@@ -555,8 +544,6 @@ function PromptWithSnippetAutocomplete(props: {
       if (!actionable) return;
       if (total > 0) {
         choose(selected());
-      } else if (canCreate()) {
-        void createSnippetDraft();
       }
       evt.preventDefault();
       evt.stopPropagation();

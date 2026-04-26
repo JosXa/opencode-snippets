@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!**/node_modules", "!**/dist", "!**/.git"],
+    "includes": ["**", "!**/node_modules", "!**/dist", "!**/.git", "!**/.beads"],
     "maxSize": 1048576
   },
   "formatter": {

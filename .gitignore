@@ -6,3 +6,8 @@ dist/
 # Added by dotagent: ignore exported AI rule files
 .roo/rules/**
 .pi/snippets/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
