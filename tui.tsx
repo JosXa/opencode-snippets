@@ -21,6 +21,7 @@ import {
 import { CONFIG } from "./src/constants.js";
 import { ensureSnippetsDir, listSnippets, loadSnippets } from "./src/loader.js";
 import { addPendingDraft } from "./src/pending-drafts.js";
+import { markSnippetReloadRequested } from "./src/reload-signal.js";
 import { loadSkills, type SkillInfo } from "./src/skill-loader.js";
 import {
   filterSkills,
@@ -34,6 +35,7 @@ import {
   insertSkillLoad,
   insertSnippetTag,
   insertSnippetTrigger,
+  isReloadCommand,
   preferredSnippetTag,
   stepSelection,
 } from "./src/tui-trigger.js";
@@ -241,6 +243,36 @@ async function getSnippets(api: TuiPluginApi): Promise<SnippetInfo[]> {
   return sortSnippets(listSnippets(registry));
 }
 
+async function reloadSnippetsInTui(api: TuiPluginApi): Promise<number> {
+  const registry = await loadSnippets(api.state.path.directory);
+  await markSnippetReloadRequested(api.state.path.directory);
+  return listSnippets(registry).length;
+}
+
+function executeReloadInPrompt(
+  api: TuiPluginApi,
+  ref: TuiPromptRef,
+  clear: () => void,
+  refresh: () => Promise<unknown> | undefined,
+) {
+  void (async () => {
+    const count = await reloadSnippetsInTui(api);
+    await refresh();
+    clear();
+    ref.focus();
+    api.renderer.requestRender();
+    setTimeout(() => {
+      api.ui.toast({
+        variant: "success",
+        title: "Snippets reloaded",
+        message: `Reloaded ${count} snippet${count === 1 ? "" : "s"}.`,
+        duration: 3000,
+      });
+      api.renderer.requestRender();
+    }, 0);
+  })();
+}
+
 async function getSkills(api: TuiPluginApi): Promise<SkillInfo[]> {
   const registry = await loadSkills(api.state.path.directory);
   return sortSkills([...registry.values()]);
@@ -295,7 +327,7 @@ function PromptWithSnippetAutocomplete(props: {
   const [creating, setCreating] = createSignal(false);
   const [dialogOpen, setDialogOpen] = createSignal(false);
   const [dialogHandoffUntil, setDialogHandoffUntil] = createSignal(0);
-  const [snippets] = createResource(
+  const [snippets, { refetch: refetchSnippets }] = createResource(
     () => props.api.state.path.directory,
     () => getSnippets(props.api),
     {
@@ -314,6 +346,10 @@ function PromptWithSnippetAutocomplete(props: {
     setPrompt(ref);
     props.bindPrompt(ref);
     props.hostRef?.(ref);
+  };
+
+  const refreshSnippetOptions = async () => {
+    await refetchSnippets();
   };
 
   let pendingPromptSync: ReturnType<typeof setTimeout> | undefined;
@@ -343,6 +379,20 @@ function PromptWithSnippetAutocomplete(props: {
   };
   const handlePromptSubmit = () => {
     if (dialogBlockingInput()) {
+      return;
+    }
+
+    const ref = prompt();
+    if (ref && isReloadCommand(ref.current.input)) {
+      executeReloadInPrompt(
+        props.api,
+        ref,
+        () => {
+          syncPromptInput(ref, "");
+          setDismissed(undefined);
+        },
+        refreshSnippetOptions,
+      );
       return;
     }
 
@@ -555,6 +605,24 @@ function PromptWithSnippetAutocomplete(props: {
     const timer = setTimeout(() => {
       dispose = props.api.command.register(() => [
         {
+          title: "Reload snippets",
+          value: "snippets.reload",
+          description: "Reload snippet files from disk",
+          category: "Prompt",
+          slash: { name: "snippets:reload" },
+          onSelect() {
+            executeReloadInPrompt(
+              props.api,
+              ref,
+              () => {
+                syncPromptInput(ref, "");
+                setDismissed(undefined);
+              },
+              refreshSnippetOptions,
+            );
+          },
+        },
+        {
           title: "Accept snippet autocomplete",
           value: "snippets.accept",
           keybind: "input_submit",
@@ -562,6 +630,19 @@ function PromptWithSnippetAutocomplete(props: {
           hidden: true,
           enabled: ref.focused,
           onSelect() {
+            if (isReloadCommand(ref.current.input)) {
+              executeReloadInPrompt(
+                props.api,
+                ref,
+                () => {
+                  syncPromptInput(ref, "");
+                  setDismissed(undefined);
+                },
+                refreshSnippetOptions,
+              );
+              return;
+            }
+
             if (dialogBlockingInput()) {
               return;
             }
@@ -690,10 +771,27 @@ function PromptWithSnippetAutocomplete(props: {
   };
 
   useKeyboard((evt) => {
+    const ref = prompt();
+    const name = evt.name?.toLowerCase();
+
+    if (ref && isReloadCommand(ref.current.input) && (name === "return" || name === "enter")) {
+      executeReloadInPrompt(
+        props.api,
+        ref,
+        () => {
+          syncPromptInput(ref, "");
+          setDismissed(undefined);
+        },
+        refreshSnippetOptions,
+      );
+      evt.preventDefault();
+      evt.stopPropagation();
+      return;
+    }
+
     if (dialogBlockingInput()) return;
     if (!visible()) return;
 
-    const name = evt.name?.toLowerCase();
     const total = options().length;
     const actionable = total > 0 || canCreate();
     const isNavUp = name === "up";

@@ -73,6 +73,10 @@ export function insertSnippetTrigger(input: string): string {
   return `${input} #`;
 }
 
+export function isReloadCommand(input: string): boolean {
+  return input.trim() === "/snippets:reload";
+}
+
 export function stepSelection(current: number, total: number, delta: -1 | 1): number {
   if (total <= 0) return 0;
 

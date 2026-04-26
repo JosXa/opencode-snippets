@@ -4,6 +4,7 @@ import {
   insertSkillLoad,
   insertSnippetTag,
   insertSnippetTrigger,
+  isReloadCommand,
   preferredSnippetTag,
   replaceTrailingHashtag,
   stepSelection,
@@ -130,6 +131,19 @@ describe("insertSnippetTrigger", () => {
 
   test("appends a bare trigger with spacing when needed", () => {
     expect(insertSnippetTrigger("please review")).toBe("please review #");
+  });
+});
+
+describe("isReloadCommand", () => {
+  test("matches the exact reload command", () => {
+    expect(isReloadCommand("/snippets:reload")).toBe(true);
+    expect(isReloadCommand("  /snippets:reload  ")).toBe(true);
+  });
+
+  test("does not match other commands or arguments", () => {
+    expect(isReloadCommand("/snippets list")).toBe(false);
+    expect(isReloadCommand("/snippets:reload now")).toBe(false);
+    expect(isReloadCommand("/snippet:reload")).toBe(false);
   });
 });
 

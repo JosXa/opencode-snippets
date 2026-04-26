@@ -17,7 +17,7 @@ function createMockContext(snippetsDir?: string): PluginInput {
       session: {
         prompt: async () => undefined,
       },
-    } as PluginInput["client"],
+    } as unknown as PluginInput["client"],
     project: {
       id: "test-project",
       worktree: "/test/worktree",
@@ -38,7 +38,7 @@ function createMockContextWithSnippets(): PluginInput {
       session: {
         prompt: async () => undefined,
       },
-    } as PluginInput["client"],
+    } as unknown as PluginInput["client"],
     project: {
       id: "test-project",
       worktree: join(tempDir, "project"),
@@ -578,24 +578,26 @@ describe("SnippetsPlugin - Hook Integration", () => {
             );
           },
         },
-      } as PluginInput["client"];
+      } as unknown as PluginInput["client"];
 
       const hooks = await SnippetsPlugin(ctx);
       const run = hooks["command.execute.before"];
       expect(run).toBeDefined();
+      const commandOutput = {
+        parts: [{ type: "text", text: "/snippets:reload" } as unknown as Part],
+      } as { parts: Part[] };
 
       await writeFile(join(projectSnippetDir, "new-one.md"), "fresh");
 
       await expect(
-        run?.({ command: "snippets:reload", sessionID: "test-session", arguments: "" }),
+        run?.(
+          { command: "snippets:reload", sessionID: "test-session", arguments: "" },
+          commandOutput,
+        ),
       ).rejects.toThrow("__SNIPPETS_COMMAND_HANDLED__");
 
-      expect(promptCalls).toHaveLength(1);
-      expect(promptCalls[0]?.path.id).toBe("test-session");
-      expect(promptCalls[0]?.body.parts[0]).toMatchObject({
-        type: "text",
-        ignored: true,
-      });
+      expect(commandOutput.parts).toEqual([]);
+      expect(promptCalls).toHaveLength(0);
 
       const userMessage = {
         role: "user",

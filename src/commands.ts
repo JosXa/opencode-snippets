@@ -5,6 +5,10 @@ import { logger } from "./logger.js";
 import { sendIgnoredMessage } from "./notification.js";
 import type { OpencodeClient, SnippetRegistry } from "./types.js";
 
+interface CommandOutput {
+  parts: unknown[];
+}
+
 /** Marker error to indicate command was handled */
 const COMMAND_HANDLED_MARKER = "__SNIPPETS_COMMAND_HANDLED__";
 
@@ -119,8 +123,15 @@ export function createCommandExecuteHandler(
   snippets: SnippetRegistry,
   projectDir?: string,
 ) {
-  return async (input: { command: string; sessionID: string; arguments: string }) => {
+  return async (
+    input: { command: string; sessionID: string; arguments: string },
+    output?: CommandOutput,
+  ) => {
     if (input.command === "snippets:reload") {
+      if (output) {
+        output.parts.length = 0;
+      }
+
       await handleReloadCommand({
         client,
         sessionId: input.sessionID,
@@ -304,16 +315,9 @@ async function handleDeleteCommand(ctx: CommandContext): Promise<void> {
  * Handle /snippets:reload
  */
 async function handleReloadCommand(ctx: CommandContext): Promise<void> {
-  const { client, sessionId, snippets, projectDir } = ctx;
+  const { snippets, projectDir } = ctx;
 
   await reloadSnippets(snippets, projectDir);
-
-  const count = listSnippets(snippets).length;
-  await sendIgnoredMessage(
-    client,
-    sessionId,
-    `Reloaded ${count} snippet${count === 1 ? "" : "s"}.`,
-  );
 }
 
 /** Maximum characters for snippet content preview */
