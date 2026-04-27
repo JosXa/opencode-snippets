@@ -39,7 +39,7 @@ Full config example with all options:
 ```jsonc
 {
   // JSON Schema for editor autocompletion
-  "$schema": "https://raw.githubusercontent.com/JosXa/opencode-snippets/v2.1.3/schema/config.schema.json",
+  "$schema": "https://raw.githubusercontent.com/JosXa/opencode-snippets/v2.1.4/schema/config.schema.json",
 
   // Logging settings
   "logging": {
