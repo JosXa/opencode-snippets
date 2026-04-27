@@ -35,6 +35,7 @@ import {
   insertSkillLoad,
   insertSnippetTag,
   insertSnippetTrigger,
+  isDialogInputBlocked,
   isReloadCommand,
   preferredSnippetTag,
   stepSelection,
@@ -367,7 +368,7 @@ function PromptWithSnippetAutocomplete(props: {
   };
 
   const allowMouseHover = () => Date.now() >= ignoreMouseUntil();
-  const dialogBlockingInput = () => dialogOpen() || dialogHandoffUntil() > 0;
+  const dialogBlockingInput = () => isDialogInputBlocked(dialogOpen(), dialogHandoffUntil());
   const beginDialogHandoff = () => {
     if (pendingDialogHandoff) clearTimeout(pendingDialogHandoff);
     setDialogHandoffUntil(Date.now() + 150);

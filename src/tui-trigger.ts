@@ -77,6 +77,14 @@ export function isReloadCommand(input: string): boolean {
   return input.trim() === "/snippets:reload";
 }
 
+export function isDialogInputBlocked(
+  dialogOpen: boolean,
+  dialogHandoffUntil: number,
+  now = Date.now(),
+): boolean {
+  return dialogOpen || dialogHandoffUntil > now;
+}
+
 export function stepSelection(current: number, total: number, delta: -1 | 1): number {
   if (total <= 0) return 0;
 

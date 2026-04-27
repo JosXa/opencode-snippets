@@ -4,6 +4,7 @@ import {
   insertSkillLoad,
   insertSnippetTag,
   insertSnippetTrigger,
+  isDialogInputBlocked,
   isReloadCommand,
   preferredSnippetTag,
   replaceTrailingHashtag,
@@ -144,6 +145,18 @@ describe("isReloadCommand", () => {
     expect(isReloadCommand("/snippets list")).toBe(false);
     expect(isReloadCommand("/snippets:reload now")).toBe(false);
     expect(isReloadCommand("/snippet:reload")).toBe(false);
+  });
+});
+
+describe("isDialogInputBlocked", () => {
+  test("blocks while the dialog is open", () => {
+    expect(isDialogInputBlocked(true, 0, 1_000)).toBe(true);
+  });
+
+  test("blocks during the handoff window only", () => {
+    expect(isDialogInputBlocked(false, 1_500, 1_000)).toBe(true);
+    expect(isDialogInputBlocked(false, 1_000, 1_000)).toBe(false);
+    expect(isDialogInputBlocked(false, 500, 1_000)).toBe(false);
   });
 });
 
