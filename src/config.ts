@@ -24,7 +24,7 @@ export interface LoggingConfig {
 export interface ExperimentalConfig {
   /** Enable skill rendering with <skill>name</skill> or <skill name="name" /> syntax */
   skillRendering: boolean;
-  /** Enable #skill(name) syntax that injects OpenCode-style skill payloads above the message */
+  /** Enable #skill(name) syntax that injects OpenCode-style skill payloads after the message */
   skillLoading: boolean;
   /** Enable <inject>...</inject> blocks for persistent context messages */
   injectBlocks: boolean;
@@ -105,7 +105,7 @@ const DEFAULT_CONFIG_CONTENT = `{
     "skillRendering": false,
 
     // Enable #skill(name) syntax that shows a placeholder inline while injecting
-    // the OpenCode-style <skill_content> payload to the model above the message
+    // the OpenCode-style <skill_content> payload to the model after the message
     // Values: true, false, "enabled", "disabled"
     // Default: false
     "skillLoading": false

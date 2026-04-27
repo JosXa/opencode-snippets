@@ -381,7 +381,7 @@ Quoted names are also supported:
 }
 ```
 
-When enabled, the user-visible message shows `↳ Loaded name`, while the model receives an injected OpenCode-style `<skill_content>` payload immediately above that message. Multiple `#skill(...)` calls in one message are injected in source order.
+When enabled, the user-visible message shows `↳ Loaded name`, while the model receives an injected OpenCode-style `<skill_content>` payload immediately after that message. Multiple `#skill(...)` calls in one message are injected in source order.
 
 Quick project-local demo in this repo:
 

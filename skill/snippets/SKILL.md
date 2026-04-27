@@ -178,9 +178,9 @@ Enable in config:
 }
 ```
 
-Visible transcript text becomes `↳ Loaded name`. The model receives the full OpenCode-style `<skill_content>` wrapper above that message.
+Visible transcript text becomes `↳ Loaded name`. The model receives the full OpenCode-style `<skill_content>` wrapper immediately after that message.
 
-Treat `#skill(...)` as hidden context injection, not inline expansion. User usually sees compact placeholder text, while the model receives an extra injected user message containing the full `<skill_content>` payload. Do not assume one visible bubble can hold different hidden text. The implementation achieves this by inserting an additional hidden message before the visible one.
+Treat `#skill(...)` as hidden context injection, not inline expansion. User usually sees compact placeholder text, while the model receives an extra injected user message containing the full `<skill_content>` payload. Do not assume one visible bubble can hold different hidden text. The implementation achieves this by inserting an additional hidden message immediately after the visible one.
 
 `#skill(...)` also works when produced by snippet expansion, not only when the user types it directly.
 

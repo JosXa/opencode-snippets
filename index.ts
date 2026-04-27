@@ -191,6 +191,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         part.text = await executeShellCommands(part.text, ctx as unknown as ShellContext, {
           hideCommandInOutput: config.hideCommandInOutput,
         });
+
         shellTimeTotal += performance.now() - shellStart;
         processedParts += 1;
       }
@@ -272,12 +273,42 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     return skillLoadManager.get(sessionID, message.info.id);
   };
 
-  const insertSkillLoadsIntoMessages = (
+  const insertSkillLoadsIntoMessages = async (
     sessionID: string,
     messages: TransformOutput["messages"],
-  ): TransformOutput["messages"] => {
-    const pending = skillLoadManager.drainPending(sessionID);
+  ): Promise<TransformOutput["messages"]> => {
+    const pendingRaw = skillLoadManager.drainPending(sessionID);
     const result: TransformOutput["messages"] = [];
+
+    // Dedup requirement: if a queued payload string already exists as a direct
+    // skillLoad on any user message (because chat.message attached it to part.skillLoads),
+    // a synthetic for that message will be pushed via the `direct` path below.
+    // We must NOT also push a fallback synthetic for the same payload, otherwise
+    // OpenCode's fresh-session flow (which seems to fire chat.message both with and
+    // without messageID) ends up with the skill_content duplicated and stuck onto
+    // an unrelated user message like beads-context.
+    const directPayloadStrings = new Set<string>();
+    for (const message of messages) {
+      if (message.info.role !== "user" || isIgnoredMessage(message)) continue;
+      for (const payload of getPartSkillLoads(message.parts)) {
+        directPayloadStrings.add(payload);
+      }
+    }
+
+    const pending = pendingRaw.filter((entry) => {
+      if (entry.payloads.length === 0) return false;
+      // If every payload string in this entry is already attached directly to
+      // some user message, the synthetic will be emitted there. Drop the dup.
+      return entry.payloads.some((p) => !directPayloadStrings.has(p));
+    });
+
+    if (pending.length !== pendingRaw.length) {
+      logger.debug("Dropped duplicate queued skill payloads", {
+        sessionID,
+        before: pendingRaw.length,
+        after: pending.length,
+      });
+    }
 
     const fallbackByIndex = new Map<number, string[]>();
     if (pending.length > 0) {
@@ -286,9 +317,29 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         if (message.info.role !== "user" || isIgnoredMessage(message)) continue;
         if (getMessageSkillLoads(sessionID, message).length > 0) continue;
 
-        const payloads = pending.pop();
-        if (!payloads) break;
-        fallbackByIndex.set(i, payloads);
+        const next = pending.at(-1);
+        if (!next) break;
+
+        if (next.messageID && message.info.id && next.messageID !== message.info.id) {
+          continue;
+        }
+
+        pending.pop();
+        fallbackByIndex.set(i, next.payloads);
+      }
+
+      while (pending.length > 0) {
+        const next = pending.pop();
+        if (!next) break;
+
+        for (let i = messages.length - 1; i >= 0; i -= 1) {
+          const message = messages[i];
+          if (message.info.role !== "user" || isIgnoredMessage(message)) continue;
+          if (getMessageSkillLoads(sessionID, message).length > 0) continue;
+          if (fallbackByIndex.has(i)) continue;
+          fallbackByIndex.set(i, next.payloads);
+          break;
+        }
       }
     }
 
@@ -307,8 +358,18 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
 
       // User requirement: try placing hidden skill context immediately after the
       // visible user message so OpenCode sees the visible marker first.
+      // Hypothesis: OpenCode core may drop synthetic user messages with no
+      // info.id during prompt assembly. Give the synthetic a derived id so it
+      // survives downstream filtering.
+      const syntheticID = message.info.id
+        ? `${message.info.id}-skill-content`
+        : `synthetic-skill-content-${i}`;
       result.push({
-        info: { role: "user", sessionID: message.info.sessionID || sessionID },
+        info: {
+          id: syntheticID,
+          role: "user",
+          sessionID: message.info.sessionID || sessionID,
+        },
         parts: [{ type: "text", text: payloads.join("\n\n") }],
       });
     }
@@ -361,7 +422,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
       } else {
         const payloads = getPartSkillLoads(output.parts);
         if (payloads.length > 0) {
-          skillLoadManager.queue(input.sessionID, payloads);
+          skillLoadManager.queue(input.sessionID, payloads, input.messageID);
         }
       }
 
@@ -454,7 +515,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
 
         if (config.experimental.skillLoading) {
           const beforeSkillLoads = output.messages.length;
-          output.messages = insertSkillLoadsIntoMessages(sessionID, output.messages);
+          output.messages = await insertSkillLoadsIntoMessages(sessionID, output.messages);
           if (output.messages.length > beforeSkillLoads) {
             logger.debug("Injected skill load context messages", {
               sessionID,

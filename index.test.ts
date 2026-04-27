@@ -372,6 +372,143 @@ describe("SnippetsPlugin - Hook Integration", () => {
       );
     });
 
+    it("should attach queued hidden skill payloads to the latest matching user message", async () => {
+      const ctx = createMockContextWithSnippets();
+      const hooks = await SnippetsPlugin(ctx);
+
+      const chatOutput = {
+        message: { role: "user", content: "Test" } as unknown as UserMessage,
+        parts: [
+          {
+            type: "text",
+            text: "Load #skill(caveman)",
+          },
+        ] as Part[],
+      };
+
+      await hooks["chat.message"]?.(
+        {
+          sessionID: "test-session",
+        },
+        chatOutput,
+      );
+
+      const output = {
+        messages: [
+          {
+            info: { id: "older", role: "user", sessionID: "test-session" } as Message,
+            parts: [{ type: "text", text: "Older user message" }] as Part[],
+          },
+          {
+            info: { role: "assistant", sessionID: "test-session" } as Message,
+            parts: [{ type: "text", text: "Older assistant reply" }] as Part[],
+          },
+          {
+            info: { id: "latest", role: "user", sessionID: "test-session" } as Message,
+            parts: [{ type: "text", text: "Load ↳ Loaded caveman" }] as Part[],
+          },
+        ],
+      };
+
+      await hooks["experimental.chat.messages.transform"]?.({ sessionID: "test-session" }, output);
+
+      expect(output.messages).toHaveLength(4);
+      expect(textOf(output.messages[0].parts[0])).toBe("Older user message");
+      expect(textOf(output.messages[1].parts[0])).toBe("Older assistant reply");
+      expect(textOf(output.messages[2].parts[0])).toBe("Load ↳ Loaded caveman");
+      expect(textOf(output.messages[3].parts[0])).toContain('<skill_content name="caveman">');
+    });
+
+    it("should not duplicate synthetic skill_content when chat.message fires both with and without messageID", async () => {
+      // Repro for the fresh `opencode run` bug where the snippet plugin observed
+      // chat.message getting fired twice for the same prompt: once without
+      // input.messageID (queued) and once with it (registered as direct part.skillLoads).
+      // Without dedup, both pending and direct paths each push a synthetic, and the
+      // queued one lands on an unrelated user message such as the beads-context.
+      const ctx = createMockContextWithSnippets();
+      const hooks = await SnippetsPlugin(ctx);
+
+      const partsWithoutId = [{ type: "text", text: "Load #skill(caveman)" }] as Part[];
+
+      // First fire: no messageID (queues payload).
+      await hooks["chat.message"]?.(
+        { sessionID: "test-session" },
+        {
+          message: { role: "user", content: "Test" } as unknown as UserMessage,
+          parts: partsWithoutId,
+        },
+      );
+
+      // Second fire: with messageID (registers payload AND attaches to part.skillLoads).
+      const chatOutputFinal = {
+        message: { role: "user", content: "Test" } as unknown as UserMessage,
+        parts: [{ type: "text", text: "Load #skill(caveman)" }] as Part[],
+      };
+      await hooks["chat.message"]?.(
+        { sessionID: "test-session", messageID: "prompt-msg" },
+        chatOutputFinal,
+      );
+
+      const output = {
+        messages: [
+          {
+            info: { id: "prompt-msg", role: "user", sessionID: "test-session" } as Message,
+            parts: chatOutputFinal.parts,
+          },
+          {
+            info: { id: "beads-msg", role: "user", sessionID: "test-session" } as Message,
+            parts: [{ type: "text", text: "<beads-context>noop</beads-context>" }] as Part[],
+          },
+        ],
+      };
+
+      await hooks["experimental.chat.messages.transform"]?.({ sessionID: "test-session" }, output);
+
+      // Exactly ONE synthetic, placed immediately after the prompt — never after beads.
+      expect(output.messages).toHaveLength(3);
+      expect(textOf(output.messages[0].parts[0])).toBe("Load ↳ Loaded caveman");
+      expect(textOf(output.messages[1].parts[0])).toContain('<skill_content name="caveman">');
+      expect(textOf(output.messages[2].parts[0])).toBe("<beads-context>noop</beads-context>");
+    });
+
+    it("should keep skill payloads in transform-injected hidden messages", async () => {
+      const ctx = createMockContextWithSnippets();
+      const hooks = await SnippetsPlugin(ctx);
+
+      const chatOutput = {
+        message: { role: "user", content: "Test" } as unknown as UserMessage,
+        parts: [
+          {
+            type: "text",
+            text: "Load #skill(caveman)",
+          },
+        ] as Part[],
+      };
+
+      await hooks["chat.message"]?.(
+        {
+          sessionID: "test-session",
+          messageID: "message-1",
+        },
+        chatOutput,
+      );
+
+      const output = {
+        messages: [
+          {
+            info: { id: "message-1", role: "user", sessionID: "test-session" } as Message,
+            parts: chatOutput.parts,
+          },
+        ],
+      };
+
+      await hooks["experimental.chat.messages.transform"]?.({ sessionID: "test-session" }, output);
+
+      expect(textOf(chatOutput.parts[0])).toBe("Load ↳ Loaded caveman");
+      expect(output.messages).toHaveLength(2);
+      expect(textOf(output.messages[1].parts[0])).toContain('<skill_content name="caveman">');
+    });
+
     it("should keep plain #skill snippets working alongside #skill(name)", async () => {
       const ctx = createMockContextWithSnippets();
       const hooks = await SnippetsPlugin(ctx);

@@ -38,7 +38,7 @@
         "skillLoading": {
           "$ref": "#/definitions/booleanSetting",
           "default": false,
-          "description": "Enable #skill(name) syntax. When enabled, the visible user message shows a ↳ Loaded name placeholder while the model receives an OpenCode-style <skill_content> payload inserted above that message."
+          "description": "Enable #skill(name) syntax. When enabled, the visible user message shows a ↳ Loaded name placeholder while the model receives an OpenCode-style <skill_content> payload inserted immediately after that message."
         },
         "injectBlocks": {
           "$ref": "#/definitions/booleanSetting",
