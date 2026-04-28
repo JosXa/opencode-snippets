@@ -9,6 +9,8 @@ import type {
   ChatMessageInput,
   ChatMessageOutput,
   MessagePart,
+  SystemTransformInput,
+  SystemTransformOutput,
   TransformInput,
   TransformOutput,
 } from "./src/hook-types.js";
@@ -21,7 +23,7 @@ import { consumeSnippetReloadRequest } from "./src/reload-signal.js";
 import { executeShellCommands, type ShellContext } from "./src/shell.js";
 import { SkillLoadManager } from "./src/skill-load-manager.js";
 import { loadSkills, type SkillRegistry } from "./src/skill-loader.js";
-import { expandSkillLoads } from "./src/skill-loading.js";
+import { buildSkillPayloadsFromVisibleText, expandSkillLoads } from "./src/skill-loading.js";
 import { expandSkillTags } from "./src/skill-renderer.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -215,6 +217,11 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   const isIgnoredMessage = (message: TransformOutput["messages"][number]): boolean =>
     message.parts.some((part) => part.ignored);
 
+  const isSkillContentMessage = (message: TransformOutput["messages"][number]): boolean =>
+    message.parts.some(
+      (part) => part.type === "text" && (part.text || "").includes("<skill_content name="),
+    );
+
   const countConversationMessages = (messages: TransformOutput["messages"]): number =>
     messages.filter((message) => !isIgnoredMessage(message)).length;
 
@@ -262,15 +269,69 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   const getPartSkillLoads = (parts: MessagePart[]): string[] =>
     parts.flatMap((part) => part.skillLoads || []);
 
-  const getMessageSkillLoads = (
+  const getMessageSkillLoads = async (
     sessionID: string,
     message: TransformOutput["messages"][number],
-  ): string[] => {
-    const direct = getPartSkillLoads(message.parts);
-    if (direct.length > 0) return direct;
+  ): Promise<string[]> => {
+    if (isSkillContentMessage(message)) {
+      logger.debug("Skipping skill-content message during load resolution", {
+        sessionID,
+        messageID: message.info.id,
+      });
+      return [];
+    }
 
-    if (!message.info.id) return [];
-    return skillLoadManager.get(sessionID, message.info.id);
+    const direct = getPartSkillLoads(message.parts);
+    if (direct.length > 0) {
+      logger.debug("Resolved skill loads from direct part metadata", {
+        sessionID,
+        messageID: message.info.id,
+        payloadCount: direct.length,
+      });
+      return direct;
+    }
+
+    if (message.info.id) {
+      const stored = skillLoadManager.get(sessionID, message.info.id);
+      if (stored.length > 0) {
+        logger.debug("Resolved skill loads from message-id registry", {
+          sessionID,
+          messageID: message.info.id,
+          payloadCount: stored.length,
+        });
+        return stored;
+      }
+    }
+
+    if (!config.experimental.skillLoading || skills.size === 0) return [];
+
+    const text = message.parts
+      .filter((part) => part.type === "text")
+      .map((part) => part.text || "")
+      .join("\n\n");
+
+    const recovered = await buildSkillPayloadsFromVisibleText(text, skills, snippets, {
+      expandSkillTagsInContent: config.experimental.skillRendering,
+      extractInject: config.experimental.injectBlocks,
+    });
+
+    if (recovered.length > 0) {
+      logger.debug("Recovered hidden skill payloads from visible markers", {
+        sessionID,
+        messageID: message.info.id,
+        payloadCount: recovered.length,
+      });
+    }
+
+    if (recovered.length === 0 && text.includes("↳ Loaded ")) {
+      logger.debug("Visible skill markers found but no hidden payloads recovered", {
+        sessionID,
+        messageID: message.info.id,
+        text,
+      });
+    }
+
+    return recovered;
   };
 
   const insertSkillLoadsIntoMessages = async (
@@ -279,6 +340,29 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   ): Promise<TransformOutput["messages"]> => {
     const pendingRaw = skillLoadManager.drainPending(sessionID);
     const result: TransformOutput["messages"] = [];
+    const resolvedLoads = await Promise.all(
+      messages.map(async (message) => {
+        if (message.info.role !== "user" || isIgnoredMessage(message)) {
+          return [] as string[];
+        }
+
+        return getMessageSkillLoads(sessionID, message);
+      }),
+    );
+    logger.debug("Resolved skill loads for transform messages", {
+      sessionID,
+      messages: messages.map((message, i) => ({
+        messageID: message.info.id,
+        role: message.info.role,
+        synthetic: message.parts.some((part) => part.synthetic),
+        snippetsProcessed: message.parts.some((part) => part.snippetsProcessed),
+        text: message.parts
+          .filter((part) => part.type === "text")
+          .map((part) => (part.text || "").slice(0, 120))
+          .join(" | "),
+        resolvedLoadCount: (resolvedLoads[i] || []).length,
+      })),
+    });
 
     // Dedup requirement: if a queued payload string already exists as a direct
     // skillLoad on any user message (because chat.message attached it to part.skillLoads),
@@ -288,9 +372,9 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     // without messageID) ends up with the skill_content duplicated and stuck onto
     // an unrelated user message like beads-context.
     const directPayloadStrings = new Set<string>();
-    for (const message of messages) {
+    for (const [i, message] of messages.entries()) {
       if (message.info.role !== "user" || isIgnoredMessage(message)) continue;
-      for (const payload of getPartSkillLoads(message.parts)) {
+      for (const payload of resolvedLoads[i] || []) {
         directPayloadStrings.add(payload);
       }
     }
@@ -315,7 +399,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
       for (let i = messages.length - 1; i >= 0; i -= 1) {
         const message = messages[i];
         if (message.info.role !== "user" || isIgnoredMessage(message)) continue;
-        if (getMessageSkillLoads(sessionID, message).length > 0) continue;
+        if ((resolvedLoads[i] || []).length > 0) continue;
 
         const next = pending.at(-1);
         if (!next) break;
@@ -335,7 +419,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         for (let i = messages.length - 1; i >= 0; i -= 1) {
           const message = messages[i];
           if (message.info.role !== "user" || isIgnoredMessage(message)) continue;
-          if (getMessageSkillLoads(sessionID, message).length > 0) continue;
+          if ((resolvedLoads[i] || []).length > 0) continue;
           if (fallbackByIndex.has(i)) continue;
           fallbackByIndex.set(i, next.payloads);
           break;
@@ -344,33 +428,49 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     }
 
     for (const [i, message] of messages.entries()) {
-      result.push(message);
-
       if (message.info.role !== "user" || isIgnoredMessage(message)) {
+        result.push(message);
         continue;
       }
 
-      const direct = getMessageSkillLoads(sessionID, message);
+      const direct = resolvedLoads[i] || [];
       const payloads = direct.length > 0 ? direct : fallbackByIndex.get(i) || [];
       if (payloads.length === 0) {
+        result.push(message);
         continue;
       }
 
-      // User requirement: try placing hidden skill context immediately after the
-      // visible user message so OpenCode sees the visible marker first.
-      // Hypothesis: OpenCode core may drop synthetic user messages with no
-      // info.id during prompt assembly. Give the synthetic a derived id so it
-      // survives downstream filtering.
-      const syntheticID = message.info.id
-        ? `${message.info.id}-skill-content`
-        : `synthetic-skill-content-${i}`;
+      skillLoadManager.rememberForSession(sessionID, payloads);
+
+      const hiddenText = payloads.join("\n\n");
+      if (
+        message.parts.some(
+          (part) => part.type === "text" && part.synthetic && (part.text || "") === hiddenText,
+        )
+      ) {
+        logger.debug("Hidden skill payload already attached to user message", {
+          sessionID,
+          messageID: message.info.id,
+          hiddenLength: hiddenText.length,
+        });
+        result.push(message);
+        continue;
+      }
+
+      // Regression guard from the PTY repro:
+      // 1. skill content must stay hidden from the user,
+      // 2. skill content must be injected immediately below the visible user message and reach the LLM,
+      // 3. the agent must not call `skill` a second time for an already-loaded skill.
+      logger.debug("Appended hidden skill payload to user message", {
+        sessionID,
+        messageID: message.info.id,
+        partCountBefore: message.parts.length,
+        partCountAfter: message.parts.length + 1,
+        hiddenLength: hiddenText.length,
+      });
       result.push({
-        info: {
-          id: syntheticID,
-          role: "user",
-          sessionID: message.info.sessionID || sessionID,
-        },
-        parts: [{ type: "text", text: payloads.join("\n\n") }],
+        ...message,
+        parts: [{ type: "text", text: hiddenText, synthetic: true }, ...message.parts],
       });
     }
 
@@ -407,6 +507,16 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
       if (output.parts.some((part) => part.ignored)) return;
 
       const injected = await processTextParts(output.parts);
+      logger.debug("chat.message processed user parts", {
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        texts: output.parts
+          .filter((part) => part.type === "text")
+          .map((part) => ({
+            text: (part.text || "").slice(0, 200),
+            skillLoads: part.skillLoads?.length || 0,
+          })),
+      });
 
       output.parts.forEach((part) => {
         if (part.type === "text") {
@@ -456,6 +566,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         if (message.info.role === "user") {
           if (message.parts.some((part) => part.snippetsProcessed)) continue;
           if (message.parts.some((part) => part.ignored)) continue;
+          if (message.parts.some((part) => part.synthetic)) continue;
 
           const injected = await processTextParts(message.parts);
 
@@ -525,6 +636,35 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
           }
         }
       }
+    },
+
+    "experimental.chat.system.transform": async (
+      input: SystemTransformInput,
+      output: SystemTransformOutput,
+    ) => {
+      if (!config.experimental.skillLoading) return;
+      if (!input.sessionID) return;
+
+      const payloads = skillLoadManager.getSessionPayloads(input.sessionID);
+      if (payloads.length === 0) return;
+
+      const hiddenText = payloads.join("\n\n");
+      if (output.system.includes(hiddenText)) {
+        logger.debug("Hidden skill payloads already present in system prompt", {
+          sessionID: input.sessionID,
+          payloadCount: payloads.length,
+          hiddenLength: hiddenText.length,
+        });
+        return;
+      }
+
+      output.system.push(hiddenText);
+      logger.debug("Mirrored hidden skill payloads into system prompt", {
+        sessionID: input.sessionID,
+        payloadCount: payloads.length,
+        hiddenLength: hiddenText.length,
+        systemEntryCount: output.system.length,
+      });
     },
 
     // Process skill tool output to expand snippets and skill tags in skill content

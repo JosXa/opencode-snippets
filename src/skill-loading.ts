@@ -2,7 +2,6 @@ import { readdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { PATTERNS } from "./constants.js";
-import { assembleMessage, type ExpandOptions, expandHashtags } from "./expander.js";
 import { logger } from "./logger.js";
 import { getSkill, type SkillInfo, type SkillRegistry } from "./skill-loader.js";
 import { expandSkillTags } from "./skill-renderer.js";
@@ -71,6 +70,57 @@ export async function expandSkillLoads(
   return { text: result, payloads };
 }
 
+export async function buildSkillPayloadsFromVisibleText(
+  text: string,
+  registry: SkillRegistry,
+  snippets: SnippetRegistry,
+  options: {
+    expandSkillTagsInContent: boolean;
+    extractInject: boolean;
+  },
+): Promise<string[]> {
+  if (!text.includes("↳ Loaded ")) {
+    return [];
+  }
+
+  const matches: Array<{ start: number; end: number; skill: SkillInfo; marker: string }> = [];
+  const skills = [...registry.values()]
+    .map((skill) => ({ skill, marker: visibleSkillLoad(skill) }))
+    .toSorted((a, b) => b.marker.length - a.marker.length);
+
+  for (const entry of skills) {
+    let from = 0;
+
+    while (from < text.length) {
+      const start = text.indexOf(entry.marker, from);
+      if (start === -1) {
+        break;
+      }
+
+      const end = start + entry.marker.length;
+      const overlaps = matches.some((match) => start < match.end && end > match.start);
+      if (!overlaps) {
+        matches.push({ start, end, skill: entry.skill, marker: entry.marker });
+        break;
+      }
+
+      from = start + 1;
+    }
+  }
+
+  if (matches.length === 0) {
+    return [];
+  }
+
+  matches.sort((a, b) => a.start - b.start);
+
+  return Promise.all(
+    matches.map((match) =>
+      buildSkillPayload(match.skill, registry, snippets, match.marker, options),
+    ),
+  );
+}
+
 function parseSkillName(input: string | undefined): string | null {
   if (!input) return null;
   const trimmed = input.trim();
@@ -88,7 +138,7 @@ function parseSkillName(input: string | undefined): string | null {
 async function buildSkillPayload(
   skill: SkillInfo,
   registry: SkillRegistry,
-  snippets: SnippetRegistry,
+  _snippets: SnippetRegistry,
   marker: string,
   options: {
     expandSkillTagsInContent: boolean;
@@ -98,7 +148,7 @@ async function buildSkillPayload(
   const dir = dirname(skill.filePath);
   const base = pathToFileURL(dir).href;
   const files = await listSkillFiles(dir, SKILL_FILE_LIMIT);
-  const content = renderSkillContent(skill.content, registry, snippets, options);
+  const content = renderSkillContent(skill.content, registry, options);
 
   return [
     `<skill_content name="${skill.name}">`,
@@ -124,10 +174,8 @@ async function buildSkillPayload(
 function renderSkillContent(
   content: string,
   registry: SkillRegistry,
-  snippets: SnippetRegistry,
   options: {
     expandSkillTagsInContent: boolean;
-    extractInject: boolean;
   },
 ): string {
   let processed = content;
@@ -135,11 +183,7 @@ function renderSkillContent(
     processed = expandSkillTags(processed, registry);
   }
 
-  const expandOptions: ExpandOptions = {
-    extractInject: options.extractInject,
-  };
-
-  return assembleMessage(expandHashtags(processed, snippets, new Map(), expandOptions));
+  return processed;
 }
 
 async function listSkillFiles(dir: string, limit: number): Promise<string[]> {

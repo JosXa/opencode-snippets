@@ -6,6 +6,7 @@ export interface MessagePart {
   type: string;
   text?: string;
   ignored?: boolean;
+  synthetic?: boolean;
   snippetsProcessed?: boolean;
   skillLoads?: string[];
 }
@@ -42,6 +43,15 @@ export interface TransformInput {
 
 export interface TransformOutput {
   messages: TransformMessage[];
+}
+
+export interface SystemTransformInput {
+  sessionID?: string;
+  model?: unknown;
+}
+
+export interface SystemTransformOutput {
+  system: string[];
 }
 
 export interface SessionIdleEvent {

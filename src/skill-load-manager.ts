@@ -1,6 +1,7 @@
 export class SkillLoadManager {
   private loads = new Map<string, Map<string, string[]>>();
   private pending = new Map<string, Array<{ messageID?: string; payloads: string[] }>>();
+  private sessionPayloads = new Map<string, string[]>();
 
   register(sessionID: string, messageID: string, payloads: string[]): void {
     const session = this.getOrCreateSession(sessionID);
@@ -15,6 +16,30 @@ export class SkillLoadManager {
 
   get(sessionID: string, messageID: string): string[] {
     return [...(this.loads.get(sessionID)?.get(messageID) || [])];
+  }
+
+  rememberForSession(sessionID: string, payloads: string[]): void {
+    const existing = this.sessionPayloads.get(sessionID) || [];
+    const seen = new Set(existing);
+    const merged = [...existing];
+
+    for (const payload of payloads) {
+      if (seen.has(payload)) continue;
+      seen.add(payload);
+      merged.push(payload);
+    }
+
+    this.sessionPayloads.set(sessionID, merged);
+  }
+
+  getSessionPayloads(sessionID: string): string[] {
+    return [...(this.sessionPayloads.get(sessionID) || [])];
+  }
+
+  clearSession(sessionID: string): void {
+    this.loads.delete(sessionID);
+    this.pending.delete(sessionID);
+    this.sessionPayloads.delete(sessionID);
   }
 
   drainPending(sessionID: string): Array<{ messageID?: string; payloads: string[] }> {
