@@ -1,6 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { importCjs } from "./cjs-interop.js";
 
 const matter = await importCjs<typeof import("gray-matter")>("gray-matter");
@@ -33,7 +34,11 @@ export type SkillRegistry = Map<string, SkillInfo>;
  */
 export interface LoadSkillsOptions {
   homeDir?: string;
+  bundledSkillDirs?: string[];
 }
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * OpenCode skill directory patterns.
@@ -74,6 +79,10 @@ function getProjectSkillDirs(projectDir: string): string[] {
     join(projectDir, ".claude", "skills"),
     join(projectDir, ".agents", "skills"),
   ];
+}
+
+function getBundledSkillDirs(): string[] {
+  return [join(__dirname, "..", "..", "skill")];
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -124,6 +133,13 @@ export async function loadSkills(
   options: LoadSkillsOptions = {},
 ): Promise<SkillRegistry> {
   const skills: SkillRegistry = new Map();
+
+  // Bundled plugin skills should participate in the same registry used by runtime
+  // expansion and TUI autocomplete. Load them first so user/global/project skills can
+  // still override shipped defaults with the same name.
+  for (const dir of options.bundledSkillDirs || getBundledSkillDirs()) {
+    await loadFromDirectory(dir, skills, "global");
+  }
 
   // Load from global directories first
   for (const dir of getGlobalSkillDirs(options.homeDir)) {

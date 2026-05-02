@@ -39,6 +39,25 @@ describe("loadSkills", () => {
     expect(skills.get("agents-global")?.content).toBe("agents skill");
   });
 
+  it("loads bundled plugin skills into the shared registry", async () => {
+    const bundledDir = join(tempDir, "bundled-skill");
+    await writeSkill(bundledDir, "snippets", "bundled snippets skill");
+
+    const skills = await loadSkills(undefined, { homeDir, bundledSkillDirs: [bundledDir] });
+
+    expect(skills.get("snippets")?.content).toBe("bundled snippets skill");
+  });
+
+  it("lets user global skills override bundled skills with the same name", async () => {
+    const bundledDir = join(tempDir, "bundled-skill");
+    await writeSkill(bundledDir, "snippets", "bundled snippets skill");
+    await writeSkill(join(homeDir, ".config", "opencode", "skills"), "snippets", "user override");
+
+    const skills = await loadSkills(undefined, { homeDir, bundledSkillDirs: [bundledDir] });
+
+    expect(skills.get("snippets")?.content).toBe("user override");
+  });
+
   it("walks upward to the git worktree so nearer project skills override farther ones", async () => {
     const repo = join(tempDir, "repo");
     const cwd = join(repo, "apps", "web", "src");
