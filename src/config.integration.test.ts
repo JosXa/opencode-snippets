@@ -88,13 +88,13 @@ describe("Config Integration", () => {
     });
 
     it("should merge partial project config", () => {
-      // Global: debug=false, hideCommandInOutput=true
+      // Global: debug=false, injectRecencyMessages=9
       writeFileSync(
         join(globalDir, "config.jsonc"),
-        JSON.stringify({ logging: { debug: false }, hideCommandInOutput: true }),
+        JSON.stringify({ logging: { debug: false }, injectRecencyMessages: 9 }),
       );
 
-      // Project: only debug=true (hideCommandInOutput should inherit from global)
+      // Project: only debug=true (injectRecencyMessages should inherit from global)
       writeFileSync(
         join(projectDir, ".opencode", "snippet", "config.jsonc"),
         JSON.stringify({ logging: { debug: true } }),
@@ -107,7 +107,7 @@ describe("Config Integration", () => {
       const config = loadConfig(projectDir);
 
       expect(config.logging.debug).toBe(true);
-      expect(config.hideCommandInOutput).toBe(true); // inherited from global
+      expect(config.injectRecencyMessages).toBe(9); // inherited from global
 
       require("./constants.js").PATHS.CONFIG_FILE_GLOBAL = originalPaths.CONFIG_FILE_GLOBAL;
       require("./constants.js").PATHS.SNIPPETS_DIR = originalPaths.SNIPPETS_DIR;

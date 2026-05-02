@@ -2,11 +2,10 @@ import { PATTERNS } from "./constants.js";
 import { logger } from "./logger.js";
 
 /**
- * Executes shell commands in text using !`command` syntax
+ * Executes shell commands in text using !`command` or !>`command` syntax
  *
  * @param text - The text containing shell commands to execute
  * @param ctx - The plugin context (with Bun shell)
- * @param options - Shell execution options
  * @returns The text with shell commands replaced by their output
  */
 export type ShellContext = {
@@ -23,18 +22,8 @@ export type ShellContext = {
   };
 };
 
-export interface ShellOptions {
-  /** Hide the command prefix in output, showing only the result */
-  hideCommandInOutput?: boolean;
-}
-
-export async function executeShellCommands(
-  text: string,
-  ctx: ShellContext,
-  options: ShellOptions = {},
-): Promise<string> {
+export async function executeShellCommands(text: string, ctx: ShellContext): Promise<string> {
   let result = text;
-  const hideCommand = options.hideCommandInOutput ?? false;
 
   // Reset regex state (global flag requires this)
   PATTERNS.SHELL_COMMAND.lastIndex = 0;
@@ -44,13 +33,15 @@ export async function executeShellCommands(
 
   // Execute each command and replace in text
   for (const match of matches) {
-    const cmd = match[1];
+    const showCommand = match[1] === "!>";
+    const cmd = match[2];
     const _placeholder = match[0];
 
     try {
       const output = await ctx.$`${{ raw: cmd }}`.quiet().nothrow();
       const text = `${output.stdout.toString()}${output.stderr.toString()}`.trim();
-      const replacement = hideCommand ? text : `$ ${cmd}\n--> ${text}`;
+      // `!>` preserves command provenance when the model should see what just ran.
+      const replacement = showCommand ? `$ ${cmd}\n--> ${text}` : text;
       result = result.replace(_placeholder, replacement);
     } catch (error) {
       // If shell command fails, leave it as-is

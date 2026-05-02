@@ -62,9 +62,9 @@ Full config example with all options:
     "skillLoading": false
   },
 
-  // Hide shell command in output, showing only the result
-  // Default: false
-  "hideCommandInOutput": false
+  // How many messages from bottom to place injected context
+  // Default: 5
+  "injectRecencyMessages": 5
 }
 ```
 
@@ -85,29 +85,52 @@ Frontmatter optional. Filename (minus .md) = primary hashtag.
 ## Features
 
 - `#other` - include another snippet (recursive, max 15 depth)
-- `` !`cmd` `` - shell substitution, output injected
+- `` !`cmd` `` - shell substitution, output only
+- `` !>`cmd` `` - shell substitution, show command plus output
 
 ### Prepend/Append Blocks
 
 Move content to message start/end instead of inline. Best for long reference material that breaks writing flow.
 
+A snippet can include a `<prepend>` or `<append>` block and ordinary body text at the same time. Only the block content moves. Text outside the block still expands inline where `#snippet` was used. Use this to keep snippets flowing inside a sentence: a short visible body like `Jira`, `bead`, or `cherry-pick` stays in the user's prose, while heavy guidance is hidden in the block.
+
 ```md
 ---
 aliases: jira
 ---
-Jira MCP
 <prepend>
 ## Jira Field Mappings
 
 - customfield_16570 => Acceptance Criteria
 - customfield_11401 => Team
 </prepend>
+
+Jira MCP
 ```
 
 Input: `Create bug in #jira about leak`
-Output: Prepended section at top + `Create bug in Jira MCP about leak`.
+Output: The field mappings are prepended at the top, and the visible inline expansion becomes `Create bug in Jira MCP about leak`.
 
 Use `<append>` for reference material at end. Content inside blocks should use `##` headings.
+
+#### Wrap block content in semantic XML tags
+
+Inside a `<prepend>` or `<append>` block, wrap content in custom tags that label its role for the LLM:
+
+- `<task>...</task>` - the next thing the agent should do
+- `<user_reminder>...</user_reminder>` - persistent reminder of user intent
+- `<guidance>...</guidance>`, `<info>...</info>` - context, rules, reference
+- `<condition="...">...</condition>` - guidance that only applies in a specific case
+
+Tags are not magic. They give the model a clear role label for the chunk so it does not blend into the rest of the message.
+
+#### When to prepend vs append
+
+Prepend puts the block at the very top of the message. The user's typed line lands last, which the LLM tends to follow more closely. Use prepend for **general context and guidance**, especially short blocks. Use it sparingly for many-paragraph blocks: a wall of text dumped on top of a one-word `#tag` is visually jarring for the user reading their own message.
+
+Append puts the block at the bottom. The user's line stays at the top, less jarring. Adherence to the user line can soften slightly, but append is ideal when the block contains a `<task>` or instruction that should be the **next thing the agent does**.
+
+Rule of thumb: short context => prepend; important next step => append; heavy reference docs => prepend with a tiny inline body so the user's sentence still flows.
 
 ### Inject Blocks (Experimental)
 
@@ -183,6 +206,10 @@ Visible transcript text becomes `↳ Loaded name`. The model receives the full O
 Treat `#skill(...)` as hidden context injection, not inline expansion. User usually sees compact placeholder text, while the model receives an extra injected user message containing the full `<skill_content>` payload. Do not assume one visible bubble can hold different hidden text. The implementation achieves this by inserting an additional hidden message immediately after the visible one.
 
 `#skill(...)` also works when produced by snippet expansion, not only when the user types it directly.
+
+## Escaped Hashtag References
+
+When a user writes `#_snippet-name` with a leading underscore after `#`, they are referring to the snippet `#snippet-name` without triggering expansion. This is an escape convention for talking about a snippet in conversation, for example `navigate to #_myapps`. Always interpret `#_foo` as meaning `#foo`. Do not ask for clarification. Silently resolve the underscored form to the real snippet name.
 
 ## Commands
 

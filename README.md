@@ -202,23 +202,23 @@ You can also use JSON array style: `aliases: ["cp", "pick"]`
 
 ### Shell Command Substitution
 
-Snippets support the same ``!`command` `` syntax as [OpenCode slash commands](https://opencode.ai/docs/commands/#shell-output) for injecting live command output:
+The plugin adds shell substitution to regular OpenCode prompts, not just snippet files. Use ``!`command` `` for output-only injection and ``!>`command` `` when you want the executed command shown too:
 
 ```markdown
 Current branch: !`git branch --show-current`
 Last commit: !`git log -1 --oneline`
 Working directory: !`pwd`
+Debug listing: !>`ls`
 ```
 
-> **Note:** By default, snippets show both the command and its output (unlike OpenCode's slash commands which only show output):
-> ``!`ls` `` → 
+> **Default:** ``!`ls` `` injects only command output, matching OpenCode command templates.
+>
+> **Verbose form:** ``!>`ls` `` →
 > ```
 > $ ls
 > --> <output>
 > ```
-> This tells the LLM which command was actually run and makes failures visible (empty output would otherwise be indistinguishable from success).
->
-> To match OpenCode's slash command behavior (output only), set `hideCommandInOutput: true` in your config.
+> LLMs tend to trust the output more when they can see which terminal command just ran. The command gives the output context, which makes it more informative and easier to interpret.
 
 ### Recursive Includes
 
@@ -476,7 +476,6 @@ A default config file is created automatically on first run.
     "skillRendering": false, // Enable <skill>name</skill> tag expansion
     "skillLoading": false // Enable #skill(name) OpenCode-style loading
   },
-  "hideCommandInOutput": false, // Show only output for shell commands (hides "$ cmd\n-->")
   "injectRecencyMessages": 5 // How many messages from the bottom to place injected context
 }
 ```
@@ -495,6 +494,7 @@ Logs are written to `~/.config/opencode/logs/snippets/daily/` when enabled.
 - Snippets are loaded once at plugin startup
 - Hashtag matching is **case-insensitive** (`#Hello` = `#hello`)
 - Unknown hashtags are left unchanged
+- ``!`cmd` `` injects output only, while ``!>`cmd` `` injects `$ cmd` plus output
 - Failed shell commands preserve the original syntax in output
 - Frontmatter is stripped from expanded content
 - Only user messages are processed (not assistant responses)

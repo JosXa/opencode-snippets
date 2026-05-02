@@ -8,8 +8,8 @@ export const PATTERNS = {
   /** Matches hashtags like #snippet-name */
   HASHTAG: /#([a-z0-9\-_]+)/gi,
 
-  /** Matches shell commands like !`command` */
-  SHELL_COMMAND: /!`([^`]+)`/g,
+  /** Matches shell commands like !`command` or !>`command` */
+  SHELL_COMMAND: /(!>?)`([^`]+)`/g,
 
   /** Matches skill loads like #skill(name) or #skill("name") */
   SKILL_LOAD: /#skill\(\s*([^\r\n)]+?)\s*\)/gi,

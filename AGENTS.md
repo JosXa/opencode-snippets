@@ -58,6 +58,10 @@ git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z
 - Keep logic in one function unless reusable/composable
 - Bun APIs (see above)
 
+## Wording-only subagents
+
+Reusable wording-only subagents MUST assume fresh context on every call. Write the output contract from the subagent's own perspective. Do NOT say "for the main agent to add" or similar. Prefer direct contracts such as "Return only the text to add or replace."
+
 # Pre-Commit Lint Check
 
 MUST run `bun run format:check` (or `biome check .`) before any git commit.

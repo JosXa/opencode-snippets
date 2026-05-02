@@ -40,9 +40,6 @@ export interface SnippetsConfig {
   /** Experimental features */
   experimental: ExperimentalConfig;
 
-  /** Hide shell command in output, showing only the result */
-  hideCommandInOutput: boolean;
-
   /** How many messages from the bottom of the conversation to place injected context */
   injectRecencyMessages: number;
 }
@@ -59,7 +56,6 @@ interface RawConfig {
     skillLoading?: BooleanSetting;
     injectBlocks?: BooleanSetting;
   };
-  hideCommandInOutput?: BooleanSetting;
   injectRecencyMessages?: number | string;
 }
 
@@ -75,7 +71,6 @@ const DEFAULT_CONFIG: SnippetsConfig = {
     skillLoading: false,
     injectBlocks: false,
   },
-  hideCommandInOutput: false,
   injectRecencyMessages: 5,
 };
 
@@ -110,13 +105,6 @@ const DEFAULT_CONFIG_CONTENT = `{
     // Default: false
     "skillLoading": false
   },
-
-  // Hide shell command in snippet output
-  // When false (default), shell commands show as "$ command\\n--> output"
-  // When true, only the output is shown (matching OpenCode's slash command behavior)
-  // Values: true, false, "enabled", "disabled"
-  // Default: false
-  "hideCommandInOutput": false,
 
   // How many messages from the bottom of the conversation to place injected context
   // Higher = injection feels "older" to the model, lower = closer to recent context
@@ -222,7 +210,6 @@ export function loadConfig(projectDir?: string): SnippetsConfig {
     loggingDebug: config.logging.debug,
     experimentalSkillRendering: config.experimental.skillRendering,
     experimentalSkillLoading: config.experimental.skillLoading,
-    hideCommandInOutput: config.hideCommandInOutput,
     injectRecencyMessages: config.injectRecencyMessages,
   });
 
@@ -237,7 +224,6 @@ function mergeConfig(base: SnippetsConfig, raw: RawConfig): SnippetsConfig {
   const skillRenderingValue = normalizeBooleanSetting(raw.experimental?.skillRendering);
   const skillLoadingValue = normalizeBooleanSetting(raw.experimental?.skillLoading);
   const injectBlocksValue = normalizeBooleanSetting(raw.experimental?.injectBlocks);
-  const hideCommandValue = normalizeBooleanSetting(raw.hideCommandInOutput);
   const injectRecencyValue = normalizePositiveInteger(raw.injectRecencyMessages);
 
   return {
@@ -252,8 +238,6 @@ function mergeConfig(base: SnippetsConfig, raw: RawConfig): SnippetsConfig {
       injectBlocks:
         injectBlocksValue !== undefined ? injectBlocksValue : base.experimental.injectBlocks,
     },
-    hideCommandInOutput:
-      hideCommandValue !== undefined ? hideCommandValue : base.hideCommandInOutput,
     injectRecencyMessages:
       injectRecencyValue !== undefined ? injectRecencyValue : base.injectRecencyMessages,
   };

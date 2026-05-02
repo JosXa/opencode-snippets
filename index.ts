@@ -188,11 +188,9 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
           skillTimeTotal += performance.now() - skillStart;
         }
 
-        // 3. Execute shell commands: !`command`
+        // 3. Execute shell commands: !`command` or !>`command`
         const shellStart = performance.now();
-        part.text = await executeShellCommands(part.text, ctx as unknown as ShellContext, {
-          hideCommandInOutput: config.hideCommandInOutput,
-        });
+        part.text = await executeShellCommands(part.text, ctx as unknown as ShellContext);
 
         shellTimeTotal += performance.now() - shellStart;
         processedParts += 1;

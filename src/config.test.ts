@@ -64,7 +64,6 @@ describe("config", () => {
       expect(config).toEqual({
         logging: { debug: false },
         experimental: { skillRendering: false, skillLoading: false, injectBlocks: false },
-        hideCommandInOutput: false,
         injectRecencyMessages: 5,
       });
     });
@@ -141,7 +140,7 @@ describe("config", () => {
       const config = loadConfig();
 
       expect(config.logging.debug).toBe(true);
-      expect(config.hideCommandInOutput).toBe(false); // Default value
+      expect(config.injectRecencyMessages).toBe(5);
     });
 
     it("should merge project config with global config (project has priority)", () => {
@@ -174,7 +173,6 @@ describe("config", () => {
       expect(config).toEqual({
         logging: { debug: false },
         experimental: { skillRendering: false, skillLoading: false, injectBlocks: false },
-        hideCommandInOutput: false,
         injectRecencyMessages: 5,
       });
     });
