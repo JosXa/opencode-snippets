@@ -84,9 +84,13 @@ Frontmatter optional. Filename (minus .md) = primary hashtag.
 
 ## Features
 
+The plugin adds shell substitution to regular OpenCode prompts, not just snippet files.
+
 - `#other` - include another snippet (recursive, max 15 depth)
 - `` !`cmd` `` - shell substitution, output only
 - `` !>`cmd` `` - shell substitution, show command plus output
+
+Use `!>` when the exact command matters. LLMs tend to trust the output more when they can see which terminal command just ran. The command gives the output context, which makes it more informative and easier to interpret.
 
 ### Prepend/Append Blocks
 
