@@ -79,7 +79,7 @@ const DEFAULT_CONFIG: SnippetsConfig = {
  */
 const DEFAULT_CONFIG_CONTENT = `{
   // JSON Schema for editor autocompletion
-  "$schema": "https://raw.githubusercontent.com/JosXa/opencode-snippets/v2.1.6/schema/config.schema.json",
+  "$schema": "https://raw.githubusercontent.com/JosXa/opencode-snippets/v2.2.0/schema/config.schema.json",
 
   // Logging settings
   "logging": {

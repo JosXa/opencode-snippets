@@ -154,6 +154,18 @@ describe("filterSkills", () => {
 
     expect(result.map((item) => item.name)).toEqual(["demo-voice"]);
   });
+
+  test("matches fuzzy compact queries for skill autocompletion", () => {
+    const result = filterSkills([skill({ name: "opencode-config", content: "x" })], "opecon");
+
+    expect(result.map((item) => item.name)).toEqual(["opencode-config"]);
+  });
+
+  test("matches non-prefix fuzzy compact queries for skill autocompletion", () => {
+    const result = filterSkills([skill({ name: "opencode-config", content: "x" })], "opcocg");
+
+    expect(result.map((item) => item.name)).toEqual(["opencode-config"]);
+  });
 });
 
 describe("snippetDescription", () => {

@@ -10,6 +10,19 @@ function normalizeSearchText(input: string): string {
   return input.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function isSubsequence(input: string, query: string): boolean {
+  if (!query) return true;
+
+  let i = 0;
+  for (const c of input) {
+    if (c !== query[i]) continue;
+    i += 1;
+    if (i === query.length) return true;
+  }
+
+  return false;
+}
+
 function scoreText(input: string, query: string): number {
   const raw = input.toLowerCase();
   const needle = query.toLowerCase();
@@ -22,6 +35,7 @@ function scoreText(input: string, query: string): number {
   if (compactNeedle && compact.startsWith(compactNeedle)) return 3;
   if (raw.includes(needle)) return 4;
   if (compactNeedle && compact.includes(compactNeedle)) return 5;
+  if (compactNeedle && isSubsequence(compact, compactNeedle)) return 6;
 
   return Number.POSITIVE_INFINITY;
 }
@@ -38,8 +52,8 @@ function scoreSnippet(snippet: SnippetInfo, query: string): number {
   if (Number.isFinite(score)) return score;
 
   const needle = query.toLowerCase();
-  if (description.startsWith(needle)) return 6;
-  if (description.includes(needle)) return 7;
+  if (description.startsWith(needle)) return 7;
+  if (description.includes(needle)) return 8;
 
   return Number.POSITIVE_INFINITY;
 }
@@ -61,8 +75,8 @@ function scoreSkill(skill: SkillInfo, query: string): number {
   if (Number.isFinite(score)) return score;
 
   const needle = query.toLowerCase();
-  if (description.startsWith(needle)) return 6;
-  if (description.includes(needle)) return 7;
+  if (description.startsWith(needle)) return 7;
+  if (description.includes(needle)) return 8;
 
   return Number.POSITIVE_INFINITY;
 }
@@ -106,6 +120,9 @@ export function filterSkills(skills: SkillInfo[], query: string): SkillInfo[] {
 export function matchedAliases(snippet: SnippetInfo, query: string): string[] {
   const needle = query.trim();
   if (!needle) return [];
+
+  const exact = snippet.aliases.filter((alias) => alias === needle);
+  if (exact.length > 0) return exact;
 
   return snippet.aliases.filter((alias) => Number.isFinite(scoreText(alias, needle)));
 }
