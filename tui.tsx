@@ -378,28 +378,6 @@ function PromptWithSnippetAutocomplete(props: {
       props.api.renderer.requestRender();
     }, 175);
   };
-  const handlePromptSubmit = () => {
-    if (dialogBlockingInput()) {
-      return;
-    }
-
-    const ref = prompt();
-    if (ref && isReloadCommand(ref.current.input)) {
-      executeReloadInPrompt(
-        props.api,
-        ref,
-        () => {
-          syncPromptInput(ref, "");
-          setDismissed(undefined);
-        },
-        refreshSnippetOptions,
-      );
-      return;
-    }
-
-    props.onSubmit?.();
-  };
-
   const recordMouseMove = (x: number, y: number) => {
     const last = lastMousePos();
     if (last?.x === x && last.y === y) {
@@ -443,14 +421,6 @@ function PromptWithSnippetAutocomplete(props: {
     }));
 
     return [...snippetOptions, ...skillOptions];
-  };
-
-  const canCreateForQuery = (value: string) => {
-    const q = value.trim();
-    if (snippets.loading || skills.loading) return false;
-    if (!q) return false;
-    if (!normalizeSnippetName(q)) return false;
-    return optionsForQuery(q).length === 0;
   };
 
   const schedulePromptSync = () => {
@@ -623,82 +593,6 @@ function PromptWithSnippetAutocomplete(props: {
             );
           },
         },
-        {
-          title: "Accept snippet autocomplete",
-          value: "snippets.accept",
-          keybind: "input_submit",
-          category: "Prompt",
-          hidden: true,
-          enabled: ref.focused,
-          onSelect() {
-            if (isReloadCommand(ref.current.input)) {
-              executeReloadInPrompt(
-                props.api,
-                ref,
-                () => {
-                  syncPromptInput(ref, "");
-                  setDismissed(undefined);
-                },
-                refreshSnippetOptions,
-              );
-              return;
-            }
-
-            if (dialogBlockingInput()) {
-              return;
-            }
-
-            const current = findTrailingHashtagTrigger(ref.current.input);
-            if (!current || dismissed() === current.token) {
-              ref.submit();
-              return;
-            }
-
-            const live = optionsForQuery(current.query.trim());
-            const index = Math.min(selected(), Math.max(live.length - 1, 0));
-
-            if (syncingPrompt()) {
-              if (live.length > 0) {
-                chooseItem(live[index] ?? live[0]);
-                return;
-              }
-
-              if (canCreateForQuery(current.query)) {
-                void createSnippetDraft(current.query);
-                return;
-              }
-
-              ref.submit();
-              return;
-            }
-
-            // Prefer the rendered dropdown state so Enter follows what the user can see.
-            if (visible()) {
-              const rendered = options();
-              if (rendered.length > 0) {
-                const index = Math.min(selected(), rendered.length - 1);
-                chooseItem(rendered[index] ?? rendered[0]);
-                return;
-              }
-            }
-
-            if (snippets.loading || skills.loading) {
-              return;
-            }
-
-            if (live.length > 0) {
-              chooseItem(live[index] ?? live[0]);
-              return;
-            }
-
-            if (canCreateForQuery(current.query)) {
-              void createSnippetDraft(current.query);
-              return;
-            }
-
-            ref.submit();
-          },
-        },
       ]);
     }, 0);
 
@@ -706,6 +600,49 @@ function PromptWithSnippetAutocomplete(props: {
       clearTimeout(timer);
       dispose?.();
     });
+  });
+
+  createEffect(() => {
+    const ref = prompt();
+    if (!ref || dialogBlockingInput()) return;
+    if (!visible() && !isReloadCommand(ref.current.input)) return;
+
+    const dispose = props.api.command.register(() => [
+      {
+        title: "Accept snippet autocomplete",
+        value: "snippets.accept",
+        keybind: "input_submit",
+        category: "Prompt",
+        hidden: true,
+        enabled: ref.focused,
+        onSelect() {
+          if (isReloadCommand(ref.current.input)) {
+            executeReloadInPrompt(
+              props.api,
+              ref,
+              () => {
+                syncPromptInput(ref, "");
+                setDismissed(undefined);
+              },
+              refreshSnippetOptions,
+            );
+            return;
+          }
+
+          const total = options().length;
+          if (total > 0) {
+            choose(Math.min(selected(), total - 1));
+            return;
+          }
+
+          if (canCreate()) {
+            void createSnippetDraft();
+          }
+        },
+      },
+    ]);
+
+    onCleanup(dispose);
   });
 
   const createSnippetDraft = async (rawQuery?: string) => {
@@ -828,6 +765,18 @@ function PromptWithSnippetAutocomplete(props: {
     }
 
     if (name === "tab") {
+      if (!actionable) return;
+      if (total > 0) {
+        choose(selected());
+      } else if (canCreate()) {
+        void createSnippetDraft();
+      }
+      evt.preventDefault();
+      evt.stopPropagation();
+      return;
+    }
+
+    if (name === "return" || name === "enter") {
       if (!actionable) return;
       if (total > 0) {
         choose(selected());
@@ -990,7 +939,7 @@ function PromptWithSnippetAutocomplete(props: {
         workspaceID={props.workspaceID}
         visible={props.visible}
         disabled={props.disabled || dialogBlockingInput()}
-        onSubmit={handlePromptSubmit}
+        onSubmit={props.onSubmit}
         placeholders={props.placeholders}
         ref={bind}
         right={props.right}
