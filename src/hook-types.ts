@@ -3,6 +3,8 @@
  */
 
 export interface MessagePart {
+  id?: string;
+  messageID?: string;
   type: string;
   text?: string;
   ignored?: boolean;
@@ -18,7 +20,9 @@ export interface ChatMessageInput {
 
 export interface ChatMessageOutput {
   message: {
+    id?: string;
     role: string;
+    sessionID?: string;
   };
   parts: MessagePart[];
 }

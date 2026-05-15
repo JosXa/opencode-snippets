@@ -10,6 +10,35 @@ let tempDir: string;
 let projectSnippetDir: string;
 let projectSkillDir: string;
 
+type PromptCall = {
+  path: { id: string };
+  body: {
+    messageID?: string;
+    noReply?: boolean;
+    parts: Array<{ type: string; text?: string; ignored?: boolean }>;
+  };
+};
+
+type DeleteCall = {
+  url: string;
+  path: { id: string; messageID: string; partID?: string };
+};
+
+function createMockClient(
+  promptCalls: PromptCall[] = [],
+  messages: Array<{ info: Message; parts: Part[] }> = [],
+): PluginInput["client"] {
+  return {
+    session: {
+      prompt: async (input: PromptCall) => {
+        promptCalls.push(input);
+        return { data: undefined };
+      },
+      messages: async () => ({ data: messages }),
+    },
+  } as unknown as PluginInput["client"];
+}
+
 /** Mock OpenCode plugin context */
 function createMockContext(snippetsDir?: string): PluginInput {
   return {
@@ -32,13 +61,11 @@ function createMockContext(snippetsDir?: string): PluginInput {
 }
 
 /** Create a mock context that uses temp snippet directory */
-function createMockContextWithSnippets(): PluginInput {
+function createMockContextWithSnippets(
+  client: PluginInput["client"] = createMockClient(),
+): PluginInput {
   return {
-    client: {
-      session: {
-        prompt: async () => undefined,
-      },
-    } as unknown as PluginInput["client"],
+    client,
     project: {
       id: "test-project",
       worktree: join(tempDir, "project"),
@@ -54,6 +81,10 @@ function createMockContextWithSnippets(): PluginInput {
 
 function textOf(part: Part): string | undefined {
   return (part as { text?: string }).text;
+}
+
+async function waitForAsyncMarkers(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 10));
 }
 
 describe("SnippetsPlugin - Hook Integration", () => {
@@ -715,6 +746,466 @@ describe("SnippetsPlugin - Hook Integration", () => {
       expect((output.parts[0] as Part & { skillLoads?: string[] }).skillLoads?.[0]).toContain(
         '<skill_content name="caveman">',
       );
+    });
+  });
+
+  describe("experimental inject blocks", () => {
+    beforeEach(async () => {
+      tempDir = join(import.meta.dir, `.test-inject-blocks-${Date.now()}`);
+      projectSnippetDir = join(tempDir, "project", ".opencode", "snippet");
+      await mkdir(projectSnippetDir, { recursive: true });
+
+      await writeFile(
+        join(projectSnippetDir, "config.jsonc"),
+        JSON.stringify({ experimental: { injectBlocks: true } }),
+      );
+      await writeFile(
+        join(projectSnippetDir, "autonomous.md"),
+        "autonomously\n<inject>\nHidden autonomous reminder\n</inject>",
+      );
+    });
+
+    afterEach(async () => {
+      await rm(tempDir, { recursive: true, force: true });
+    });
+
+    it("should render the visible injected marker at the hidden injection position", async () => {
+      const promptCalls: PromptCall[] = [];
+      const persistedMessages = [
+        {
+          info: {
+            id: "msg_000000000001zzzzzzzzzzzzzz",
+            role: "user",
+            sessionID: "test-session",
+          } as Message,
+          parts: [{ type: "text", text: "First" }] as Part[],
+        },
+        {
+          info: {
+            id: "msg_000000000002zzzzzzzzzzzzzz",
+            role: "assistant",
+            sessionID: "test-session",
+          } as Message,
+          parts: [{ type: "text", text: "Second" }] as Part[],
+        },
+        {
+          info: { role: "user", sessionID: "test-session" } as Message,
+          parts: [{ type: "text", text: "Third" }] as Part[],
+        },
+        {
+          info: { role: "assistant", sessionID: "test-session" } as Message,
+          parts: [{ type: "text", text: "Fourth" }] as Part[],
+        },
+        {
+          info: { role: "user", sessionID: "test-session" } as Message,
+          parts: [{ type: "text", text: "Fifth" }] as Part[],
+        },
+      ];
+      const ctx = createMockContextWithSnippets(createMockClient(promptCalls, persistedMessages));
+      const hooks = await SnippetsPlugin(ctx);
+
+      const chatOutput = {
+        message: {
+          id: "msg_000000000006zzzzzzzzzzzzzz",
+          role: "user",
+          content: "Test",
+        } as unknown as UserMessage,
+        parts: [{ type: "text", text: "Say ok. #autonomous" }] as Part[],
+      };
+
+      await hooks["chat.message"]?.(
+        {
+          sessionID: "test-session",
+          messageID: "message-3",
+        },
+        chatOutput,
+      );
+      expect(promptCalls).toHaveLength(0);
+      await waitForAsyncMarkers();
+
+      const output = {
+        messages: [
+          ...persistedMessages,
+          {
+            info: {
+              id: "msg_000000000006zzzzzzzzzzzzzz",
+              role: "user",
+              sessionID: "test-session",
+            } as Message,
+            parts: chatOutput.parts,
+          },
+        ],
+      };
+
+      await hooks["experimental.chat.messages.transform"]?.({ sessionID: "test-session" }, output);
+
+      expect(output.messages).toHaveLength(7);
+      expect(textOf(output.messages[0].parts[0])).toBe("First");
+      expect(textOf(output.messages[1].parts[0])).toBe("Hidden autonomous reminder");
+      expect((output.messages[1].parts[0] as Part & { ignored?: boolean }).ignored).toBeUndefined();
+      expect(textOf(output.messages[6].parts[0])).toBe("Say ok. autonomously");
+      expect(promptCalls).toHaveLength(1);
+      expect(promptCalls[0].path.id).toBe("test-session");
+      expect(promptCalls[0].body.messageID).toBe("msg_000000000001zzzzzzzzzzz001");
+      expect(promptCalls[0].body.noReply).toBe(true);
+      expect(promptCalls[0].body.parts[0]).toEqual({
+        type: "text",
+        text: "↳ Injected autonomous",
+        ignored: true,
+      });
+    });
+
+    it("should move the visible injected marker when the configured recency position changes", async () => {
+      await writeFile(
+        join(projectSnippetDir, "config.jsonc"),
+        JSON.stringify({ experimental: { injectBlocks: true }, injectRecencyMessages: 3 }),
+      );
+
+      const originalFetch = globalThis.fetch;
+      const deletedUrls: string[] = [];
+      const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "DELETE") {
+          deletedUrls.push(String(input));
+        }
+        return new Response(null, { status: 200 });
+      };
+      globalThis.fetch = mockFetch as typeof fetch;
+
+      try {
+        const promptCalls: PromptCall[] = [];
+        const persistedMessages: Array<{ info: Message; parts: Part[] }> = [
+          {
+            info: {
+              id: "msg_000000000001zzzzzzzzzzzzzz",
+              role: "user",
+              sessionID: "test-session",
+            } as Message,
+            parts: [{ type: "text", text: "First" }] as Part[],
+          },
+          {
+            info: {
+              id: "msg_000000000002zzzzzzzzzzzzzz",
+              role: "assistant",
+              sessionID: "test-session",
+            } as Message,
+            parts: [{ type: "text", text: "Second" }] as Part[],
+          },
+          {
+            info: {
+              id: "msg_000000000003zzzzzzzzzzzzzz",
+              role: "user",
+              sessionID: "test-session",
+            } as Message,
+            parts: [{ type: "text", text: "Third" }] as Part[],
+          },
+          {
+            info: {
+              id: "msg_000000000004zzzzzzzzzzzzzz",
+              role: "assistant",
+              sessionID: "test-session",
+            } as Message,
+            parts: [{ type: "text", text: "Fourth" }] as Part[],
+          },
+          {
+            info: {
+              id: "msg_000000000005zzzzzzzzzzzzzz",
+              role: "user",
+              sessionID: "test-session",
+            } as Message,
+            parts: [{ type: "text", text: "Fifth" }] as Part[],
+          },
+        ];
+        const ctx = createMockContextWithSnippets(createMockClient(promptCalls, persistedMessages));
+        const hooks = await SnippetsPlugin(ctx);
+
+        const firstOutput = {
+          message: {
+            id: "msg_000000000006zzzzzzzzzzzzzz",
+            role: "user",
+            content: "Test",
+          } as unknown as UserMessage,
+          parts: [{ type: "text", text: "Say ok. #autonomous" }] as Part[],
+        };
+
+        await hooks["chat.message"]?.(
+          {
+            sessionID: "test-session",
+            messageID: "msg_000000000006zzzzzzzzzzzzzz",
+          },
+          firstOutput,
+        );
+        await waitForAsyncMarkers();
+
+        expect(promptCalls[0].body.messageID).toBe("msg_000000000003zzzzzzzzzzz001");
+
+        persistedMessages.push(
+          {
+            info: {
+              id: "msg_000000000003zzzzzzzzzzz001",
+              role: "user",
+              sessionID: "test-session",
+            } as Message,
+            parts: [{ type: "text", text: "↳ Injected autonomous", ignored: true }] as Part[],
+          },
+          {
+            info: {
+              id: "msg_000000000006zzzzzzzzzzzzzz",
+              role: "user",
+              sessionID: "test-session",
+            } as Message,
+            parts: firstOutput.parts,
+          },
+          {
+            info: {
+              id: "msg_000000000007zzzzzzzzzzzzzz",
+              role: "assistant",
+              sessionID: "test-session",
+            } as Message,
+            parts: [{ type: "text", text: "Sixth" }] as Part[],
+          },
+          {
+            info: {
+              id: "msg_000000000008zzzzzzzzzzzzzz",
+              role: "user",
+              sessionID: "test-session",
+            } as Message,
+            parts: [{ type: "text", text: "Seventh" }] as Part[],
+          },
+          {
+            info: {
+              id: "msg_000000000009zzzzzzzzzzzzzz",
+              role: "assistant",
+              sessionID: "test-session",
+            } as Message,
+            parts: [{ type: "text", text: "Eighth" }] as Part[],
+          },
+        );
+
+        await hooks["chat.message"]?.(
+          {
+            sessionID: "test-session",
+            messageID: "msg_00000000000azzzzzzzzzzzzzz",
+          },
+          {
+            message: {
+              id: "msg_00000000000azzzzzzzzzzzzzz",
+              role: "user",
+              content: "Test",
+            } as unknown as UserMessage,
+            parts: [{ type: "text", text: "Continue" }] as Part[],
+          },
+        );
+        await waitForAsyncMarkers();
+
+        expect(promptCalls).toHaveLength(2);
+        expect(promptCalls[1].body.messageID).toBe("msg_000000000007zzzzzzzzzzz001");
+        expect(deletedUrls[0]).toContain("msg_000000000003zzzzzzzzzzz001");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("should not create a duplicate marker when stale marker deletion fails", async () => {
+      await writeFile(
+        join(projectSnippetDir, "config.jsonc"),
+        JSON.stringify({ experimental: { injectBlocks: true }, injectRecencyMessages: 3 }),
+      );
+
+      const originalFetch = globalThis.fetch;
+      const deletedUrls: string[] = [];
+      const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "DELETE") {
+          deletedUrls.push(String(input));
+        }
+        return new Response(null, { status: 500 });
+      };
+      globalThis.fetch = mockFetch as typeof fetch;
+
+      try {
+        const promptCalls: PromptCall[] = [];
+        const persistedMessages: Array<{ info: Message; parts: Part[] }> = [
+          {
+            info: { id: "msg_000000000001zzzzzzzzzzzzzz", role: "user" } as Message,
+            parts: [{ type: "text", text: "First" }] as Part[],
+          },
+          {
+            info: { id: "msg_000000000002zzzzzzzzzzzzzz", role: "assistant" } as Message,
+            parts: [{ type: "text", text: "Second" }] as Part[],
+          },
+          {
+            info: { id: "msg_000000000003zzzzzzzzzzzzzz", role: "user" } as Message,
+            parts: [{ type: "text", text: "Third" }] as Part[],
+          },
+          {
+            info: { id: "msg_000000000004zzzzzzzzzzzzzz", role: "assistant" } as Message,
+            parts: [{ type: "text", text: "Fourth" }] as Part[],
+          },
+          {
+            info: { id: "msg_000000000005zzzzzzzzzzzzzz", role: "user" } as Message,
+            parts: [{ type: "text", text: "Fifth" }] as Part[],
+          },
+        ];
+        const ctx = createMockContextWithSnippets(createMockClient(promptCalls, persistedMessages));
+        const hooks = await SnippetsPlugin(ctx);
+
+        const firstOutput = {
+          message: { id: "msg_000000000006zzzzzzzzzzzzzz", role: "user" } as UserMessage,
+          parts: [{ type: "text", text: "Say ok. #autonomous" }] as Part[],
+        };
+
+        await hooks["chat.message"]?.({ sessionID: "test-session" }, firstOutput);
+        await waitForAsyncMarkers();
+
+        expect(promptCalls).toHaveLength(1);
+        expect(promptCalls[0].body.messageID).toBe("msg_000000000003zzzzzzzzzzz001");
+
+        persistedMessages.push(
+          {
+            info: { id: "msg_000000000003zzzzzzzzzzz001", role: "user" } as Message,
+            parts: [{ type: "text", text: "↳ Injected autonomous", ignored: true }] as Part[],
+          },
+          {
+            info: { id: "msg_000000000006zzzzzzzzzzzzzz", role: "user" } as Message,
+            parts: firstOutput.parts,
+          },
+          {
+            info: { id: "msg_000000000007zzzzzzzzzzzzzz", role: "assistant" } as Message,
+            parts: [{ type: "text", text: "Sixth" }] as Part[],
+          },
+          {
+            info: { id: "msg_000000000008zzzzzzzzzzzzzz", role: "user" } as Message,
+            parts: [{ type: "text", text: "Seventh" }] as Part[],
+          },
+          {
+            info: { id: "msg_000000000009zzzzzzzzzzzzzz", role: "assistant" } as Message,
+            parts: [{ type: "text", text: "Eighth" }] as Part[],
+          },
+        );
+
+        await hooks["chat.message"]?.(
+          { sessionID: "test-session" },
+          {
+            message: { id: "msg_00000000000azzzzzzzzzzzzzz", role: "user" } as UserMessage,
+            parts: [{ type: "text", text: "Continue" }] as Part[],
+          },
+        );
+        await waitForAsyncMarkers();
+
+        expect(deletedUrls[0]).toContain("msg_000000000003zzzzzzzzzzz001");
+        expect(promptCalls).toHaveLength(1);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("should delete stale marker parts before moving the visible marker", async () => {
+      await writeFile(
+        join(projectSnippetDir, "config.jsonc"),
+        JSON.stringify({ experimental: { injectBlocks: true }, injectRecencyMessages: 3 }),
+      );
+
+      const promptCalls: PromptCall[] = [];
+      const deleteCalls: DeleteCall[] = [];
+      const persistedMessages: Array<{ info: Message; parts: Part[] }> = [
+        {
+          info: { id: "msg_000000000001zzzzzzzzzzzzzz", role: "user" } as Message,
+          parts: [{ type: "text", text: "First" }] as Part[],
+        },
+        {
+          info: { id: "msg_000000000002zzzzzzzzzzzzzz", role: "assistant" } as Message,
+          parts: [{ type: "text", text: "Second" }] as Part[],
+        },
+        {
+          info: { id: "msg_000000000003zzzzzzzzzzzzzz", role: "user" } as Message,
+          parts: [{ type: "text", text: "Third" }] as Part[],
+        },
+        {
+          info: { id: "msg_000000000004zzzzzzzzzzzzzz", role: "assistant" } as Message,
+          parts: [{ type: "text", text: "Fourth" }] as Part[],
+        },
+        {
+          info: { id: "msg_000000000005zzzzzzzzzzzzzz", role: "user" } as Message,
+          parts: [{ type: "text", text: "Fifth" }] as Part[],
+        },
+      ];
+      const client = createMockClient(promptCalls, persistedMessages);
+      (
+        client.session as unknown as {
+          _client: { delete: (input: DeleteCall) => Promise<{ data: true }> };
+        }
+      )._client = {
+        delete: async (input) => {
+          deleteCalls.push(input);
+          return { data: true };
+        },
+      };
+      const ctx = createMockContextWithSnippets(client);
+      const hooks = await SnippetsPlugin(ctx);
+
+      const firstOutput = {
+        message: { id: "msg_000000000006zzzzzzzzzzzzzz", role: "user" } as UserMessage,
+        parts: [{ type: "text", text: "Say ok. #autonomous" }] as Part[],
+      };
+
+      await hooks["chat.message"]?.({ sessionID: "test-session" }, firstOutput);
+      await waitForAsyncMarkers();
+
+      const oldMarkerId = "msg_000000000003zzzzzzzzzzz001";
+      expect(promptCalls).toHaveLength(1);
+      expect(promptCalls[0].body.messageID).toBe(oldMarkerId);
+
+      persistedMessages.push(
+        {
+          info: { id: oldMarkerId, role: "user" } as Message,
+          parts: [
+            {
+              id: "prt_marker_text",
+              messageID: oldMarkerId,
+              type: "text",
+              text: "↳ Injected autonomous",
+              ignored: true,
+            },
+          ] as Part[],
+        },
+        {
+          info: { id: "msg_000000000006zzzzzzzzzzzzzz", role: "user" } as Message,
+          parts: firstOutput.parts,
+        },
+        {
+          info: { id: "msg_000000000007zzzzzzzzzzzzzz", role: "assistant" } as Message,
+          parts: [{ type: "text", text: "Sixth" }] as Part[],
+        },
+        {
+          info: { id: "msg_000000000008zzzzzzzzzzzzzz", role: "user" } as Message,
+          parts: [{ type: "text", text: "Seventh" }] as Part[],
+        },
+        {
+          info: { id: "msg_000000000009zzzzzzzzzzzzzz", role: "assistant" } as Message,
+          parts: [{ type: "text", text: "Eighth" }] as Part[],
+        },
+      );
+
+      await hooks["chat.message"]?.(
+        { sessionID: "test-session" },
+        {
+          message: { id: "msg_00000000000azzzzzzzzzzzzzz", role: "user" } as UserMessage,
+          parts: [{ type: "text", text: "Continue" }] as Part[],
+        },
+      );
+      await waitForAsyncMarkers();
+
+      expect(deleteCalls).toEqual([
+        {
+          url: "/session/{id}/message/{messageID}/part/{partID}",
+          path: { id: "test-session", messageID: oldMarkerId, partID: "prt_marker_text" },
+        },
+        {
+          url: "/session/{id}/message/{messageID}",
+          path: { id: "test-session", messageID: oldMarkerId },
+        },
+      ]);
+      expect(promptCalls).toHaveLength(2);
+      expect(promptCalls[1].body.messageID).toBe("msg_000000000007zzzzzzzzzzz001");
     });
   });
 

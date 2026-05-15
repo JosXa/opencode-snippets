@@ -17,7 +17,7 @@ import type {
 import { InjectionManager } from "./src/injection-manager.js";
 import { loadSnippets } from "./src/loader.js";
 import { logger } from "./src/logger.js";
-import { sendIgnoredMessage } from "./src/notification.js";
+import { deleteSessionMessage, deleteSessionPart, sendIgnoredMessage } from "./src/notification.js";
 import { refreshPendingDraftsForText } from "./src/pending-drafts.js";
 import { consumeSnippetReloadRequest } from "./src/reload-signal.js";
 import { executeShellCommands, type ShellContext } from "./src/shell.js";
@@ -30,6 +30,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PLUGIN_ROOT = join(__dirname, "..");
 const SKILL_DIR = join(PLUGIN_ROOT, "skill");
+const MARKER_ID_RANDOM_FILL = "0000000000";
 
 /**
  * Clean up legacy skill installation from pre-v1.7.0
@@ -106,6 +107,8 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
 
   const injectionManager = new InjectionManager();
   const skillLoadManager = new SkillLoadManager();
+  const injectionMarkerIdsBySession = new Map<string, Set<string>>();
+  const injectionMarkerRenderQueueBySession = new Map<string, Promise<void>>();
 
   /**
    * Processes text parts for snippet expansion, skill rendering, and shell command execution.
@@ -220,30 +223,201 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
       (part) => part.type === "text" && (part.text || "").includes("<skill_content name="),
     );
 
+  const isInjectionMarkerMessage = (message: TransformOutput["messages"][number]): boolean =>
+    isIgnoredMessage(message) &&
+    message.parts.some((part) => part.type === "text" && part.text?.startsWith("↳ Injected "));
+
+  const injectionMarkerPartIdsByMessage = (
+    messages: TransformOutput["messages"],
+  ): Map<string, string[]> => {
+    const ids = new Map<string, string[]>();
+
+    for (const message of messages) {
+      if (!message.info.id || !isInjectionMarkerMessage(message)) continue;
+
+      const partIds = message.parts
+        .filter((part) => part.type === "text" && part.text?.startsWith("↳ Injected "))
+        .map((part) => part.id)
+        .filter((id): id is string => !!id);
+      if (partIds.length > 0) ids.set(message.info.id, partIds);
+    }
+
+    return ids;
+  };
+
   const countConversationMessages = (messages: TransformOutput["messages"]): number =>
     messages.filter((message) => !isIgnoredMessage(message)).length;
 
+  const messageIdPrefix = (messageId: string): string | undefined => {
+    const match = /^msg_([0-9a-f]{12})/.exec(messageId);
+    return match?.[1];
+  };
+
+  const markerSuffix = (targetPosition: number, index: number): string => {
+    const suffix = `000${(index + 1).toString(36)}`.slice(-3);
+    if (targetPosition === 0) return `${MARKER_ID_RANDOM_FILL}${suffix}`;
+    return `zzzzzzzzzzz${suffix}`;
+  };
+
+  const buildMarkerMessageId = (
+    messages: TransformOutput["messages"],
+    targetPosition: number,
+    index: number,
+  ): string | undefined => {
+    const realMessages = messages.filter((message) => !isIgnoredMessage(message));
+    const pivot = realMessages[Math.max(0, Math.min(realMessages.length - 1, targetPosition - 1))];
+    if (!pivot?.info.id) return undefined;
+
+    const prefix = messageIdPrefix(pivot.info.id);
+    if (!prefix) return undefined;
+
+    return `msg_${prefix}${markerSuffix(targetPosition, index)}`;
+  };
+
+  const getPersistedMessages = async (sessionID: string): Promise<TransformOutput["messages"]> => {
+    try {
+      const response = await ctx.client.session.messages({ path: { id: sessionID } });
+      return (response.data || []).map((message) => ({
+        info: message.info,
+        parts: message.parts,
+      })) as TransformOutput["messages"];
+    } catch (error) {
+      logger.debug("Failed to load session messages for injection markers", {
+        sessionID,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
+  };
+
+  const renderInjectionMarkers = async (
+    sessionID: string,
+    messages: TransformOutput["messages"],
+    injections: Array<{ targetPosition: number; snippetName: string }>,
+  ): Promise<void> => {
+    if (injections.length === 0) return;
+
+    const next = new Set<string>();
+    const pending: Array<{ id: string; text: string }> = [];
+
+    injections.forEach((injection, index) => {
+      const id = buildMarkerMessageId(messages, injection.targetPosition, index);
+      if (!id) return;
+
+      next.add(id);
+      pending.push({ id, text: `↳ Injected ${injection.snippetName}` });
+    });
+
+    const persistedMarkerIds = messages
+      .filter(isInjectionMarkerMessage)
+      .map((message) => message.info.id)
+      .filter((id): id is string => !!id);
+    const persistedMarkerPartIds = injectionMarkerPartIdsByMessage(messages);
+    const previous = new Set([
+      ...persistedMarkerIds,
+      ...(injectionMarkerIdsBySession.get(sessionID) || []),
+    ]);
+    const kept = new Set<string>();
+    const current = new Set<string>();
+
+    logger.debug("Rendering injection markers", {
+      sessionID,
+      messageCount: countConversationMessages(messages),
+      injectionCount: injections.length,
+      nextMarkerIds: [...next],
+      persistedMarkerIds,
+      persistedMarkerPartIds: Object.fromEntries(persistedMarkerPartIds),
+      previousMarkerIds: [...previous],
+    });
+
+    for (const id of previous) {
+      if (!next.has(id)) {
+        let deleted = true;
+        for (const partId of persistedMarkerPartIds.get(id) || []) {
+          const partDeleted = await deleteSessionPart(
+            ctx.client,
+            ctx.serverUrl,
+            sessionID,
+            id,
+            partId,
+          );
+          if (!partDeleted) deleted = false;
+        }
+
+        const messageDeleted = await deleteSessionMessage(ctx.client, ctx.serverUrl, sessionID, id);
+        if (!messageDeleted) deleted = false;
+        if (!deleted) kept.add(id);
+      }
+    }
+
+    if (kept.size > 0) {
+      logger.debug("Skipping injection marker creation until stale markers delete", {
+        sessionID,
+        keptMarkerIds: [...kept],
+        nextMarkerIds: [...next],
+      });
+      injectionMarkerIdsBySession.set(sessionID, kept);
+      return;
+    }
+
+    for (const marker of pending) {
+      current.add(marker.id);
+      if (!previous.has(marker.id)) {
+        await sendIgnoredMessage(ctx.client, sessionID, marker.text, marker.id);
+      }
+    }
+
+    injectionMarkerIdsBySession.set(sessionID, current);
+  };
+
+  const scheduleInjectionMarkerRender = (
+    sessionID: string,
+    messages: TransformOutput["messages"],
+    injections: Array<{ targetPosition: number; snippetName: string }>,
+  ): void => {
+    const previous = injectionMarkerRenderQueueBySession.get(sessionID) || Promise.resolve();
+    const next = previous
+      .catch(() => undefined)
+      .then(
+        () =>
+          new Promise<void>((resolve) => {
+            // User requirement: marker maintenance must not block the real prompt.
+            setTimeout(() => {
+              renderInjectionMarkers(sessionID, messages, injections).then(resolve, (error) => {
+                logger.debug("Failed to render injection markers", {
+                  sessionID,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+                resolve();
+              });
+            }, 0);
+          }),
+      );
+
+    injectionMarkerRenderQueueBySession.set(sessionID, next);
+  };
+
   const insertInjectionsIntoMessages = (
     messages: TransformOutput["messages"],
-    injections: Array<{ targetPosition: number; content: string }>,
+    injections: Array<{ targetPosition: number; snippetName: string; content: string }>,
   ): TransformOutput["messages"] => {
     if (injections.length === 0) return messages;
 
     const totalRealMessages = countConversationMessages(messages);
-    const buckets = new Map<number, string[]>();
+    const buckets = new Map<number, Array<{ snippetName: string; content: string }>>();
     for (const injection of injections) {
       const position = Math.max(0, Math.min(totalRealMessages, injection.targetPosition));
       const existing = buckets.get(position) || [];
-      existing.push(injection.content);
+      existing.push(injection);
       buckets.set(position, existing);
     }
 
     const result: TransformOutput["messages"] = [];
     const prepend = buckets.get(0) || [];
-    for (const text of prepend) {
+    for (const injection of prepend) {
       result.push({
         info: { role: "user" },
-        parts: [{ type: "text", text }],
+        parts: [{ type: "text", text: injection.content }],
       });
     }
 
@@ -252,11 +426,11 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
       result.push(message);
       if (isIgnoredMessage(message)) return;
       seenRealMessages += 1;
-      const texts = buckets.get(seenRealMessages) || [];
-      for (const text of texts) {
+      const positioned = buckets.get(seenRealMessages) || [];
+      for (const injection of positioned) {
         result.push({
           info: { role: "user", sessionID: message.info.sessionID },
-          parts: [{ type: "text", text }],
+          parts: [{ type: "text", text: injection.content }],
         });
       }
     });
@@ -534,16 +708,26 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         }
       }
 
-      if (injected.length > 0) {
-        const newOnes = injectionManager.registerAndGetNew(input.sessionID, injected);
-        if (newOnes.length > 0) {
-          const snippetNames = [...new Set(newOnes.map((i) => i.snippetName))];
-          await sendIgnoredMessage(
-            ctx.client,
-            input.sessionID,
-            snippetNames.map((name) => `↳ Injected #${name}`).join("\n"),
-          );
-        }
+      injectionManager.registerAndGetNew(input.sessionID, injected);
+
+      if (config.experimental.injectBlocks) {
+        const persisted = await getPersistedMessages(input.sessionID);
+        const current = {
+          info: {
+            id: output.message.id,
+            role: output.message.role,
+            sessionID: output.message.sessionID || input.sessionID,
+          },
+          parts: output.parts,
+        };
+        const messages = [...persisted, current];
+        const messageCount = countConversationMessages(messages);
+        const { injections } = injectionManager.getRenderableInjections(
+          input.sessionID,
+          messageCount,
+          config.injectRecencyMessages,
+        );
+        scheduleInjectionMarkerRender(input.sessionID, messages, injections);
       }
     },
 
@@ -569,15 +753,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
           const injected = await processTextParts(message.parts);
 
           if (injected.length > 0 && sessionID) {
-            const newOnes = injectionManager.registerAndGetNew(sessionID, injected);
-            if (newOnes.length > 0) {
-              const snippetNames = [...new Set(newOnes.map((i) => i.snippetName))];
-              await sendIgnoredMessage(
-                ctx.client,
-                sessionID,
-                snippetNames.map((name) => `↳ Injected #${name}`).join("\n"),
-              );
-            }
+            injectionManager.registerAndGetNew(sessionID, injected);
           }
 
           if (sessionID && message.info.id) {

@@ -7,7 +7,7 @@ import type {
   TuiPromptInfo,
   TuiPromptRef,
 } from "@opencode-ai/plugin/tui";
-import { RGBA, type ScrollBoxRenderable } from "@opentui/core";
+import { type KeyEvent, RGBA, type ScrollBoxRenderable } from "@opentui/core";
 import { useKeyboard } from "@opentui/solid";
 import {
   createEffect,
@@ -16,6 +16,7 @@ import {
   createSignal,
   Index,
   onCleanup,
+  onMount,
   Show,
 } from "solid-js";
 import { CONFIG } from "./src/constants.js";
@@ -237,6 +238,20 @@ function toPromptInfo(prompt: TuiPromptRef, input: string): TuiPromptInfo {
 
 function setPromptInput(prompt: TuiPromptRef, input: string): void {
   prompt.set(toPromptInfo(prompt, input));
+}
+
+function isSubmitKey(evt: { name: string; raw?: string; sequence?: string }): boolean {
+  return (
+    evt.name === "return" ||
+    evt.name === "linefeed" ||
+    evt.name === "enter" ||
+    evt.raw === "\r" ||
+    evt.raw === "\n" ||
+    evt.sequence === "\r" ||
+    evt.sequence === "\n" ||
+    evt.raw === "\x1bOM" ||
+    evt.sequence === "\x1bOM"
+  );
 }
 
 async function getSnippets(api: TuiPluginApi): Promise<SnippetInfo[]> {
@@ -602,49 +617,6 @@ function PromptWithSnippetAutocomplete(props: {
     });
   });
 
-  createEffect(() => {
-    const ref = prompt();
-    if (!ref || dialogBlockingInput()) return;
-    if (!visible() && !isReloadCommand(ref.current.input)) return;
-
-    const dispose = props.api.command.register(() => [
-      {
-        title: "Accept snippet autocomplete",
-        value: "snippets.accept",
-        keybind: "input_submit",
-        category: "Prompt",
-        hidden: true,
-        enabled: ref.focused,
-        onSelect() {
-          if (isReloadCommand(ref.current.input)) {
-            executeReloadInPrompt(
-              props.api,
-              ref,
-              () => {
-                syncPromptInput(ref, "");
-                setDismissed(undefined);
-              },
-              refreshSnippetOptions,
-            );
-            return;
-          }
-
-          const total = options().length;
-          if (total > 0) {
-            choose(Math.min(selected(), total - 1));
-            return;
-          }
-
-          if (canCreate()) {
-            void createSnippetDraft();
-          }
-        },
-      },
-    ]);
-
-    onCleanup(dispose);
-  });
-
   const createSnippetDraft = async (rawQuery?: string) => {
     const ref = prompt();
     const name = normalizeSnippetName(rawQuery ?? query());
@@ -708,6 +680,35 @@ function PromptWithSnippetAutocomplete(props: {
     ));
   };
 
+  const acceptVisibleAutocomplete = () => {
+    const total = options().length;
+    const actionable = total > 0 || canCreate();
+    if (!visible() || !actionable) return false;
+
+    if (total > 0) {
+      choose(selected());
+    } else if (canCreate()) {
+      void createSnippetDraft();
+    }
+
+    return true;
+  };
+
+  onMount(() => {
+    const submitAutocomplete = (evt: KeyEvent) => {
+      if (!isSubmitKey(evt)) return;
+      if (dialogBlockingInput()) return;
+      if (!acceptVisibleAutocomplete()) return;
+      evt.preventDefault();
+      evt.stopPropagation();
+    };
+
+    props.api.renderer.keyInput.prependListener("keypress", submitAutocomplete);
+    onCleanup(() => {
+      props.api.renderer.keyInput.removeListener("keypress", submitAutocomplete);
+    });
+  });
+
   useKeyboard((evt) => {
     const ref = prompt();
     const name = evt.name?.toLowerCase();
@@ -764,25 +765,8 @@ function PromptWithSnippetAutocomplete(props: {
       return;
     }
 
-    if (name === "tab") {
-      if (!actionable) return;
-      if (total > 0) {
-        choose(selected());
-      } else if (canCreate()) {
-        void createSnippetDraft();
-      }
-      evt.preventDefault();
-      evt.stopPropagation();
-      return;
-    }
-
-    if (name === "return" || name === "enter") {
-      if (!actionable) return;
-      if (total > 0) {
-        choose(selected());
-      } else if (canCreate()) {
-        void createSnippetDraft();
-      }
+    if (name === "tab" || name === "return" || name === "linefeed" || name === "enter") {
+      if (!acceptVisibleAutocomplete()) return;
       evt.preventDefault();
       evt.stopPropagation();
       return;
