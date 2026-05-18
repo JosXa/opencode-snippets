@@ -1,44 +1,27 @@
-import { access, mkdir, readdir, unlink } from "node:fs/promises";
+import { mkdir, readdir, unlink } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { importCjs } from "./cjs-interop.js";
 
 const matter = await importCjs<typeof import("gray-matter")>("gray-matter");
 
-import { CONFIG, getProjectPaths, PATHS } from "./constants.js";
+import { CONFIG, GLOBAL_PATHS, getProjectPaths } from "./constants.js";
 import { logger } from "./logger.js";
 import type { SnippetFrontmatter, SnippetInfo, SnippetRegistry } from "./types.js";
 
 function getGlobalSnippetDirs(globalDir?: string): string[] {
   if (globalDir) return [globalDir];
 
-  return [PATHS.SNIPPETS_DIR_ALT, PATHS.SNIPPETS_DIR];
+  return [GLOBAL_PATHS.SNIPPETS_DIR_ALT, GLOBAL_PATHS.SNIPPETS_DIR_PREFERRED];
 }
 
 function getProjectSnippetDirs(projectDir: string): string[] {
   const paths = getProjectPaths(projectDir);
-  return [paths.SNIPPETS_DIR_ALT, paths.SNIPPETS_DIR];
-}
-
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
+  return [paths.SNIPPETS_DIR_ALT, paths.SNIPPETS_DIR_PREFERRED];
 }
 
 async function resolveWritableSnippetDir(projectDir?: string): Promise<string> {
-  const paths = projectDir
-    ? getProjectPaths(projectDir)
-    : { SNIPPETS_DIR: PATHS.SNIPPETS_DIR, SNIPPETS_DIR_ALT: PATHS.SNIPPETS_DIR_ALT };
-
-  // Support both snippet/ and snippets/. Reuse an existing directory first, then default to snippet/.
-  for (const dir of [paths.SNIPPETS_DIR, paths.SNIPPETS_DIR_ALT]) {
-    if (await pathExists(dir)) return dir;
-  }
-
-  return paths.SNIPPETS_DIR;
+  if (projectDir) return getProjectPaths(projectDir).ACTIVE_SNIPPETS_DIR;
+  return GLOBAL_PATHS.ACTIVE_SNIPPETS_DIR;
 }
 
 /**
@@ -265,7 +248,7 @@ export async function deleteSnippet(name: string, projectDir?: string): Promise<
   // Try project directory first if provided
   if (projectDir) {
     const paths = getProjectPaths(projectDir);
-    for (const dir of [paths.SNIPPETS_DIR, paths.SNIPPETS_DIR_ALT]) {
+    for (const dir of [paths.SNIPPETS_DIR_PREFERRED, paths.SNIPPETS_DIR_ALT]) {
       const filePath = join(dir, `${name}${CONFIG.SNIPPET_EXTENSION}`);
       try {
         await unlink(filePath);
@@ -278,7 +261,7 @@ export async function deleteSnippet(name: string, projectDir?: string): Promise<
   }
 
   // Try global directory
-  for (const dir of [PATHS.SNIPPETS_DIR, PATHS.SNIPPETS_DIR_ALT]) {
+  for (const dir of [GLOBAL_PATHS.SNIPPETS_DIR_PREFERRED, GLOBAL_PATHS.SNIPPETS_DIR_ALT]) {
     const filePath = join(dir, `${name}${CONFIG.SNIPPET_EXTENSION}`);
     try {
       await unlink(filePath);

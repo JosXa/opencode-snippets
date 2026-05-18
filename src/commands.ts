@@ -1,5 +1,5 @@
 import { parseCommandArgs } from "./arg-parser.js";
-import { getProjectPaths, PATHS } from "./constants.js";
+import { GLOBAL_PATHS, getProjectPaths } from "./constants.js";
 import { createSnippet, deleteSnippet, listSnippets, reloadSnippets } from "./loader.js";
 import { logger } from "./logger.js";
 import { sendIgnoredMessage } from "./notification.js";
@@ -352,12 +352,12 @@ function formatAliases(aliases: string[]): string {
 }
 
 function globalSnippetLocations(): string {
-  return `${PATHS.SNIPPETS_DIR}/ or ${PATHS.SNIPPETS_DIR_ALT}/`;
+  return `${GLOBAL_PATHS.SNIPPETS_DIR_PREFERRED}/ or ${GLOBAL_PATHS.SNIPPETS_DIR_ALT}/`;
 }
 
 function projectSnippetLocations(projectDir: string): string {
   const paths = getProjectPaths(projectDir);
-  return `${paths.SNIPPETS_DIR}/ or ${paths.SNIPPETS_DIR_ALT}/`;
+  return `${paths.SNIPPETS_DIR_PREFERRED}/ or ${paths.SNIPPETS_DIR_ALT}/`;
 }
 
 /**
