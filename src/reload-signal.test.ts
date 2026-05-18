@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { PATHS } from "../src/constants.js";
+import { GLOBAL_PATHS } from "../src/constants.js";
 import { consumeSnippetReloadRequest, markSnippetReloadRequested } from "../src/reload-signal.js";
 
 describe("snippet reload signal", () => {
   let tempDir: string;
-  const originalConfigDir = PATHS.CONFIG_DIR;
+  const originalConfigDir = GLOBAL_PATHS.CONFIG_DIR;
 
   beforeEach(async () => {
     tempDir = join(process.cwd(), ".test-reload-signal");
     await mkdir(tempDir, { recursive: true });
 
-    Object.defineProperty(PATHS, "CONFIG_DIR", {
+    Object.defineProperty(GLOBAL_PATHS, "CONFIG_DIR", {
       value: tempDir,
       writable: true,
       configurable: true,
@@ -20,7 +20,7 @@ describe("snippet reload signal", () => {
   });
 
   afterEach(async () => {
-    Object.defineProperty(PATHS, "CONFIG_DIR", {
+    Object.defineProperty(GLOBAL_PATHS, "CONFIG_DIR", {
       value: originalConfigDir,
       writable: true,
       configurable: true,

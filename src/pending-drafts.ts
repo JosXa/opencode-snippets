@@ -1,13 +1,13 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { PATHS, PATTERNS } from "./constants.js";
+import { GLOBAL_PATHS, PATTERNS } from "./constants.js";
 import { logger } from "./logger.js";
 import type { SnippetRegistry } from "./types.js";
 
 type PendingDraftState = Record<string, string[]>;
 
 function statePath(): string {
-  return join(PATHS.CONFIG_DIR, "state", "pending-drafts.json");
+  return join(GLOBAL_PATHS.CONFIG_DIR, "state", "pending-drafts.json");
 }
 
 function scopeKey(workspaceDir?: string): string {
@@ -50,7 +50,7 @@ async function readState(): Promise<PendingDraftState> {
 }
 
 async function writeState(state: PendingDraftState): Promise<void> {
-  await mkdir(join(PATHS.CONFIG_DIR, "state"), { recursive: true });
+  await mkdir(join(GLOBAL_PATHS.CONFIG_DIR, "state"), { recursive: true });
   await Bun.write(statePath(), `${JSON.stringify(state, null, 2)}\n`);
 }
 
