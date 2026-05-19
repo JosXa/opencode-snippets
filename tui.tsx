@@ -773,9 +773,6 @@ function PromptWithSnippetAutocomplete(props: {
     if (dialogBlockingInput()) return;
     if (!visible()) return;
 
-    const total = options().length;
-    const actionable = total > 0 || canCreate();
-
     if (handleNavigationKey(evt)) {
       return;
     }
