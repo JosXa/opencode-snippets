@@ -85,6 +85,26 @@ export function isDialogInputBlocked(
   return dialogOpen || dialogHandoffUntil > now;
 }
 
+export function isAutocompleteNavUpKey(evt: {
+  name?: string;
+  raw?: string;
+  sequence?: string;
+}): boolean {
+  const name = evt.name?.toLowerCase();
+  return name === "up" || name === "arrowup" || evt.raw === "\x1b[A" || evt.sequence === "\x1b[A";
+}
+
+export function isAutocompleteNavDownKey(evt: {
+  name?: string;
+  raw?: string;
+  sequence?: string;
+}): boolean {
+  const name = evt.name?.toLowerCase();
+  return (
+    name === "down" || name === "arrowdown" || evt.raw === "\x1b[B" || evt.sequence === "\x1b[B"
+  );
+}
+
 export function stepSelection(current: number, total: number, delta: -1 | 1): number {
   if (total <= 0) return 0;
 

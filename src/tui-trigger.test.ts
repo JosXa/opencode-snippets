@@ -4,6 +4,8 @@ import {
   insertSkillLoad,
   insertSnippetTag,
   insertSnippetTrigger,
+  isAutocompleteNavDownKey,
+  isAutocompleteNavUpKey,
   isDialogInputBlocked,
   isReloadCommand,
   preferredSnippetTag,
@@ -157,6 +159,27 @@ describe("isDialogInputBlocked", () => {
     expect(isDialogInputBlocked(false, 1_500, 1_000)).toBe(true);
     expect(isDialogInputBlocked(false, 1_000, 1_000)).toBe(false);
     expect(isDialogInputBlocked(false, 500, 1_000)).toBe(false);
+  });
+});
+
+describe("autocomplete navigation key predicates", () => {
+  test("recognizes OpenTUI arrow name variants", () => {
+    expect(isAutocompleteNavUpKey({ name: "up" })).toBe(true);
+    expect(isAutocompleteNavUpKey({ name: "ArrowUp" })).toBe(true);
+    expect(isAutocompleteNavDownKey({ name: "down" })).toBe(true);
+    expect(isAutocompleteNavDownKey({ name: "ArrowDown" })).toBe(true);
+  });
+
+  test("recognizes terminal escape sequence variants", () => {
+    expect(isAutocompleteNavUpKey({ raw: "\x1b[A" })).toBe(true);
+    expect(isAutocompleteNavUpKey({ sequence: "\x1b[A" })).toBe(true);
+    expect(isAutocompleteNavDownKey({ raw: "\x1b[B" })).toBe(true);
+    expect(isAutocompleteNavDownKey({ sequence: "\x1b[B" })).toBe(true);
+  });
+
+  test("does not treat unrelated keys as navigation", () => {
+    expect(isAutocompleteNavUpKey({ name: "return" })).toBe(false);
+    expect(isAutocompleteNavDownKey({ name: "escape" })).toBe(false);
   });
 });
 

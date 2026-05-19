@@ -36,6 +36,8 @@ import {
   insertSkillLoad,
   insertSnippetTag,
   insertSnippetTrigger,
+  isAutocompleteNavDownKey,
+  isAutocompleteNavUpKey,
   isDialogInputBlocked,
   isReloadCommand,
   preferredSnippetTag,
@@ -583,6 +585,37 @@ function PromptWithSnippetAutocomplete(props: {
     setDismissed(undefined);
   };
 
+  const handleNavigationKey = (evt: {
+    name?: string;
+    raw?: string;
+    sequence?: string;
+    preventDefault(): void;
+    stopPropagation(): void;
+  }) => {
+    if (dialogBlockingInput() || !visible()) return false;
+
+    const total = options().length;
+    if (total <= 0) return false;
+
+    if (isAutocompleteNavUpKey(evt)) {
+      lockKeyboardSelection();
+      setSelected(stepSelection(selected(), total, -1));
+      evt.preventDefault();
+      evt.stopPropagation();
+      return true;
+    }
+
+    if (isAutocompleteNavDownKey(evt)) {
+      lockKeyboardSelection();
+      setSelected(stepSelection(selected(), total, 1));
+      evt.preventDefault();
+      evt.stopPropagation();
+      return true;
+    }
+
+    return false;
+  };
+
   createEffect(() => {
     const ref = prompt();
     if (!ref) return;
@@ -614,6 +647,15 @@ function PromptWithSnippetAutocomplete(props: {
     onCleanup(() => {
       clearTimeout(timer);
       dispose?.();
+    });
+  });
+
+  createEffect(() => {
+    if (dialogBlockingInput() || !visible() || options().length === 0) return;
+
+    props.api.renderer.keyInput.prependListener("keypress", handleNavigationKey);
+    onCleanup(() => {
+      props.api.renderer.keyInput.removeListener("keypress", handleNavigationKey);
     });
   });
 
@@ -733,28 +775,8 @@ function PromptWithSnippetAutocomplete(props: {
 
     const total = options().length;
     const actionable = total > 0 || canCreate();
-    const isNavUp = name === "up";
-    const isNavDown = name === "down";
 
-    if (isNavUp) {
-      if (!actionable) return;
-      lockKeyboardSelection();
-      if (total > 0) {
-        setSelected(stepSelection(selected(), total, -1));
-      }
-      evt.preventDefault();
-      evt.stopPropagation();
-      return;
-    }
-
-    if (isNavDown) {
-      if (!actionable) return;
-      lockKeyboardSelection();
-      if (total > 0) {
-        setSelected(stepSelection(selected(), total, 1));
-      }
-      evt.preventDefault();
-      evt.stopPropagation();
+    if (handleNavigationKey(evt)) {
       return;
     }
 
