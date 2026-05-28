@@ -113,6 +113,15 @@ describe("preferredSnippetTag", () => {
     ).toBe("opencode-config-path");
   });
 
+  test("returns the compact matching alias when the query has separators", () => {
+    expect(
+      preferredSnippetTag("please #_cats", {
+        name: "cat",
+        aliases: ["cats"],
+      }),
+    ).toBe("cats");
+  });
+
   test("falls back to the snippet name when there is no active trailing hashtag", () => {
     expect(
       preferredSnippetTag("please review", {

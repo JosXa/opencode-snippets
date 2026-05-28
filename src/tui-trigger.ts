@@ -9,6 +9,10 @@ export interface HashtagTriggerMatch {
 
 const HASHTAG_TRIGGER = /(^|\s)#([^\s#]*)$/;
 
+function compactTagText(input: string): string {
+  return input.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 export function findTrailingHashtagTrigger(input: string): HashtagTriggerMatch | undefined {
   const hit = input.match(HASHTAG_TRIGGER);
   if (!hit) return;
@@ -61,7 +65,13 @@ export function preferredSnippetTag(
   const query = findTrailingHashtagTrigger(input)?.query.trim();
   if (!query) return item.name;
 
-  return item.aliases.find((alias) => alias === query) ?? item.name;
+  const exact = item.aliases.find((alias) => alias === query);
+  if (exact) return exact;
+
+  const compact = compactTagText(query);
+  if (!compact) return item.name;
+
+  return item.aliases.find((alias) => compactTagText(alias) === compact) ?? item.name;
 }
 
 export function insertSnippetTrigger(input: string): string {
