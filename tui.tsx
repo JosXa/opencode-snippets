@@ -45,6 +45,35 @@ import {
 } from "./src/tui-trigger.js";
 import type { SnippetInfo } from "./src/types.js";
 
+type OpenCodeConfigWithSkillPaths = {
+  skills?: { paths?: string[] };
+};
+
+type OpenCodeNativeSkill = {
+  name: string;
+  description?: string;
+  content: string;
+  location: string;
+};
+
+type OpenCodeSkillApi = {
+  app?: {
+    skills(input: { directory: string }): Promise<{
+      data?: OpenCodeNativeSkill[];
+    }>;
+  };
+  global?: {
+    skills(input: { directory: string }): Promise<{
+      data?: OpenCodeNativeSkill[];
+    }>;
+  };
+  client: {
+    get(input: { url: string; query: { directory: string } }): Promise<{
+      data?: { data?: OpenCodeNativeSkill[] };
+    }>;
+  };
+};
+
 const id = "opencode-snippets:autocomplete";
 const PROMPT_SYNC_MS = 50;
 const MENU_MAX_HEIGHT = 10;
@@ -292,8 +321,44 @@ function executeReloadInPrompt(
 }
 
 async function getSkills(api: TuiPluginApi): Promise<SkillInfo[]> {
-  const registry = await loadSkills(api.state.path.directory);
+  const native = api.client as unknown as OpenCodeSkillApi;
+  if (native.app?.skills) {
+    const response = await native.app.skills({ directory: api.state.path.directory });
+    if (response.data) return sortSkills(response.data.map(nativeSkillInfo));
+  }
+
+  if (native.global?.skills) {
+    const response = await native.global.skills({ directory: api.state.path.directory });
+    if (response.data) return sortSkills(response.data.map(nativeSkillInfo));
+  }
+
+  if (native.client?.get) {
+    const response = await native.client.get({
+      url: "/api/skill",
+      query: { directory: api.state.path.directory },
+    });
+    const skills = response.data?.data;
+    if (skills) {
+      return sortSkills(skills.map(nativeSkillInfo));
+    }
+  }
+
+  const response = await api.client.config.get({ directory: api.state.path.directory });
+  const cfg = (response.data || api.state.config) as OpenCodeConfigWithSkillPaths;
+  const registry = await loadSkills(api.state.path.directory, {
+    opencodeSkillDirs: cfg.skills?.paths,
+  });
   return sortSkills([...registry.values()]);
+}
+
+function nativeSkillInfo(skill: OpenCodeNativeSkill): SkillInfo {
+  return {
+    name: skill.name,
+    content: skill.content.trim(),
+    description: skill.description,
+    source: "global",
+    filePath: skill.location,
+  };
 }
 
 function skillDescription(skill: SkillInfo): string {

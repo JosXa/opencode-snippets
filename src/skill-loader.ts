@@ -35,6 +35,7 @@ export type SkillRegistry = Map<string, SkillInfo>;
 export interface LoadSkillsOptions {
   homeDir?: string;
   bundledSkillDirs?: string[];
+  opencodeSkillDirs?: string[];
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -83,6 +84,21 @@ function getProjectSkillDirs(projectDir: string): string[] {
 
 function getBundledSkillDirs(): string[] {
   return [join(__dirname, "..", "..", "skill")];
+}
+
+function uniqueDirs(dirs: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const dir of dirs) {
+    const key = resolve(dir);
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    result.push(dir);
+  }
+
+  return result;
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -137,8 +153,13 @@ export async function loadSkills(
   // Bundled plugin skills should participate in the same registry used by runtime
   // expansion and TUI autocomplete. Load them first so user/global/project skills can
   // still override shipped defaults with the same name.
-  for (const dir of options.bundledSkillDirs || getBundledSkillDirs()) {
+  const bundledDirs = options.bundledSkillDirs || getBundledSkillDirs();
+  for (const dir of uniqueDirs([...bundledDirs, ...(options.opencodeSkillDirs || [])])) {
     await loadFromDirectory(dir, skills, "global");
+  }
+
+  if (options.opencodeSkillDirs && options.opencodeSkillDirs.length > 0) {
+    logger.debug("Loaded OpenCode-exposed skill directories", { paths: options.opencodeSkillDirs });
   }
 
   // Load from global directories first

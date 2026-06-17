@@ -1,7 +1,7 @@
 import { rmdir, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Plugin } from "@opencode-ai/plugin";
+import type { Plugin, PluginModule } from "@opencode-ai/plugin";
 import { createCommandExecuteHandler } from "./src/commands.js";
 import { loadConfig } from "./src/config.js";
 import { assembleMessage, type ExpandOptions, expandHashtags } from "./src/expander.js";
@@ -25,6 +25,10 @@ import { SkillLoadManager } from "./src/skill-load-manager.js";
 import { loadSkills, type SkillRegistry } from "./src/skill-loader.js";
 import { buildSkillPayloadsFromVisibleText, expandSkillLoads } from "./src/skill-loading.js";
 import { expandSkillTags } from "./src/skill-renderer.js";
+
+type OpenCodeConfigWithSkillPaths = {
+  skills?: { paths?: string[] };
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -84,10 +88,14 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   const startupStart = performance.now();
   const snippets = await loadSnippets(ctx.directory);
 
-  // Load skills if either skill feature is enabled
+  const opencodeSkillDirs: string[] = [];
+  const loadRuntimeSkills = () => loadSkills(ctx.directory, { opencodeSkillDirs });
+
+  // Load skills if either skill feature is enabled. The config hook below refreshes this
+  // after OpenCode exposes paths registered by earlier plugins.
   let skills: SkillRegistry = new Map();
   if (config.experimental.skillRendering || config.experimental.skillLoading) {
-    skills = await loadSkills(ctx.directory);
+    skills = await loadRuntimeSkills();
   }
 
   const startupTime = performance.now() - startupStart;
@@ -653,12 +661,16 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     // Register /snippets commands and skill path
     config: async (opencodeConfig) => {
       // Register skill folder path for automatic discovery
-      const cfg = opencodeConfig as typeof opencodeConfig & {
-        skills?: { paths?: string[] };
-      };
+      const cfg = opencodeConfig as typeof opencodeConfig & OpenCodeConfigWithSkillPaths;
       cfg.skills ??= {};
       cfg.skills.paths ??= [];
       cfg.skills.paths.push(SKILL_DIR);
+
+      opencodeSkillDirs.length = 0;
+      opencodeSkillDirs.push(...cfg.skills.paths);
+      if (config.experimental.skillRendering || config.experimental.skillLoading) {
+        skills = await loadRuntimeSkills();
+      }
 
       // Register /snippets commands
       opencodeConfig.command ??= {};
@@ -870,3 +882,11 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     },
   };
 };
+
+const plugin: PluginModule & { id: string } = {
+  id: "opencode-snippets",
+  server: SnippetsPlugin,
+};
+
+export const server = SnippetsPlugin;
+export default plugin;
