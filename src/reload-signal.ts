@@ -1,12 +1,12 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { PATHS } from "./constants.js";
+import { GLOBAL_PATHS } from "./constants.js";
 import { logger } from "./logger.js";
 
 type ReloadSignalState = Record<string, number>;
 
 function statePath(): string {
-  return join(PATHS.CONFIG_DIR, "state", "snippet-reload.json");
+  return join(GLOBAL_PATHS.CONFIG_DIR, "state", "snippet-reload.json");
 }
 
 function scopeKey(workspaceDir?: string): string {
@@ -39,7 +39,7 @@ async function readState(): Promise<ReloadSignalState> {
 }
 
 async function writeState(state: ReloadSignalState): Promise<void> {
-  await mkdir(join(PATHS.CONFIG_DIR, "state"), { recursive: true });
+  await mkdir(join(GLOBAL_PATHS.CONFIG_DIR, "state"), { recursive: true });
   await Bun.write(statePath(), `${JSON.stringify(state, null, 2)}\n`);
 }
 

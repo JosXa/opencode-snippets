@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { importCjs } from "./cjs-interop.js";
-import { getProjectPaths, PATHS } from "./constants.js";
+import { GLOBAL_PATHS, getProjectPaths } from "./constants.js";
 import { logger } from "./logger.js";
 
 const { parse: parseJsonc } = await importCjs<typeof import("jsonc-parser")>("jsonc-parser");
@@ -159,15 +159,15 @@ function parseJsoncFile(filePath: string): RawConfig {
  */
 function ensureGlobalConfigExists(): void {
   // Create snippets directory if it doesn't exist
-  if (!existsSync(PATHS.SNIPPETS_DIR)) {
-    mkdirSync(PATHS.SNIPPETS_DIR, { recursive: true });
-    logger.debug("Created global snippets directory", { path: PATHS.SNIPPETS_DIR });
+  if (!existsSync(GLOBAL_PATHS.ACTIVE_SNIPPETS_DIR)) {
+    mkdirSync(GLOBAL_PATHS.ACTIVE_SNIPPETS_DIR, { recursive: true });
+    logger.debug("Created global snippets directory", { path: GLOBAL_PATHS.ACTIVE_SNIPPETS_DIR });
   }
 
   // Create default config file if it doesn't exist
-  if (!existsSync(PATHS.CONFIG_FILE_GLOBAL)) {
-    writeFileSync(PATHS.CONFIG_FILE_GLOBAL, DEFAULT_CONFIG_CONTENT, "utf-8");
-    logger.debug("Created default config file", { path: PATHS.CONFIG_FILE_GLOBAL });
+  if (!existsSync(GLOBAL_PATHS.CONFIG_FILE)) {
+    writeFileSync(GLOBAL_PATHS.CONFIG_FILE, DEFAULT_CONFIG_CONTENT, "utf-8");
+    logger.debug("Created default config file", { path: GLOBAL_PATHS.CONFIG_FILE });
   }
 }
 
@@ -190,10 +190,10 @@ export function loadConfig(projectDir?: string): SnippetsConfig {
   let config: SnippetsConfig = structuredClone(DEFAULT_CONFIG);
 
   // Load global config
-  if (existsSync(PATHS.CONFIG_FILE_GLOBAL)) {
-    const globalConfig = parseJsoncFile(PATHS.CONFIG_FILE_GLOBAL);
+  if (existsSync(GLOBAL_PATHS.CONFIG_FILE)) {
+    const globalConfig = parseJsoncFile(GLOBAL_PATHS.CONFIG_FILE);
     config = mergeConfig(config, globalConfig);
-    logger.debug("Loaded global config", { path: PATHS.CONFIG_FILE_GLOBAL });
+    logger.debug("Loaded global config", { path: GLOBAL_PATHS.CONFIG_FILE });
   }
 
   // Load project config if project directory is provided
@@ -247,7 +247,7 @@ function mergeConfig(base: SnippetsConfig, raw: RawConfig): SnippetsConfig {
  * Get the path to the global config file
  */
 export function getGlobalConfigPath(): string {
-  return PATHS.CONFIG_FILE_GLOBAL;
+  return GLOBAL_PATHS.CONFIG_FILE;
 }
 
 /**

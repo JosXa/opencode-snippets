@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { PATHS } from "../src/constants.js";
+import { GLOBAL_PATHS } from "../src/constants.js";
 import {
   addPendingDraft,
   getPendingDrafts,
@@ -15,13 +15,13 @@ function snippet(name: string, content: string): SnippetInfo {
 
 describe("pending draft reloads", () => {
   let tempDir: string;
-  const originalConfigDir = PATHS.CONFIG_DIR;
+  const originalConfigDir = GLOBAL_PATHS.CONFIG_DIR;
 
   beforeEach(async () => {
     tempDir = join(process.cwd(), ".test-pending-drafts");
     await mkdir(tempDir, { recursive: true });
 
-    Object.defineProperty(PATHS, "CONFIG_DIR", {
+    Object.defineProperty(GLOBAL_PATHS, "CONFIG_DIR", {
       value: tempDir,
       writable: true,
       configurable: true,
@@ -29,7 +29,7 @@ describe("pending draft reloads", () => {
   });
 
   afterEach(async () => {
-    Object.defineProperty(PATHS, "CONFIG_DIR", {
+    Object.defineProperty(GLOBAL_PATHS, "CONFIG_DIR", {
       value: originalConfigDir,
       writable: true,
       configurable: true,

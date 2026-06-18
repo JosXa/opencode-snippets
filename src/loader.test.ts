@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { PATHS } from "../src/constants.js";
+import { GLOBAL_PATHS } from "../src/constants.js";
 import { createSnippet, deleteSnippet, ensureSnippetsDir, loadSnippets } from "../src/loader.js";
 
 describe("loadSnippets - Dual Path Support", () => {
@@ -11,8 +11,9 @@ describe("loadSnippets - Dual Path Support", () => {
   let projectDir: string;
   let projectSnippetDir: string;
   let projectSnippetsDir: string;
-  const originalGlobalSnippetDir = PATHS.SNIPPETS_DIR;
-  const originalGlobalSnippetsDir = PATHS.SNIPPETS_DIR_ALT;
+  const originalGlobalSnippetDir = GLOBAL_PATHS.SNIPPETS_DIR_PREFERRED;
+  const originalGlobalSnippetsDir = GLOBAL_PATHS.SNIPPETS_DIR_ALT;
+  const originalActiveSnippetsDir = GLOBAL_PATHS.ACTIVE_SNIPPETS_DIR;
 
   beforeEach(async () => {
     // Create temporary directories for testing
@@ -26,26 +27,36 @@ describe("loadSnippets - Dual Path Support", () => {
     await mkdir(globalSnippetDir, { recursive: true });
     await mkdir(projectSnippetDir, { recursive: true });
 
-    Object.defineProperty(PATHS, "SNIPPETS_DIR", {
+    Object.defineProperty(GLOBAL_PATHS, "SNIPPETS_DIR_PREFERRED", {
       value: globalSnippetDir,
       writable: true,
       configurable: true,
     });
-    Object.defineProperty(PATHS, "SNIPPETS_DIR_ALT", {
+    Object.defineProperty(GLOBAL_PATHS, "SNIPPETS_DIR_ALT", {
       value: globalSnippetsDir,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(GLOBAL_PATHS, "ACTIVE_SNIPPETS_DIR", {
+      value: globalSnippetDir,
       writable: true,
       configurable: true,
     });
   });
 
   afterEach(async () => {
-    Object.defineProperty(PATHS, "SNIPPETS_DIR", {
+    Object.defineProperty(GLOBAL_PATHS, "SNIPPETS_DIR_PREFERRED", {
       value: originalGlobalSnippetDir,
       writable: true,
       configurable: true,
     });
-    Object.defineProperty(PATHS, "SNIPPETS_DIR_ALT", {
+    Object.defineProperty(GLOBAL_PATHS, "SNIPPETS_DIR_ALT", {
       value: originalGlobalSnippetsDir,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(GLOBAL_PATHS, "ACTIVE_SNIPPETS_DIR", {
+      value: originalActiveSnippetsDir,
       writable: true,
       configurable: true,
     });
@@ -406,6 +417,13 @@ Hello there!`,
     it("reuses an existing plural global directory", async () => {
       await rm(globalSnippetDir, { recursive: true, force: true });
       await mkdir(globalSnippetsDir, { recursive: true });
+
+      // ACTIVE_SNIPPETS_DIR is fixed at startup; simulate alt-only scenario by mocking it
+      Object.defineProperty(GLOBAL_PATHS, "ACTIVE_SNIPPETS_DIR", {
+        value: globalSnippetsDir,
+        writable: true,
+        configurable: true,
+      });
 
       const filePath = await createSnippet("plural-global", "Plural global content");
 

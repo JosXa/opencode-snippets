@@ -1,13 +1,13 @@
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { PATHS } from "./constants.js";
+import { GLOBAL_PATHS } from "./constants.js";
 
 export class Logger {
   private logDir: string;
   debugEnabled: boolean;
 
   constructor(logDirOverride?: string, debugEnabled = false) {
-    this.logDir = logDirOverride ?? join(PATHS.CONFIG_DIR, "logs", "snippets");
+    this.logDir = logDirOverride ?? join(GLOBAL_PATHS.CONFIG_DIR, "logs", "snippets");
     this.debugEnabled = debugEnabled;
   }
 

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -24,33 +25,71 @@ export const PATTERNS = {
 } as const;
 
 /**
- * File system paths
+ * Resolved paths for a snippet scope (global or project).
  */
-export const PATHS = {
-  /** OpenCode configuration directory */
-  CONFIG_DIR: join(homedir(), ".config", "opencode"),
-
-  /** Preferred global snippets directory */
-  SNIPPETS_DIR: join(homedir(), ".config", "opencode", "snippet"),
-
-  /** Alternate global snippets directory */
-  SNIPPETS_DIR_ALT: join(homedir(), ".config", "opencode", "snippets"),
-
-  /** Global config file */
-  CONFIG_FILE_GLOBAL: join(homedir(), ".config", "opencode", "snippet", "config.jsonc"),
-} as const;
+export interface SnippetPaths {
+  /** OpenCode configuration directory for the scope (e.g. ~/.config/opencode or projectDir/.opencode) */
+  CONFIG_DIR: string;
+  /** Canonical preferred snippets directory */
+  SNIPPETS_DIR_PREFERRED: string;
+  /** Alternate snippets directory */
+  SNIPPETS_DIR_ALT: string;
+  /** Resolved active snippets directory: preferred, unless only alt exists */
+  ACTIVE_SNIPPETS_DIR: string;
+  /** Config file path inside ACTIVE_SNIPPETS_DIR */
+  CONFIG_FILE: string;
+}
 
 /**
- * Get project-specific paths based on project directory
+ * Resolve the active snippets directory for writing/init.
+ *
+ * Uses alt only when it already exists and preferred does not
+ * This avoids creating a redundant snippet/ dir next to an existing snippets/ dir.
+ * Falls back to preferred in all other cases (including creation).
  */
-export function getProjectPaths(projectDir: string) {
-  const snippetDir = join(projectDir, ".opencode", "snippet");
+export function resolveSnippetDir(preferred: string, alt: string): string {
+  if (existsSync(alt) && !existsSync(preferred)) return alt;
+  return preferred;
+}
+
+/**
+ * Get global paths.
+ */
+function getGlobalPaths(): SnippetPaths {
+  const configDir = join(homedir(), ".config", "opencode");
+  const preferred = join(configDir, "snippet");
+  const alt = join(configDir, "snippets");
+  const active = resolveSnippetDir(preferred, alt);
   return {
-    SNIPPETS_DIR: snippetDir,
-    SNIPPETS_DIR_ALT: join(projectDir, ".opencode", "snippets"),
-    CONFIG_FILE: join(snippetDir, "config.jsonc"),
+    CONFIG_DIR: configDir,
+    SNIPPETS_DIR_PREFERRED: preferred,
+    SNIPPETS_DIR_ALT: alt,
+    ACTIVE_SNIPPETS_DIR: active,
+    CONFIG_FILE: join(active, "config.jsonc"),
   };
 }
+
+/**
+ * Get project-specific paths based on project directory.
+ */
+export function getProjectPaths(projectDir: string): SnippetPaths {
+  const configDir = join(projectDir, ".opencode");
+  const preferred = join(configDir, "snippet");
+  const alt = join(configDir, "snippets");
+  const active = resolveSnippetDir(preferred, alt);
+  return {
+    CONFIG_DIR: configDir,
+    SNIPPETS_DIR_PREFERRED: preferred,
+    SNIPPETS_DIR_ALT: alt,
+    ACTIVE_SNIPPETS_DIR: active,
+    CONFIG_FILE: join(active, "config.jsonc"),
+  };
+}
+
+/**
+ * Global file system paths, computed once at startup.
+ */
+export const GLOBAL_PATHS = getGlobalPaths();
 
 /**
  * Plugin configuration
