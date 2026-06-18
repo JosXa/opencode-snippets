@@ -1,4 +1,4 @@
-import { rmdir, unlink } from "node:fs/promises";
+import { access, rmdir, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Plugin, PluginModule } from "@opencode-ai/plugin";
@@ -20,7 +20,7 @@ import { logger } from "./src/logger.js";
 import { deleteSessionMessage, deleteSessionPart, sendIgnoredMessage } from "./src/notification.js";
 import { refreshPendingDraftsForText } from "./src/pending-drafts.js";
 import { consumeSnippetReloadRequest } from "./src/reload-signal.js";
-import { executeShellCommands, type ShellContext } from "./src/shell.js";
+import { executeShellCommands } from "./src/shell.js";
 import { SkillLoadManager } from "./src/skill-load-manager.js";
 import { loadSkills, type SkillRegistry } from "./src/skill-loader.js";
 import { buildSkillPayloadsFromVisibleText, expandSkillLoads } from "./src/skill-loading.js";
@@ -51,16 +51,14 @@ async function cleanupLegacySkillInstall(): Promise<void> {
   const legacySkillPath = join(legacySkillDir, "SKILL.md");
 
   try {
-    const file = Bun.file(legacySkillPath);
-    if (await file.exists()) {
-      await unlink(legacySkillPath);
-      logger.debug("Cleaned up legacy skill file", { path: legacySkillPath });
+    await access(legacySkillPath);
+    await unlink(legacySkillPath);
+    logger.debug("Cleaned up legacy skill file", { path: legacySkillPath });
 
-      // Try to remove the empty directory too
-      await rmdir(legacySkillDir).catch(() => {
-        // Directory not empty or doesn't exist - that's fine
-      });
-    }
+    // Try to remove the empty directory too
+    await rmdir(legacySkillDir).catch(() => {
+      // Directory not empty or doesn't exist - that's fine
+    });
   } catch (err) {
     logger.debug("Failed to cleanup legacy skill", { error: String(err) });
   }
@@ -201,7 +199,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
 
         // 3. Execute shell commands: !`command` or !>`command`
         const shellStart = performance.now();
-        part.text = await executeShellCommands(part.text, ctx as unknown as ShellContext);
+        part.text = await executeShellCommands(part.text, { directory: ctx.directory });
 
         shellTimeTotal += performance.now() - shellStart;
         processedParts += 1;

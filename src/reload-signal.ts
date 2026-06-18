@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PATHS } from "./constants.js";
 import { logger } from "./logger.js";
@@ -24,12 +24,10 @@ function normalizeState(value: unknown): ReloadSignalState {
 }
 
 async function readState(): Promise<ReloadSignalState> {
-  const file = Bun.file(statePath());
-  if (!(await file.exists())) return {};
-
   try {
-    return normalizeState(JSON.parse(await file.text()));
+    return normalizeState(JSON.parse(await readFile(statePath(), "utf8")));
   } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
     logger.warn("Failed to read snippet reload signal", {
       error: error instanceof Error ? error.message : String(error),
       path: statePath(),
@@ -40,7 +38,7 @@ async function readState(): Promise<ReloadSignalState> {
 
 async function writeState(state: ReloadSignalState): Promise<void> {
   await mkdir(join(PATHS.CONFIG_DIR, "state"), { recursive: true });
-  await Bun.write(statePath(), `${JSON.stringify(state, null, 2)}\n`);
+  await writeFile(statePath(), `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
 export async function markSnippetReloadRequested(workspaceDir?: string): Promise<void> {

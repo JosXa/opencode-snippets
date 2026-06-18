@@ -1,4 +1,4 @@
-import { readdir, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -223,12 +223,7 @@ async function loadSkill(
   const filePath = join(baseDir, skillName, "SKILL.md");
 
   try {
-    const file = Bun.file(filePath);
-    if (!(await file.exists())) {
-      return null;
-    }
-
-    const fileContent = await file.text();
+    const fileContent = await readFile(filePath, "utf8");
     const parsed = matter(fileContent);
 
     const content = parsed.content.trim();

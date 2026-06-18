@@ -1,25 +1,19 @@
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import { PATTERNS } from "./constants.js";
 import { logger } from "./logger.js";
+
+const execAsync = promisify(exec);
 
 /**
  * Executes shell commands in text using !`command` or !>`command` syntax
  *
  * @param text - The text containing shell commands to execute
- * @param ctx - The plugin context (with Bun shell)
+ * @param ctx - Shell execution context
  * @returns The text with shell commands replaced by their output
  */
 export type ShellContext = {
-  $: (
-    template: TemplateStringsArray,
-    ...args: unknown[]
-  ) => {
-    quiet: () => {
-      nothrow: () => Promise<{
-        stdout: { toString: () => string };
-        stderr: { toString: () => string };
-      }>;
-    };
-  };
+  directory?: string;
 };
 
 export async function executeShellCommands(text: string, ctx: ShellContext): Promise<string> {
@@ -38,8 +32,8 @@ export async function executeShellCommands(text: string, ctx: ShellContext): Pro
     const _placeholder = match[0];
 
     try {
-      const output = await ctx.$`${{ raw: cmd }}`.quiet().nothrow();
-      const text = `${output.stdout.toString()}${output.stderr.toString()}`.trim();
+      const output = await execAsync(cmd, { cwd: ctx.directory });
+      const text = `${output.stdout}${output.stderr}`.trim();
       // `!>` preserves command provenance when the model should see what just ran.
       const replacement = showCommand ? `$ ${cmd}\n--> ${text}` : text;
       result = result.replace(_placeholder, replacement);

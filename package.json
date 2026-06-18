@@ -15,12 +15,12 @@
     },
     "./tui": {
       "types": "./dist/tui.d.ts",
-      "default": "./dist/tui.jsx"
+      "default": "./dist/tui.js"
     }
   },
   "type": "module",
   "engines": {
-    "bun": ">=1.0.0"
+    "node": ">=20"
   },
   "keywords": [
     "opencode",
@@ -67,7 +67,6 @@
     "@opentui/core": "0.1.99",
     "@opentui/solid": "0.1.99",
     "@biomejs/biome": "^2.3.11",
-    "@types/bun": "latest",
     "@types/node": "^22",
     "@typescript/native-preview": "^7.0.0-dev.20260120.1",
     "husky": "^9.1.7",
@@ -75,11 +74,11 @@
     "typescript": "^5"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "bun scripts/build.ts",
     "typecheck": "tsgo --noEmit",
     "format:check": "biome check .",
     "format:fix": "biome check --write .",
-    "ai:check": "bun run format:fix",
+    "ai:check": "biome check --write --error-on-warnings . && tsgo --noEmit",
     "prepare": "husky",
     "prepublishOnly": "bun run build"
   },

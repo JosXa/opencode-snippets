@@ -1,4 +1,6 @@
 /** @jsxImportSource @opentui/solid */
+import { spawn } from "node:child_process";
+import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   TuiPlugin,
@@ -164,7 +166,7 @@ function normalizeSnippetName(input: string): string {
 }
 
 function resolveExternalEditor() {
-  const visual = Bun.env.VISUAL?.trim();
+  const visual = process.env.VISUAL?.trim();
   if (visual) {
     return {
       command: visual,
@@ -172,7 +174,7 @@ function resolveExternalEditor() {
     };
   }
 
-  const editor = Bun.env.EDITOR?.trim();
+  const editor = process.env.EDITOR?.trim();
   if (editor) {
     return {
       command: editor,
@@ -215,8 +217,11 @@ async function ensureSnippetDraft(name: string, projectDir?: string): Promise<st
   const dir = await ensureSnippetsDir(projectDir);
   const filePath = join(dir, `${name}${CONFIG.SNIPPET_EXTENSION}`);
 
-  if (!(await Bun.file(filePath).exists())) {
-    await Bun.write(filePath, EMPTY_SNIPPET);
+  try {
+    await access(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    await writeFile(filePath, EMPTY_SNIPPET, "utf8");
   }
 
   return filePath;
@@ -241,12 +246,14 @@ async function openExternalEditor(
       process.platform === "win32"
         ? ["cmd", "/c", `${editor.command} "${filePath.replace(/"/g, '\\"')}"`]
         : [...editor.command.split(" "), filePath];
-    const proc = Bun.spawn(cmd, {
-      stdin: interactive ? "inherit" : "ignore",
-      stdout: interactive ? "inherit" : "ignore",
-      stderr: interactive ? "inherit" : "ignore",
+    const proc = spawn(cmd[0] ?? "", cmd.slice(1), {
+      stdio: interactive ? "inherit" : "ignore",
+      windowsHide: !interactive,
     });
-    await proc.exited;
+    await new Promise<void>((resolve, reject) => {
+      proc.once("error", reject);
+      proc.once("close", () => resolve());
+    });
     return true;
   } finally {
     if (interactive) {
