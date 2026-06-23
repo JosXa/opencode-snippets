@@ -66,5 +66,7 @@ describe("ESM compatibility", () => {
     }
 
     expect(violations).toEqual([]);
-  });
+    // This test shells out to a full `bun run build`, which can take well over
+    // the 5s default test budget on cold caches / loaded machines. Allow 60s.
+  }, 60_000);
 });
