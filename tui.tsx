@@ -517,7 +517,6 @@ function PromptWithSnippetAutocomplete(props: {
     if (!ref) return;
     if (dialogBlockingInput()) return;
 
-    const prev = input();
     setSyncingPrompt(true);
     setMenuEpoch((n) => n + 1);
     if (pendingPromptSync) clearTimeout(pendingPromptSync);
@@ -525,9 +524,7 @@ function PromptWithSnippetAutocomplete(props: {
       pendingPromptSync = undefined;
       const next = ref.current.input;
       setInput((prev) => (prev === next ? prev : next));
-      if (next !== prev) {
-        setSyncingPrompt(false);
-      }
+      setSyncingPrompt(false);
       props.api.renderer.requestRender();
     }, 0);
   };
