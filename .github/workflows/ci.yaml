@@ -6,6 +6,14 @@ on:
   pull_request:
     branches: [main]
 
+# Bun 1.3.13 / 1.3.14 introduced a regression in `bun install` that opens
+# zero-byte sockets to the npm registry from GitHub Actions runners
+# (FailedToOpenSocket / ConnectionRefused). curl to the same registry works
+# fine on the same runner, so this is purely a Bun installer bug. Pinning
+# to 1.3.12 until the upstream regression (oven-sh/bun#30325) is fixed.
+env:
+  BUN_VERSION: 1.3.12
+
 jobs:
   lint:
     name: Lint
@@ -16,7 +24,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.14
+          bun-version: ${{ env.BUN_VERSION }}
 
       - name: Install dependencies
         run: bun install
@@ -33,7 +41,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.14
+          bun-version: ${{ env.BUN_VERSION }}
 
       - name: Install dependencies
         run: bun install
@@ -50,20 +58,10 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.14
+          bun-version: ${{ env.BUN_VERSION }}
 
-      - name: Network diagnostic
-        run: |
-          echo "=== curl registry.npmjs.org ==="
-          curl -sI -o /dev/null -w "registry: %{http_code} time=%{time_total}s\n" https://registry.npmjs.org/zod || echo "registry curl failed"
-          curl -sI -o /dev/null -w "tarball: %{http_code} time=%{time_total}s\n" https://registry.npmjs.org/zod/-/zod-3.25.76.tgz || echo "tarball curl failed"
-          echo "=== bun version ==="
-          bun --version
-          echo "=== resolved DNS ==="
-          getent hosts registry.npmjs.org || echo "DNS resolution failed"
-
-      - name: Install dependencies (serial)
-        run: bun install --concurrent-scripts 1
+      - name: Install dependencies
+        run: bun install
 
       - name: Run tests
         run: bun test
