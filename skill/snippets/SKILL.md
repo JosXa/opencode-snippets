@@ -82,6 +82,8 @@ Content here
 
 Frontmatter optional. Filename (minus .md) = primary hashtag.
 
+When authoring a new snippet or restructuring an existing one, first read [Creating snippets](./references/creating-snippets.md) for the shape decision tree (fluent inline / parenthetical / `<prepend>` vs `<append>` block) and prepend-vs-append guidance.
+
 ## Features
 
 The plugin adds shell substitution to regular OpenCode prompts, not just snippet files.
@@ -94,9 +96,7 @@ Use `!>` when the exact command matters. LLMs tend to trust the output more when
 
 ### Prepend/Append Blocks
 
-Move content to message start/end instead of inline. Best for long reference material that breaks writing flow.
-
-A snippet can include a `<prepend>` or `<append>` block and ordinary body text at the same time. Only the block content moves. Text outside the block still expands inline where `#snippet` was used. Use this to keep snippets flowing inside a sentence: a short visible body like `Jira`, `bead`, or `cherry-pick` stays in the user's prose, while heavy guidance is hidden in the block.
+A snippet can include a `<prepend>` or `<append>` block alongside ordinary body text. Only the block content moves to message start/end; text outside the block still expands inline where `#snippet` was used.
 
 ```md
 ---
@@ -115,26 +115,7 @@ Jira MCP
 Input: `Create bug in #jira about leak`
 Output: The field mappings are prepended at the top, and the visible inline expansion becomes `Create bug in Jira MCP about leak`.
 
-Use `<append>` for reference material at end. Content inside blocks should use `##` headings.
-
-#### Wrap block content in semantic XML tags
-
-Inside a `<prepend>` or `<append>` block, wrap content in custom tags that label its role for the LLM:
-
-- `<task>...</task>` - the next thing the agent should do
-- `<user_reminder>...</user_reminder>` - persistent reminder of user intent
-- `<guidance>...</guidance>`, `<info>...</info>` - context, rules, reference
-- `<condition="...">...</condition>` - guidance that only applies in a specific case
-
-Tags are not magic. They give the model a clear role label for the chunk so it does not blend into the rest of the message.
-
-#### When to prepend vs append
-
-Prepend puts the block at the very top of the message. The user's typed line lands last, which the LLM tends to follow more closely. Use prepend for **general context and guidance**, especially short blocks. Use it sparingly for many-paragraph blocks: a wall of text dumped on top of a one-word `#tag` is visually jarring for the user reading their own message.
-
-Append puts the block at the bottom. The user's line stays at the top, less jarring. Adherence to the user line can soften slightly, but append is ideal when the block contains a `<task>` or instruction that should be the **next thing the agent does**.
-
-Rule of thumb: short context => prepend; important next step => append; heavy reference docs => prepend with a tiny inline body so the user's sentence still flows.
+For when to use prepend vs append, when to keep content inline, and how to tag block content with `<task>` / `<guidance>` / `<info>` / `<condition>`, see [Creating snippets](./references/creating-snippets.md).
 
 ### Inject Blocks (Experimental)
 
