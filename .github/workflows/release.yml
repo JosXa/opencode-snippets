@@ -18,8 +18,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Pinned to dodge the bun 1.3.13/1.3.14 install regression
-      # (oven-sh/bun#30325 — zero-byte sockets to npm in Actions).
+      # GitHub Actions runners advertise IPv6 via DNS but drop egress, and
+      # Bun's installer stalls on the IPv6 path with FailedToOpenSocket /
+      # ConnectionRefused. Pin registry.npmjs.org to its IPv4 address so the
+      # installer skips the broken path. Tracked upstream at oven-sh/bun#30325.
+      - name: Force IPv4 for npm registry
+        run: |
+          getent ahostsv4 registry.npmjs.org | awk '{print $1; exit}' \
+            | xargs -I{} sudo bash -c 'echo "{} registry.npmjs.org" >> /etc/hosts'
+          cat /etc/hosts | tail -2
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
