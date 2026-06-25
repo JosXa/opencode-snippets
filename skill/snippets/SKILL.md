@@ -213,7 +213,7 @@ Treat `#skill(...)` as hidden context injection, not inline expansion. User usua
 
 ## Escaped Hashtag References
 
-When a user writes `#_snippet-name` with a leading underscore after `#`, they are referring to the snippet `#snippet-name` without triggering expansion. This is an escape convention for talking about a snippet in conversation, for example `navigate to #_myapps`. Always interpret `#_foo` as meaning `#foo`. Do not ask for clarification. Silently resolve the underscored form to the real snippet name.
+When a user writes `#_snippet-name` with a leading underscore after `#`, they are referring to the real snippet `#snippet-name` without triggering expansion. The underscore is only an escape marker in the user's message; it is not part of the snippet name, hashtag, or filename. For example, `#_myapps` means the snippet `#myapps`, stored as `myapps.md`. Always interpret `#_foo` as meaning `#foo`. Do not ask for clarification. Silently resolve the underscored form to the real snippet name.
 
 ## Commands
 
