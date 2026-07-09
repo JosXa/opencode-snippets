@@ -5,10 +5,18 @@ import { PATHS } from "./constants.js";
 export class Logger {
   private logDir: string;
   debugEnabled: boolean;
+  /**
+   * When true, every log call is a no-op. Used by the exported singleton under
+   * test to avoid synchronous disk I/O (which is slow and flaky under load) and
+   * to keep the test suite from polluting the real ~/.config/opencode log dir.
+   * Explicitly-constructed Logger instances (e.g. in logger.test.ts) stay active.
+   */
+  private silent: boolean;
 
-  constructor(logDirOverride?: string, debugEnabled = false) {
+  constructor(logDirOverride?: string, debugEnabled = false, silent = false) {
     this.logDir = logDirOverride ?? join(PATHS.CONFIG_DIR, "logs", "snippets");
     this.debugEnabled = debugEnabled;
+    this.silent = silent;
   }
 
   private ensureLogDir() {
@@ -64,6 +72,7 @@ export class Logger {
   }
 
   private write(level: string, component: string, message: string, data?: Record<string, unknown>) {
+    if (this.silent) return;
     // Only write debug logs when debugEnabled, but always write other levels
     if (level === "DEBUG" && !this.debugEnabled) return;
 
@@ -108,5 +117,7 @@ export class Logger {
   }
 }
 
-// Export singleton logger instance
-export const logger = new Logger();
+// Export singleton logger instance. Silenced under `bun test` (NODE_ENV=test) so
+// production hot paths that log (e.g. snippet loop detection) don't perform
+// synchronous disk writes during tests.
+export const logger = new Logger(undefined, false, process.env.NODE_ENV === "test");

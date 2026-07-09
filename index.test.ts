@@ -128,6 +128,41 @@ describe("SnippetsPlugin - Hook Integration", () => {
       expect(textOf(output.parts[0])).toBe("Say Hello, I am a test snippet! please");
     });
 
+    it("should append parent snippet blocks before nested snippet side effects", async () => {
+      await writeFile(
+        join(projectSnippetDir, "progressive.md"),
+        "progressive disclosure\n<append>\nParent info mentions #semantic\n</append>",
+      );
+      await writeFile(
+        join(projectSnippetDir, "semantic.md"),
+        "semantic compression\n<append>\nNested info\n</append>",
+      );
+
+      const ctx = createMockContextWithSnippets();
+      const hooks = await SnippetsPlugin(ctx);
+
+      const userMessage = {
+        role: "user",
+        content: "Test message",
+      } as unknown as UserMessage;
+
+      const output = {
+        message: userMessage,
+        parts: [{ type: "text", text: "Use #progressive" }] as Part[],
+      };
+
+      await hooks["chat.message"]?.(
+        {
+          sessionID: "test-session",
+        },
+        output,
+      );
+
+      expect(textOf(output.parts[0])).toBe(
+        "Use progressive disclosure\n\nParent info mentions semantic compression\n\nNested info",
+      );
+    });
+
     it("should not process assistant messages", async () => {
       const ctx = createMockContext();
       const hooks = await SnippetsPlugin(ctx);

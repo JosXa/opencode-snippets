@@ -1,7 +1,7 @@
-import { rmdir, unlink } from "node:fs/promises";
+import { access, rmdir, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Plugin } from "@opencode-ai/plugin";
+import type { Plugin, PluginModule } from "@opencode-ai/plugin";
 import { createCommandExecuteHandler } from "./src/commands.js";
 import { loadConfig } from "./src/config.js";
 import { assembleMessage, type ExpandOptions, expandHashtags } from "./src/expander.js";
@@ -20,11 +20,15 @@ import { logger } from "./src/logger.js";
 import { deleteSessionMessage, deleteSessionPart, sendIgnoredMessage } from "./src/notification.js";
 import { refreshPendingDraftsForText } from "./src/pending-drafts.js";
 import { consumeSnippetReloadRequest } from "./src/reload-signal.js";
-import { executeShellCommands, type ShellContext } from "./src/shell.js";
+import { executeShellCommands } from "./src/shell.js";
 import { SkillLoadManager } from "./src/skill-load-manager.js";
 import { loadSkills, type SkillRegistry } from "./src/skill-loader.js";
 import { buildSkillPayloadsFromVisibleText, expandSkillLoads } from "./src/skill-loading.js";
 import { expandSkillTags } from "./src/skill-renderer.js";
+
+type OpenCodeConfigWithSkillPaths = {
+  skills?: { paths?: string[] };
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -47,16 +51,14 @@ async function cleanupLegacySkillInstall(): Promise<void> {
   const legacySkillPath = join(legacySkillDir, "SKILL.md");
 
   try {
-    const file = Bun.file(legacySkillPath);
-    if (await file.exists()) {
-      await unlink(legacySkillPath);
-      logger.debug("Cleaned up legacy skill file", { path: legacySkillPath });
+    await access(legacySkillPath);
+    await unlink(legacySkillPath);
+    logger.debug("Cleaned up legacy skill file", { path: legacySkillPath });
 
-      // Try to remove the empty directory too
-      await rmdir(legacySkillDir).catch(() => {
-        // Directory not empty or doesn't exist - that's fine
-      });
-    }
+    // Try to remove the empty directory too
+    await rmdir(legacySkillDir).catch(() => {
+      // Directory not empty or doesn't exist - that's fine
+    });
   } catch (err) {
     logger.debug("Failed to cleanup legacy skill", { error: String(err) });
   }
@@ -84,10 +86,14 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   const startupStart = performance.now();
   const snippets = await loadSnippets(ctx.directory);
 
-  // Load skills if either skill feature is enabled
+  const opencodeSkillDirs: string[] = [];
+  const loadRuntimeSkills = () => loadSkills(ctx.directory, { opencodeSkillDirs });
+
+  // Load skills if either skill feature is enabled. The config hook below refreshes this
+  // after OpenCode exposes paths registered by earlier plugins.
   let skills: SkillRegistry = new Map();
   if (config.experimental.skillRendering || config.experimental.skillLoading) {
-    skills = await loadSkills(ctx.directory);
+    skills = await loadRuntimeSkills();
   }
 
   const startupTime = performance.now() - startupStart;
@@ -193,7 +199,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
 
         // 3. Execute shell commands: !`command` or !>`command`
         const shellStart = performance.now();
-        part.text = await executeShellCommands(part.text, ctx as unknown as ShellContext);
+        part.text = await executeShellCommands(part.text, { directory: ctx.directory });
 
         shellTimeTotal += performance.now() - shellStart;
         processedParts += 1;
@@ -653,12 +659,16 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     // Register /snippets commands and skill path
     config: async (opencodeConfig) => {
       // Register skill folder path for automatic discovery
-      const cfg = opencodeConfig as typeof opencodeConfig & {
-        skills?: { paths?: string[] };
-      };
+      const cfg = opencodeConfig as typeof opencodeConfig & OpenCodeConfigWithSkillPaths;
       cfg.skills ??= {};
       cfg.skills.paths ??= [];
       cfg.skills.paths.push(SKILL_DIR);
+
+      opencodeSkillDirs.length = 0;
+      opencodeSkillDirs.push(...cfg.skills.paths);
+      if (config.experimental.skillRendering || config.experimental.skillLoading) {
+        skills = await loadRuntimeSkills();
+      }
 
       // Register /snippets commands
       opencodeConfig.command ??= {};
@@ -870,3 +880,11 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     },
   };
 };
+
+const plugin: PluginModule & { id: string } = {
+  id: "opencode-snippets",
+  server: SnippetsPlugin,
+};
+
+export const server = SnippetsPlugin;
+export default plugin;

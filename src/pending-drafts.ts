@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PATHS, PATTERNS } from "./constants.js";
 import { logger } from "./logger.js";
@@ -35,12 +35,10 @@ function normalizeState(value: unknown): PendingDraftState {
 }
 
 async function readState(): Promise<PendingDraftState> {
-  const file = Bun.file(statePath());
-  if (!(await file.exists())) return {};
-
   try {
-    return normalizeState(JSON.parse(await file.text()));
+    return normalizeState(JSON.parse(await readFile(statePath(), "utf8")));
   } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
     logger.warn("Failed to read pending draft state", {
       error: error instanceof Error ? error.message : String(error),
       path: statePath(),
@@ -51,7 +49,7 @@ async function readState(): Promise<PendingDraftState> {
 
 async function writeState(state: PendingDraftState): Promise<void> {
   await mkdir(join(PATHS.CONFIG_DIR, "state"), { recursive: true });
-  await Bun.write(statePath(), `${JSON.stringify(state, null, 2)}\n`);
+  await writeFile(statePath(), `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
 function usedHashtags(text: string): Set<string> {

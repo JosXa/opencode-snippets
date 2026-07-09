@@ -1,4 +1,4 @@
-import { access, mkdir, readdir, unlink } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { importCjs } from "./cjs-interop.js";
 
@@ -122,7 +122,7 @@ async function loadSnippetFile(
   try {
     const name = basename(filename, CONFIG.SNIPPET_EXTENSION);
     const filePath = join(dir, filename);
-    const fileContent = await Bun.file(filePath).text();
+    const fileContent = await readFile(filePath, "utf8");
     const parsed = matter(fileContent);
 
     const content = parsed.content.trim();
@@ -248,7 +248,7 @@ export async function createSnippet(
     fileContent = content;
   }
 
-  await Bun.write(filePath, fileContent);
+  await writeFile(filePath, fileContent, "utf8");
   logger.info("Created snippet", { name, path: filePath });
 
   return filePath;

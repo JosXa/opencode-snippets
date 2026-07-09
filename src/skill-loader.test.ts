@@ -58,6 +58,29 @@ describe("loadSkills", () => {
     expect(skills.get("snippets")?.content).toBe("user override");
   });
 
+  it("loads skill paths exposed through OpenCode config after bundled skills", async () => {
+    const bundledDir = join(tempDir, "bundled-skill");
+    const exposedDir = join(tempDir, "plugin-skill");
+
+    await writeSkill(bundledDir, "jira", "bundled fallback");
+    await writeSkill(
+      exposedDir,
+      "jira",
+      "---\nname: jira\ndescription: Jira plugin skill\n---\nplugin jira",
+    );
+    await writeSkill(exposedDir, "bitbucket", "plugin bitbucket");
+
+    const skills = await loadSkills(undefined, {
+      homeDir,
+      bundledSkillDirs: [bundledDir],
+      opencodeSkillDirs: [exposedDir],
+    });
+
+    expect(skills.get("jira")?.content).toBe("plugin jira");
+    expect(skills.get("jira")?.description).toBe("Jira plugin skill");
+    expect(skills.get("bitbucket")?.content).toBe("plugin bitbucket");
+  });
+
   it("walks upward to the git worktree so nearer project skills override farther ones", async () => {
     const repo = join(tempDir, "repo");
     const cwd = join(repo, "apps", "web", "src");

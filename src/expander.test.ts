@@ -911,6 +911,39 @@ describe("Prepend/Append integration with expandHashtags", () => {
     expect(assembled).toBe("Use Outer inline\n\nAppend with Inner content included");
   });
 
+  it("should keep parent append blocks before nested append side effects", () => {
+    const registry = createRegistry([
+      [
+        "progressive",
+        "progressive disclosure\n<append>\nParent info mentions #semantic\n</append>",
+      ],
+      ["semantic", "semantic compression\n<append>\nNested info\n</append>"],
+    ]);
+
+    const result = expandHashtags("Use #progressive", registry);
+    const assembled = assembleMessage(result);
+
+    expect(result.text).toBe("Use progressive disclosure");
+    expect(result.append).toEqual(["Parent info mentions semantic compression", "Nested info"]);
+    expect(assembled).toBe(
+      "Use progressive disclosure\n\nParent info mentions semantic compression\n\nNested info",
+    );
+  });
+
+  it("should keep parent prepend blocks before nested prepend side effects", () => {
+    const registry = createRegistry([
+      ["outer", "<prepend>\nParent before #inner\n</prepend>\nOuter inline"],
+      ["inner", "inner inline\n<prepend>\nNested before\n</prepend>"],
+    ]);
+
+    const result = expandHashtags("Use #outer", registry);
+    const assembled = assembleMessage(result);
+
+    expect(result.text).toBe("Use Outer inline");
+    expect(result.prepend).toEqual(["Parent before inner inline", "Nested before"]);
+    expect(assembled).toBe("Parent before inner inline\n\nNested before\n\nUse Outer inline");
+  });
+
   it("should expand hashtags inside prepend blocks", () => {
     const registry = createRegistry([
       ["outer", "<prepend>\nBefore: #inner\n</prepend>\nMain"],

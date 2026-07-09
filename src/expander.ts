@@ -28,10 +28,27 @@ export interface ExpandOptions {
 }
 
 interface BlockCollector {
-  prepend: string[];
-  append: string[];
-  inject: string[];
+  prepend: BlockRecord[];
+  append: BlockRecord[];
+  inject: BlockRecord[];
   seen: Set<string>;
+}
+
+interface BlockRecord {
+  type: BlockType;
+  snippetName: string;
+  content: string;
+}
+
+const BLOCK_TYPES: BlockType[] = ["prepend", "append", "inject"];
+
+function createCollector(): BlockCollector {
+  return {
+    prepend: [],
+    append: [],
+    inject: [],
+    seen: new Set<string>(),
+  };
 }
 
 function addBlock(
@@ -47,11 +64,38 @@ function addBlock(
   if (collector.seen.has(key)) return;
 
   collector.seen.add(key);
-  collector[type].push(content);
+  collector[type].push({ type, snippetName, content });
 
   if (type === "inject") {
     onInjectBlock?.({ snippetName, content });
   }
+}
+
+function addNestedBlocks(
+  collector: BlockCollector,
+  nested: BlockCollector,
+  onInjectBlock?: (block: InjectBlockInfo) => void,
+): void {
+  for (const type of BLOCK_TYPES) {
+    for (const block of nested[type]) {
+      addBlock(collector, type, block.snippetName, block.content, onInjectBlock);
+    }
+  }
+}
+
+function expandBlock(
+  block: string,
+  registry: SnippetRegistry,
+  expansionCounts: Map<string, number>,
+  options: ExpandOptions,
+): { content: string; nested: BlockCollector } {
+  const nested = createCollector();
+  const content = expandText(block, registry, expansionCounts, nested, {
+    ...options,
+    onInjectBlock: undefined,
+  });
+
+  return { content, nested };
 }
 
 function expandText(
@@ -111,33 +155,21 @@ function expandText(
       // User requirement: inline snippet text should replace every hashtag occurrence,
       // but prepend/append/inject side effects should only be inserted once per snippet block.
       for (const block of parsed.prepend) {
-        addBlock(
-          collector,
-          "prepend",
-          snippet.name,
-          expandText(block, registry, expansionCounts, collector, options),
-          onInjectBlock,
-        );
+        const expanded = expandBlock(block, registry, expansionCounts, options);
+        addBlock(collector, "prepend", snippet.name, expanded.content, onInjectBlock);
+        addNestedBlocks(collector, expanded.nested, onInjectBlock);
       }
 
       for (const block of parsed.append) {
-        addBlock(
-          collector,
-          "append",
-          snippet.name,
-          expandText(block, registry, expansionCounts, collector, options),
-          onInjectBlock,
-        );
+        const expanded = expandBlock(block, registry, expansionCounts, options);
+        addBlock(collector, "append", snippet.name, expanded.content, onInjectBlock);
+        addNestedBlocks(collector, expanded.nested, onInjectBlock);
       }
 
       for (const block of parsed.inject) {
-        addBlock(
-          collector,
-          "inject",
-          snippet.name,
-          expandText(block, registry, expansionCounts, collector, options),
-          onInjectBlock,
-        );
+        const expanded = expandBlock(block, registry, expansionCounts, options);
+        addBlock(collector, "inject", snippet.name, expanded.content, onInjectBlock);
+        addNestedBlocks(collector, expanded.nested, onInjectBlock);
       }
 
       return expandText(parsed.inline, registry, expansionCounts, collector, options);
@@ -268,20 +300,15 @@ export function expandHashtags(
   expansionCounts = new Map<string, number>(),
   options: ExpandOptions = {},
 ): ExpansionResult {
-  const collector: BlockCollector = {
-    prepend: [],
-    append: [],
-    inject: [],
-    seen: new Set<string>(),
-  };
+  const collector = createCollector();
 
   const expanded = expandText(text, registry, expansionCounts, collector, options);
 
   return {
     text: expanded,
-    prepend: collector.prepend,
-    append: collector.append,
-    inject: collector.inject,
+    prepend: collector.prepend.map((block) => block.content),
+    append: collector.append.map((block) => block.content),
+    inject: collector.inject.map((block) => block.content),
   };
 }
 
