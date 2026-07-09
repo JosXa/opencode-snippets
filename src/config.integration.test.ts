@@ -3,6 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "./config.js";
+import { PATHS } from "./constants.js";
 import { logger } from "./logger.js";
 
 describe("Config Integration", () => {
@@ -31,18 +32,19 @@ describe("Config Integration", () => {
     it("should enable debug logging when config.logging.debug is true", () => {
       writeFileSync(join(globalDir, "config.jsonc"), JSON.stringify({ logging: { debug: true } }));
 
-      // Temporarily override PATHS for this test
-      const originalPaths = require("./constants.js").PATHS;
-      require("./constants.js").PATHS.CONFIG_FILE_GLOBAL = join(globalDir, "config.jsonc");
-      require("./constants.js").PATHS.SNIPPETS_DIR = globalDir;
+      // Capture original values as primitives (not references) before patching
+      const origConfigFile = PATHS.CONFIG_FILE_GLOBAL;
+      const origSnippetsDir = PATHS.SNIPPETS_DIR;
+      PATHS.CONFIG_FILE_GLOBAL = join(globalDir, "config.jsonc");
+      PATHS.SNIPPETS_DIR = globalDir;
 
       const config = loadConfig();
 
       expect(config.logging.debug).toBe(true);
 
-      // Restore
-      require("./constants.js").PATHS.CONFIG_FILE_GLOBAL = originalPaths.CONFIG_FILE_GLOBAL;
-      require("./constants.js").PATHS.SNIPPETS_DIR = originalPaths.SNIPPETS_DIR;
+      // Restore original values
+      PATHS.CONFIG_FILE_GLOBAL = origConfigFile;
+      PATHS.SNIPPETS_DIR = origSnippetsDir;
     });
 
     it("should accept 'enabled' string for debug logging", () => {
@@ -51,16 +53,17 @@ describe("Config Integration", () => {
         JSON.stringify({ logging: { debug: "enabled" } }),
       );
 
-      const originalPaths = require("./constants.js").PATHS;
-      require("./constants.js").PATHS.CONFIG_FILE_GLOBAL = join(globalDir, "config.jsonc");
-      require("./constants.js").PATHS.SNIPPETS_DIR = globalDir;
+      const origConfigFile = PATHS.CONFIG_FILE_GLOBAL;
+      const origSnippetsDir = PATHS.SNIPPETS_DIR;
+      PATHS.CONFIG_FILE_GLOBAL = join(globalDir, "config.jsonc");
+      PATHS.SNIPPETS_DIR = globalDir;
 
       const config = loadConfig();
 
       expect(config.logging.debug).toBe(true);
 
-      require("./constants.js").PATHS.CONFIG_FILE_GLOBAL = originalPaths.CONFIG_FILE_GLOBAL;
-      require("./constants.js").PATHS.SNIPPETS_DIR = originalPaths.SNIPPETS_DIR;
+      PATHS.CONFIG_FILE_GLOBAL = origConfigFile;
+      PATHS.SNIPPETS_DIR = origSnippetsDir;
     });
   });
 
@@ -75,16 +78,17 @@ describe("Config Integration", () => {
         JSON.stringify({ logging: { debug: true } }),
       );
 
-      const originalPaths = require("./constants.js").PATHS;
-      require("./constants.js").PATHS.CONFIG_FILE_GLOBAL = join(globalDir, "config.jsonc");
-      require("./constants.js").PATHS.SNIPPETS_DIR = globalDir;
+      const origConfigFile = PATHS.CONFIG_FILE_GLOBAL;
+      const origSnippetsDir = PATHS.SNIPPETS_DIR;
+      PATHS.CONFIG_FILE_GLOBAL = join(globalDir, "config.jsonc");
+      PATHS.SNIPPETS_DIR = globalDir;
 
       const config = loadConfig(projectDir);
 
       expect(config.logging.debug).toBe(true);
 
-      require("./constants.js").PATHS.CONFIG_FILE_GLOBAL = originalPaths.CONFIG_FILE_GLOBAL;
-      require("./constants.js").PATHS.SNIPPETS_DIR = originalPaths.SNIPPETS_DIR;
+      PATHS.CONFIG_FILE_GLOBAL = origConfigFile;
+      PATHS.SNIPPETS_DIR = origSnippetsDir;
     });
 
     it("should merge partial project config", () => {
@@ -100,17 +104,18 @@ describe("Config Integration", () => {
         JSON.stringify({ logging: { debug: true } }),
       );
 
-      const originalPaths = require("./constants.js").PATHS;
-      require("./constants.js").PATHS.CONFIG_FILE_GLOBAL = join(globalDir, "config.jsonc");
-      require("./constants.js").PATHS.SNIPPETS_DIR = globalDir;
+      const origConfigFile = PATHS.CONFIG_FILE_GLOBAL;
+      const origSnippetsDir = PATHS.SNIPPETS_DIR;
+      PATHS.CONFIG_FILE_GLOBAL = join(globalDir, "config.jsonc");
+      PATHS.SNIPPETS_DIR = globalDir;
 
       const config = loadConfig(projectDir);
 
       expect(config.logging.debug).toBe(true);
       expect(config.injectRecencyMessages).toBe(9); // inherited from global
 
-      require("./constants.js").PATHS.CONFIG_FILE_GLOBAL = originalPaths.CONFIG_FILE_GLOBAL;
-      require("./constants.js").PATHS.SNIPPETS_DIR = originalPaths.SNIPPETS_DIR;
+      PATHS.CONFIG_FILE_GLOBAL = origConfigFile;
+      PATHS.SNIPPETS_DIR = origSnippetsDir;
     });
   });
 });

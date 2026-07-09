@@ -662,7 +662,10 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
       const cfg = opencodeConfig as typeof opencodeConfig & OpenCodeConfigWithSkillPaths;
       cfg.skills ??= {};
       cfg.skills.paths ??= [];
-      cfg.skills.paths.push(SKILL_DIR);
+      // Idempotent: only push if not already present (config hook may run multiple times)
+      if (!cfg.skills.paths.includes(SKILL_DIR)) {
+        cfg.skills.paths.push(SKILL_DIR);
+      }
 
       opencodeSkillDirs.length = 0;
       opencodeSkillDirs.push(...cfg.skills.paths);
@@ -670,17 +673,21 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         skills = await loadRuntimeSkills();
       }
 
-      // Register /snippets commands
+      // Register /snippets commands (idempotent — skip if already registered)
       opencodeConfig.command ??= {};
-      opencodeConfig.command.snippets = {
-        template: "",
-        description: "Manage text snippets (add, delete, list, help)",
-      };
+      if (!opencodeConfig.command.snippets) {
+        opencodeConfig.command.snippets = {
+          template: "",
+          description: "Manage text snippets (add, delete, list, help)",
+        };
+      }
       // Sole slash registration for /snippets:reload (TUI must not also register slash: { name }).
-      opencodeConfig.command["snippets:reload"] = {
-        template: "",
-        description: "Reload snippet files from disk",
-      };
+      if (!opencodeConfig.command["snippets:reload"]) {
+        opencodeConfig.command["snippets:reload"] = {
+          template: "",
+          description: "Reload snippet files from disk",
+        };
+      }
     },
 
     "command.execute.before": commandHandler,

@@ -7,7 +7,7 @@ description: "Fanout implement DSL (1xNxN): 1 manager → N parallel coders (TDD
 
 ## Fanout Implement — 1x3x3 Orchestration DSL
 
-**DSL**: `#fanout implement 1x3x3`
+**DSL**: `fanout implement 1x3x3` (invoke: `#fanout` + ` implement 1x3x3` in the prompt; never put `#fanout` inside snippet content)
 
 **Topology**: 1x @glm52umans manager → 3x @glm52umans coders (parallel, TDD red/green, atomic commits, `/tmp/fanout-locks/` file lock protocol) → 3x @glm52umans reviewers (parallel, verify semantics + commits + tests)
 

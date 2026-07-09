@@ -446,3 +446,57 @@ Hello there!`,
     });
   });
 });
+
+describe("loadSnippets - OPENCODE_CONFIG_DIR lazy resolution", () => {
+  let tempConfigDir: string;
+  let originalEnv: string | undefined;
+
+  beforeEach(async () => {
+    originalEnv = process.env.OPENCODE_CONFIG_DIR;
+    tempConfigDir = join(process.cwd(), ".test-config-dir");
+    await rm(tempConfigDir, { recursive: true, force: true });
+    await mkdir(join(tempConfigDir, "snippet"), { recursive: true });
+    process.env.OPENCODE_CONFIG_DIR = tempConfigDir;
+  });
+
+  afterEach(async () => {
+    if (originalEnv === undefined) {
+      delete process.env.OPENCODE_CONFIG_DIR;
+    } else {
+      process.env.OPENCODE_CONFIG_DIR = originalEnv;
+    }
+    await rm(tempConfigDir, { recursive: true, force: true });
+  });
+
+  it("finds snippets from OPENCODE_CONFIG_DIR without globalDir parameter", async () => {
+    await writeFile(join(tempConfigDir, "snippet", "custom-snippet.md"), "Custom snippet content");
+
+    // loadSnippets without globalDir should resolve from OPENCODE_CONFIG_DIR
+    const snippets = await loadSnippets();
+
+    expect(snippets.get("custom-snippet")?.content).toBe("Custom snippet content");
+  });
+
+  it("finds snippets from the snippets/ (plural) directory via OPENCODE_CONFIG_DIR", async () => {
+    await rm(join(tempConfigDir, "snippet"), { recursive: true, force: true });
+    await mkdir(join(tempConfigDir, "snippets"), { recursive: true });
+    await writeFile(join(tempConfigDir, "snippets", "plural-snippet.md"), "Plural snippet content");
+
+    const snippets = await loadSnippets();
+
+    expect(snippets.get("plural-snippet")?.content).toBe("Plural snippet content");
+  });
+
+  it("picks up OPENCODE_CONFIG_DIR changes after module load", async () => {
+    // This simulates the wrapper scenario: OPENCODE_CONFIG_DIR is set
+    // after the module is imported (e.g., by a wrapper script).
+    // The lazy resolution should pick up the new value.
+    await writeFile(join(tempConfigDir, "snippet", "lazy-resolved.md"), "Lazy resolved content");
+
+    // Even though PATHS was frozen at import time with the original env,
+    // loadSnippets should find snippets from the current OPENCODE_CONFIG_DIR
+    const snippets = await loadSnippets();
+
+    expect(snippets.get("lazy-resolved")?.content).toBe("Lazy resolved content");
+  });
+});
