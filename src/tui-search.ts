@@ -81,6 +81,27 @@ function scoreSkill(skill: SkillInfo, query: string): number {
   return Number.POSITIVE_INFINITY;
 }
 
+function bestMatchingAlias(snippet: SnippetInfo, query: string): string | undefined {
+  const needle = query.trim();
+  if (!needle) return;
+
+  let best: { alias: string; score: number } | undefined;
+  for (const alias of snippet.aliases) {
+    const score = scoreText(alias, needle);
+    if (!Number.isFinite(score)) continue;
+    if (!best || score < best.score) {
+      best = { alias, score };
+    }
+  }
+
+  return best?.alias;
+}
+
+export function autocompleteLabelForSnippet(snippet: SnippetInfo, query: string): string {
+  const alias = bestMatchingAlias(snippet, query.trim());
+  return alias ? `#${alias}` : `#${snippet.name}`;
+}
+
 export function filterSnippets(snippets: SnippetInfo[], query: string): SnippetInfo[] {
   return [...snippets]
     .map((snippet) => ({

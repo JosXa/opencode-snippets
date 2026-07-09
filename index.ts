@@ -676,6 +676,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
         template: "",
         description: "Manage text snippets (add, delete, list, help)",
       };
+      // Sole slash registration for /snippets:reload (TUI must not also register slash: { name }).
       opencodeConfig.command["snippets:reload"] = {
         template: "",
         description: "Reload snippet files from disk",
