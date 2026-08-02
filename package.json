@@ -78,8 +78,8 @@
     "format:check": "biome check .",
     "format:fix": "biome check --write .",
     "ai:check": "biome check --write --error-on-warnings . && tsc --noEmit",
-    "prepare": "husky",
+    "prepare": "node scripts/prepare.mjs",
     "prepublishOnly": "bun run build"
   },
-  "files": ["dist", "skill"]
+  "files": ["dist", "skill", "scripts/prepare.mjs"]
 }
