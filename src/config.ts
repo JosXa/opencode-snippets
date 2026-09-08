@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { importCjs } from "./cjs-interop.js";
 import { getProjectPaths, PATHS } from "./constants.js";
 import { logger } from "./logger.js";
@@ -157,17 +158,18 @@ function parseJsoncFile(filePath: string): RawConfig {
 /**
  * Ensure the global snippets directory and config file exist
  */
-function ensureGlobalConfigExists(): void {
+function ensureGlobalConfigExists(globalConfigFile: string): void {
+  const globalSnippetDir = dirname(globalConfigFile);
   // Create snippets directory if it doesn't exist
-  if (!existsSync(PATHS.SNIPPETS_DIR)) {
-    mkdirSync(PATHS.SNIPPETS_DIR, { recursive: true });
-    logger.debug("Created global snippets directory", { path: PATHS.SNIPPETS_DIR });
+  if (!existsSync(globalSnippetDir)) {
+    mkdirSync(globalSnippetDir, { recursive: true });
+    logger.debug("Created global snippets directory", { path: globalSnippetDir });
   }
 
   // Create default config file if it doesn't exist
-  if (!existsSync(PATHS.CONFIG_FILE_GLOBAL)) {
-    writeFileSync(PATHS.CONFIG_FILE_GLOBAL, DEFAULT_CONFIG_CONTENT, "utf-8");
-    logger.debug("Created default config file", { path: PATHS.CONFIG_FILE_GLOBAL });
+  if (!existsSync(globalConfigFile)) {
+    writeFileSync(globalConfigFile, DEFAULT_CONFIG_CONTENT, "utf-8");
+    logger.debug("Created default config file", { path: globalConfigFile });
   }
 }
 
@@ -182,18 +184,21 @@ function ensureGlobalConfigExists(): void {
  * @param projectDir - Optional project directory to check for project-specific config
  * @returns Merged configuration object
  */
-export function loadConfig(projectDir?: string): SnippetsConfig {
+export function loadConfig(
+  projectDir?: string,
+  globalConfigFile = PATHS.CONFIG_FILE_GLOBAL,
+): SnippetsConfig {
   // Ensure global directory and config file exist
-  ensureGlobalConfigExists();
+  ensureGlobalConfigExists(globalConfigFile);
 
   // Start with defaults
   let config: SnippetsConfig = structuredClone(DEFAULT_CONFIG);
 
   // Load global config
-  if (existsSync(PATHS.CONFIG_FILE_GLOBAL)) {
-    const globalConfig = parseJsoncFile(PATHS.CONFIG_FILE_GLOBAL);
+  if (existsSync(globalConfigFile)) {
+    const globalConfig = parseJsoncFile(globalConfigFile);
     config = mergeConfig(config, globalConfig);
-    logger.debug("Loaded global config", { path: PATHS.CONFIG_FILE_GLOBAL });
+    logger.debug("Loaded global config", { path: globalConfigFile });
   }
 
   // Load project config if project directory is provided

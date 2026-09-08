@@ -1,7 +1,8 @@
 import { access, rmdir, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Plugin, PluginModule } from "@opencode-ai/plugin";
+import { Plugin } from "@opencode-ai/plugin";
+import type { Plugin as LegacyPlugin } from "@opencode-ai/plugin-v1/v1";
 import { createCommandExecuteHandler } from "./src/commands.js";
 import { loadConfig } from "./src/config.js";
 import { assembleMessage, type ExpandOptions, expandHashtags } from "./src/expander.js";
@@ -25,6 +26,7 @@ import { SkillLoadManager } from "./src/skill-load-manager.js";
 import { loadSkills, type SkillRegistry } from "./src/skill-loader.js";
 import { buildSkillPayloadsFromVisibleText, expandSkillLoads } from "./src/skill-loading.js";
 import { expandSkillTags } from "./src/skill-renderer.js";
+import { setupV2Snippets } from "./src/v2-request.js";
 
 type OpenCodeConfigWithSkillPaths = {
   skills?: { paths?: string[] };
@@ -35,6 +37,13 @@ const __dirname = dirname(__filename);
 const PLUGIN_ROOT = join(__dirname, "..");
 const SKILL_DIR = join(PLUGIN_ROOT, "skill");
 const MARKER_ID_RANDOM_FILL = "0000000000";
+
+function stringOption(
+  options: Readonly<Record<string, unknown>>,
+  name: string,
+): string | undefined {
+  return typeof options[name] === "string" ? options[name] : undefined;
+}
 
 /**
  * Clean up legacy skill installation from pre-v1.7.0
@@ -72,7 +81,7 @@ async function cleanupLegacySkillInstall(): Promise<void> {
  *
  * @see https://github.com/JosXa/opencode-snippets for full documentation
  */
-export const SnippetsPlugin: Plugin = async (ctx) => {
+export const SnippetsPlugin: LegacyPlugin = async (ctx) => {
   // Load configuration (global + project-local override)
   const config = loadConfig(ctx.directory);
 
@@ -881,10 +890,17 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
   };
 };
 
-const plugin: PluginModule & { id: string } = {
+const plugin = Plugin.define({
   id: "opencode-snippets",
-  server: SnippetsPlugin,
-};
+  setup(ctx) {
+    return setupV2Snippets(ctx, {
+      skillDirectory: SKILL_DIR,
+      globalDirectory: stringOption(ctx.options, "globalDirectory"),
+      homeDirectory: stringOption(ctx.options, "homeDirectory"),
+      dataDirectory: stringOption(ctx.options, "dataDirectory"),
+    });
+  },
+});
 
-export const server = SnippetsPlugin;
+export const server = plugin;
 export default plugin;

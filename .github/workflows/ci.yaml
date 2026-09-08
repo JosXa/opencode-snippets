@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, opencode-v2]
   pull_request:
-    branches: [main]
+    branches: [main, opencode-v2]
 
 jobs:
   lint:
@@ -23,6 +23,9 @@ jobs:
 
       - name: Run format check
         run: bun run format:check
+
+      - name: Run typecheck
+        run: bun run typecheck
 
   build:
     name: Build

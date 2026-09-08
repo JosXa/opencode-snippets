@@ -172,6 +172,16 @@ https://github.com/user-attachments/assets/ebb303b5-d41b-4d87-8f08-eb1d730db5c8
 
 Snippets can be global (`~/.config/opencode/snippet/*.md` or `~/.config/opencode/snippets/*.md`) or project-specific (`.opencode/snippet/*.md` or `.opencode/snippets/*.md`). Both singular and plural directory names are loaded automatically. Project snippets override global ones with the same name, and `snippet/` wins over `snippets/` within the same scope.
 
+Project snippet directories are resolved against the canonical project root. A symlinked project snippet directory, including one that points outside the project, is rejected rather than loaded or modified.
+
+### V2 processing state
+
+New submissions read the current snippet files, including nested references and completed drafts. Changes made through TUI commands or an editor apply to the next submission. Replayed messages retain their original expansion and skill content.
+
+V2 records a bounded amount of processing output so rebuilt request history and server restarts cannot repeat shell or management side effects. State lives under the user's private data directory (`$XDG_DATA_HOME/opencode/opencode-snippets/v2`, or `~/.local/share/opencode/opencode-snippets/v2`) rather than inside a project. Directories use mode `0700` and records use `0600`.
+
+Only hashed project/message identifiers, completion status, timestamps, and output needed for replay are retained; raw input prompts and project paths are not stored. Records older than 30 days are pruned, with additional limits of 100 sessions per project and 1,000 messages per session. Deleting an OpenCode session removes that session's records immediately.
+
 ## Features
 
 ### Aliases
@@ -351,9 +361,7 @@ Or use the self-closing format:
 }
 ```
 
-Skills are loaded from OpenCode's standard skill directories:
-- **Global**: `~/.config/opencode/skill/<name>/SKILL.md`
-- **Project**: `.opencode/skill/<name>/SKILL.md`
+V2 uses OpenCode's native skill registry for both expansion and autocomplete. This includes skills discovered by OpenCode, configured skill sources, and skills supplied by plugins. Skill IDs and display names are accepted; autocomplete inserts the native ID to distinguish skills with the same display name.
 
 When a skill tag is found, it's replaced with the skill's content body (frontmatter stripped). Unknown skills leave the tag unchanged.
 
@@ -381,7 +389,9 @@ Quoted names are also supported:
 }
 ```
 
-When enabled, the user-visible message shows `↳ Loaded name`, while the model receives an injected OpenCode-style `<skill_content>` payload immediately after that message. Multiple `#skill(...)` calls in one message are injected in source order.
+When enabled, the user-visible message shows `↳ Loaded name`, while the model receives an injected OpenCode-style `<skill_content>` payload immediately after that message. Multiple `#skill(...)` calls in one message are injected in their final visible order, including loads introduced by recursive snippets and prepend/append blocks.
+
+Expansion follows the V1 processing boundaries: XML skill tags render before hashtag expansion; `#skill(...)` loads resolve after recursive hashtag expansion; shell substitutions run last. Hidden skill bodies retain literal hashtag and shell examples. Within `<inject>` blocks, only hashtag references expand. Skill-tool results expand XML tags and recursive hashtags using the configured injection flag.
 
 Quick project-local demo in this repo:
 

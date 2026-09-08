@@ -183,13 +183,18 @@ export async function loadSkills(
 /**
  * Loads skills from a specific directory
  */
-async function loadFromDirectory(
+export async function loadFromDirectory(
   dir: string,
   registry: SkillRegistry,
   source: "global" | "project",
 ): Promise<void> {
   try {
     const entries = await readdir(dir, { withFileTypes: true });
+
+    if (entries.some((entry) => entry.isFile() && entry.name === "SKILL.md")) {
+      const skill = await loadSkill(dirname(dir), dir.split(/[\\/]/).pop() ?? "snippets", source);
+      if (skill) registry.set(skill.name.toLowerCase(), skill);
+    }
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;

@@ -1,5 +1,14 @@
-import { access, mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import {
+  access,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { importCjs } from "./cjs-interop.js";
 
 const matter = await importCjs<typeof import("gray-matter")>("gray-matter");
@@ -28,7 +37,8 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-async function resolveWritableSnippetDir(projectDir?: string): Promise<string> {
+async function resolveWritableSnippetDir(projectDir?: string, globalDir?: string): Promise<string> {
+  if (!projectDir && globalDir) return globalDir;
   const paths = projectDir
     ? getProjectPaths(projectDir)
     : { SNIPPETS_DIR: PATHS.SNIPPETS_DIR, SNIPPETS_DIR_ALT: PATHS.SNIPPETS_DIR_ALT };
@@ -39,6 +49,85 @@ async function resolveWritableSnippetDir(projectDir?: string): Promise<string> {
   }
 
   return paths.SNIPPETS_DIR;
+}
+
+const SNIPPET_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
+
+export function validateSnippetName(name: string): void {
+  if (!SNIPPET_NAME.test(name)) {
+    throw new Error(
+      `Invalid snippet name "${name}". Use letters, numbers, underscores, or hyphens.`,
+    );
+  }
+}
+
+function isContained(parent: string, candidate: string): boolean {
+  const child = relative(parent, candidate);
+  return (
+    child === "" ||
+    (!isAbsolute(child) && child !== ".." && !child.startsWith("../") && !child.startsWith("..\\"))
+  );
+}
+
+async function assertContainedSnippetPath(dir: string, filePath: string): Promise<void> {
+  const resolvedDir = await realpath(dir);
+  let resolvedFile: string;
+  try {
+    resolvedFile = await realpath(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    resolvedFile = join(resolvedDir, basename(filePath));
+  }
+  if (!isContained(resolvedDir, resolvedFile)) {
+    throw new Error(`Snippet path escapes its configured directory: ${filePath}`);
+  }
+}
+
+async function assertProjectSnippetDirectory(projectDir: string, dir: string): Promise<boolean> {
+  let projectRoot: string;
+  try {
+    projectRoot = await realpath(projectDir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+  let details: Awaited<ReturnType<typeof lstat>>;
+  try {
+    details = await lstat(dir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+  if (details.isSymbolicLink()) {
+    throw new Error(`Project snippet directory must not be a symbolic link: ${dir}`);
+  }
+  const resolvedDir = await realpath(dir);
+  if (!isContained(projectRoot, resolvedDir)) {
+    throw new Error(`Project snippet directory escapes the canonical project root: ${dir}`);
+  }
+  return true;
+}
+
+async function assertProjectSnippetCreationTarget(projectDir: string, dir: string): Promise<void> {
+  const projectRoot = await realpath(projectDir);
+  if (!isContained(resolve(projectDir), resolve(dir))) {
+    throw new Error(`Project snippet directory escapes the project path: ${dir}`);
+  }
+  let ancestor = dirname(dir);
+  while (true) {
+    try {
+      const resolvedAncestor = await realpath(ancestor);
+      if (!isContained(projectRoot, resolvedAncestor)) {
+        throw new Error(`Project snippet directory escapes the canonical project root: ${dir}`);
+      }
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      const parent = dirname(ancestor);
+      if (parent === ancestor) throw error;
+      ancestor = parent;
+    }
+  }
 }
 
 /**
@@ -62,6 +151,7 @@ export async function loadSnippets(
   // Load from project directory if provided (overrides global)
   if (projectDir) {
     for (const dir of getProjectSnippetDirs(projectDir)) {
+      if (!(await assertProjectSnippetDirectory(projectDir, dir))) continue;
       await loadFromDirectory(dir, snippets, "project");
     }
   }
@@ -122,6 +212,16 @@ async function loadSnippetFile(
   try {
     const name = basename(filename, CONFIG.SNIPPET_EXTENSION);
     const filePath = join(dir, filename);
+    if (source === "project") {
+      const details = await lstat(filePath);
+      if (details.isSymbolicLink()) {
+        throw new Error(`Project snippet file must not be a symbolic link: ${filePath}`);
+      }
+      const [resolvedDir, resolvedFile] = await Promise.all([realpath(dir), realpath(filePath)]);
+      if (!isContained(resolvedDir, resolvedFile)) {
+        throw new Error(`Project snippet file escapes its configured directory: ${filePath}`);
+      }
+    }
     const fileContent = await readFile(filePath, "utf8");
     const parsed = matter(fileContent);
 
@@ -207,9 +307,11 @@ export function listSnippets(registry: SnippetRegistry): SnippetInfo[] {
 /**
  * Ensures the snippets directory exists
  */
-export async function ensureSnippetsDir(projectDir?: string): Promise<string> {
-  const dir = await resolveWritableSnippetDir(projectDir);
+export async function ensureSnippetsDir(projectDir?: string, globalDir?: string): Promise<string> {
+  const dir = await resolveWritableSnippetDir(projectDir, globalDir);
+  if (projectDir) await assertProjectSnippetCreationTarget(projectDir, dir);
   await mkdir(dir, { recursive: true });
+  if (projectDir) await assertProjectSnippetDirectory(projectDir, dir);
   return dir;
 }
 
@@ -227,9 +329,12 @@ export async function createSnippet(
   content: string,
   options: { aliases?: string[]; description?: string } = {},
   projectDir?: string,
+  globalDir?: string,
 ): Promise<string> {
-  const dir = await ensureSnippetsDir(projectDir);
+  validateSnippetName(name);
+  const dir = await ensureSnippetsDir(projectDir, globalDir);
   const filePath = join(dir, `${name}${CONFIG.SNIPPET_EXTENSION}`);
+  await assertContainedSnippetPath(dir, filePath);
 
   // Build frontmatter if we have metadata
   const frontmatter: SnippetFrontmatter = {};
@@ -261,31 +366,39 @@ export async function createSnippet(
  * @param projectDir - If provided, looks in project directory first; otherwise global
  * @returns The path of the deleted file, or null if not found
  */
-export async function deleteSnippet(name: string, projectDir?: string): Promise<string | null> {
+export async function deleteSnippet(
+  name: string,
+  projectDir?: string,
+  globalDir?: string,
+): Promise<string | null> {
+  validateSnippetName(name);
   // Try project directory first if provided
   if (projectDir) {
     const paths = getProjectPaths(projectDir);
     for (const dir of [paths.SNIPPETS_DIR, paths.SNIPPETS_DIR_ALT]) {
       const filePath = join(dir, `${name}${CONFIG.SNIPPET_EXTENSION}`);
       try {
+        if (!(await assertProjectSnippetDirectory(projectDir, dir))) continue;
+        await assertContainedSnippetPath(dir, filePath);
         await unlink(filePath);
         logger.info("Deleted project snippet", { name, path: filePath });
         return filePath;
-      } catch {
-        // Not found in this project directory, keep looking.
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
     }
   }
 
   // Try global directory
-  for (const dir of [PATHS.SNIPPETS_DIR, PATHS.SNIPPETS_DIR_ALT]) {
+  for (const dir of globalDir ? [globalDir] : [PATHS.SNIPPETS_DIR, PATHS.SNIPPETS_DIR_ALT]) {
     const filePath = join(dir, `${name}${CONFIG.SNIPPET_EXTENSION}`);
     try {
+      await assertContainedSnippetPath(dir, filePath);
       await unlink(filePath);
       logger.info("Deleted global snippet", { name, path: filePath });
       return filePath;
-    } catch {
-      // Not found in this global directory, keep looking.
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
   }
 
@@ -299,9 +412,10 @@ export async function deleteSnippet(name: string, projectDir?: string): Promise<
 export async function reloadSnippets(
   registry: SnippetRegistry,
   projectDir?: string,
+  globalDir?: string,
 ): Promise<void> {
   registry.clear();
-  const fresh = await loadSnippets(projectDir);
+  const fresh = await loadSnippets(projectDir, globalDir);
   for (const [key, value] of fresh) {
     registry.set(key, value);
   }

@@ -1,10 +1,24 @@
+import type { SkillInfo } from "./skill-loader.js";
 import type { SnippetInfo } from "./types.js";
+
+export type TuiCompletion = { kind: "snippet" | "skill"; name: string };
+
+export interface TuiCompletionOption {
+  title: string;
+  description: string;
+  value: TuiCompletion;
+}
 
 export interface HashtagTriggerMatch {
   start: number;
   end: number;
   query: string;
   token: string;
+}
+
+/** OpenTUI's native cursorOffset is the canonical insertion offset. */
+export function resolveCompletionCursor(text: string, cursorOffset: number): number {
+  return Math.max(0, Math.min(cursorOffset, text.length));
 }
 
 const HASHTAG_TRIGGER = /(^|\s)#([^\s#]*)$/;
@@ -26,6 +40,69 @@ export function findTrailingHashtagTrigger(input: string): HashtagTriggerMatch |
     query,
     token,
   };
+}
+
+export function findHashtagTriggerAtCursor(
+  input: string,
+  cursor: number,
+): HashtagTriggerMatch | undefined {
+  return findTrailingHashtagTrigger(input.slice(0, Math.max(0, Math.min(cursor, input.length))));
+}
+
+export function replaceHashtagAtCursor(
+  input: string,
+  cursor: number,
+  replacement: string,
+): { text: string; cursor: number } | undefined {
+  const match = findHashtagTriggerAtCursor(input, cursor);
+  if (!match) return;
+  const inserted = `${replacement} `;
+  return {
+    text: `${input.slice(0, match.start)}${inserted}${input.slice(cursor)}`,
+    cursor: match.start + inserted.length,
+  };
+}
+
+export function buildTuiCompletionOptions(
+  snippets: Iterable<SnippetInfo>,
+  skills: Iterable<Pick<SkillInfo, "name" | "description">>,
+  query: string,
+): TuiCompletionOption[] {
+  const normalized = query.toLowerCase();
+  const skillQuery = normalized.match(/^skill\(([^)]*)$/)?.[1];
+  const snippetOptions = [...snippets]
+    .filter(() => skillQuery === undefined)
+    .filter(
+      (snippet) =>
+        snippet.name.toLowerCase().includes(normalized) ||
+        snippet.aliases.some((alias) => alias.toLowerCase().includes(normalized)),
+    )
+    .map((snippet) => ({
+      title: `#${snippet.name}`,
+      description: snippet.description || snippet.content.replace(/\s+/g, " ").slice(0, 100),
+      value: { kind: "snippet" as const, name: snippet.name },
+    }));
+  const skillOptions = [...skills]
+    .filter(
+      (skill) =>
+        skill.name.toLowerCase().includes(skillQuery ?? normalized) ||
+        skill.description?.toLowerCase().includes(skillQuery ?? normalized),
+    )
+    .map((skill) => ({
+      title: `#skill(${skill.name})`,
+      description: skill.description || "Load skill instructions",
+      value: { kind: "skill" as const, name: skill.name },
+    }));
+  return [...snippetOptions, ...skillOptions];
+}
+
+export function normalizeUnmatchedTrigger(query: string): string | undefined {
+  const name = query
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return name || undefined;
 }
 
 export function replaceTrailingHashtag(input: string, name: string): string | undefined {

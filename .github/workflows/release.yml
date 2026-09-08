@@ -1,100 +1,49 @@
-name: Release and Publish
+name: Publish OpenCode V2 prerelease
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      confirm_version:
+        description: Type the exact package version to publish
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
 
 jobs:
-  release:
+  publish:
+    # This branch intentionally publishes only the package's guarded V2 prerelease.
+    if: github.ref == 'refs/heads/opencode-v2' && inputs.confirm_version == '3.0.0-opencode-v2'
     runs-on: ubuntu-24.04
+    environment: npm
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v6
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
 
-      - name: Install dependencies
-        run: bun install
-
-      - name: Build
-        run: bun run build
-
-      - name: Generate Release Notes
-        id: release_notes
-        run: |
-          echo "Generating release notes..."
-          
-          # Get previous tag
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          
-          if [ -z "$PREV_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %s (%h)" ${{ github.ref_name }})
-          else
-            COMMITS=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..${{ github.ref_name }})
-          fi
-          
-          # Categorize commits
-          FEATURES=$(echo "$COMMITS" | grep -E "^- feat" || true)
-          FIXES=$(echo "$COMMITS" | grep -E "^- fix" || true)
-          DOCS=$(echo "$COMMITS" | grep -E "^- docs" || true)
-          CHORES=$(echo "$COMMITS" | grep -E "^- chore" || true)
-          OTHERS=$(echo "$COMMITS" | grep -Ev "^- (feat|fix|docs|chore)" || true)
-          
-          # Build changelog
-          CHANGELOG="## What's Changed"$'\n'
-          
-          if [ -n "$FEATURES" ]; then
-            CHANGELOG+=$'\n'"### ✨ Features"$'\n'"$FEATURES"$'\n'
-          fi
-          
-          if [ -n "$FIXES" ]; then
-            CHANGELOG+=$'\n'"### 🐛 Bug Fixes"$'\n'"$FIXES"$'\n'
-          fi
-          
-          if [ -n "$DOCS" ]; then
-            CHANGELOG+=$'\n'"### 📚 Documentation"$'\n'"$DOCS"$'\n'
-          fi
-          
-          if [ -n "$CHORES" ]; then
-            CHANGELOG+=$'\n'"### 🔧 Chores"$'\n'"$CHORES"$'\n'
-          fi
-          
-          if [ -n "$OTHERS" ]; then
-            CHANGELOG+=$'\n'"### Other Changes"$'\n'"$OTHERS"$'\n'
-          fi
-          
-          # Add full changelog link if there's a previous tag
-          if [ -n "$PREV_TAG" ]; then
-            CHANGELOG+=$'\n'"**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${{ github.ref_name }}"
-          fi
-          
-          # Save to file for the release
-          echo "$CHANGELOG" > release_notes.md
-          
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          body_path: release_notes.md
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Node.js for npm publishing
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
+          registry-url: https://registry.npmjs.org
 
-      - name: Publish to npm
-        run: npm publish --provenance --access public
+      - name: Verify release identity and version
+        run: |
+          test "$(node -p "require('./package.json').name")" = "opencode-snippets"
+          test "$(node -p "require('./package.json').version")" = "${{ inputs.confirm_version }}"
+          node -e "const v=require('./package.json').version;if(!/^3\.0\.0-opencode-v2$/.test(v))process.exit(1)"
+
+      - name: Install, validate, and build
+        run: |
+          bun install --frozen-lockfile
+          bun run format:check
+          bun run typecheck
+          bun test
+          bun run build
+          npm pack --dry-run
+
+      - name: Publish with npm trusted publishing
+        run: npm publish --provenance --access public --tag opencode-v2

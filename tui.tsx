@@ -1,1084 +1,375 @@
 /** @jsxImportSource @opentui/solid */
-import { spawn } from "node:child_process";
-import { access, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { Plugin } from "@opencode-ai/plugin/tui";
 import type {
-  TuiPlugin,
-  TuiPluginApi,
-  TuiPluginModule,
-  TuiPromptInfo,
-  TuiPromptRef,
-} from "@opencode-ai/plugin/tui";
-import { type KeyEvent, RGBA, type ScrollBoxRenderable } from "@opentui/core";
-import { useKeyboard } from "@opentui/solid";
+  BoxRenderable,
+  EditBufferRenderable,
+  KeyEvent,
+  Renderable,
+  ScrollBoxRenderable,
+} from "@opentui/core";
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createSnippet, listSnippets, loadSnippets } from "./src/loader.js";
 import {
-  createEffect,
-  createMemo,
-  createResource,
-  createSignal,
-  Index,
-  onCleanup,
-  onMount,
-  Show,
-} from "solid-js";
-import { CONFIG } from "./src/constants.js";
-import { ensureSnippetsDir, listSnippets, loadSnippets } from "./src/loader.js";
-import { addPendingDraft } from "./src/pending-drafts.js";
-import { markSnippetReloadRequested } from "./src/reload-signal.js";
-import { loadSkills, type SkillInfo } from "./src/skill-loader.js";
-import {
-  filterSkills,
-  filterSnippets,
-  highlightMatches,
-  matchedAliases,
-  snippetDescription,
-} from "./src/tui-search.js";
-import {
-  findTrailingHashtagTrigger,
-  insertSkillLoad,
-  insertSnippetTag,
-  insertSnippetTrigger,
+  buildTuiCompletionOptions,
+  findHashtagTriggerAtCursor,
   isAutocompleteNavDownKey,
   isAutocompleteNavUpKey,
-  isDialogInputBlocked,
-  isReloadCommand,
-  preferredSnippetTag,
+  normalizeUnmatchedTrigger,
   stepSelection,
+  type TuiCompletionOption,
 } from "./src/tui-trigger.js";
-import type { SnippetInfo } from "./src/types.js";
+import { executeV2SnippetCommand } from "./src/v2-command.js";
 
-type OpenCodeConfigWithSkillPaths = {
-  skills?: { paths?: string[] };
-};
-
-type OpenCodeNativeSkill = {
-  name: string;
-  description?: string;
-  content: string;
-  location: string;
-};
-
-type OpenCodeSkillApi = {
-  app?: {
-    skills(input: { directory: string }): Promise<{
-      data?: OpenCodeNativeSkill[];
-    }>;
-  };
-  global?: {
-    skills(input: { directory: string }): Promise<{
-      data?: OpenCodeNativeSkill[];
-    }>;
-  };
-  client: {
-    get(input: { url: string; query: { directory: string } }): Promise<{
-      data?: { data?: OpenCodeNativeSkill[] };
-    }>;
-  };
-};
-
-const id = "opencode-snippets:autocomplete";
-const PROMPT_SYNC_MS = 50;
-const MENU_MAX_HEIGHT = 10;
-const MOUSE_HOVER_SUPPRESS_MS = 150;
-const HOME_PLACEHOLDERS = {
-  normal: [
-    "Fix a TODO in the codebase",
-    "What is the tech stack of this project?",
-    "Fix broken tests",
-  ],
-  shell: ["ls -la", "git status", "pwd"],
-};
-const EMPTY_SNIPPET = `---
-description: ""
----
-
-`;
-const INLINE_BORDER = {
-  border: ["left", "right"] as Array<"left" | "right">,
-  customBorderChars: {
-    topLeft: "",
-    bottomLeft: "",
-    vertical: "┃",
-    topRight: "",
-    bottomRight: "",
-    horizontal: " ",
-    bottomT: "",
-    topT: "",
-    cross: "",
-    leftT: "",
-    rightT: "",
-  },
-};
-
-function sortSnippets(snippets: SnippetInfo[]): SnippetInfo[] {
-  return [...snippets].sort((a, b) => {
-    if (a.source !== b.source) {
-      if (a.source === "project") return -1;
-      return 1;
-    }
-
-    return a.name.localeCompare(b.name);
-  });
+function promptTrigger(editor: EditBufferRenderable) {
+  // Native offsets count display columns, not UTF-16 units. Let OpenTUI decode
+  // the prefix so wide glyphs, combining marks and newlines use its own rules.
+  const prefix = editor.getTextRange(0, editor.cursorOffset);
+  return findHashtagTriggerAtCursor(prefix, prefix.length);
 }
 
-function sortSkills(skills: SkillInfo[]): SkillInfo[] {
-  return [...skills].sort((a, b) => {
-    if (a.source !== b.source) {
-      if (a.source === "project") return -1;
-      return 1;
-    }
-
-    return a.name.localeCompare(b.name);
-  });
-}
-
-function selectedText(theme: TuiPluginApi["theme"]["current"]): RGBA {
-  if (theme.background.a !== 0) return theme.background;
-
-  const { r, g, b } = theme.primary;
-  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-  return luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255);
-}
-
-function renderHighlighted(text: string, query: string, fg: RGBA) {
-  return highlightMatches(text, query).map((part) => {
-    if (!part.match) return part.text;
-    return (
-      <span
-        style={{
-          fg,
-          underline: true,
-        }}
-      >
-        {part.text}
-      </span>
-    );
-  });
-}
-
-function normalizeSnippetName(input: string): string {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/-{2,}/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function resolveExternalEditor() {
-  const visual = process.env.VISUAL?.trim();
-  if (visual) {
-    return {
-      command: visual,
-      env: "VISUAL" as const,
-    };
-  }
-
-  const editor = process.env.EDITOR?.trim();
-  if (editor) {
-    return {
-      command: editor,
-      env: "EDITOR" as const,
-    };
-  }
-}
-
-function editorBinary(editor: NonNullable<ReturnType<typeof resolveExternalEditor>>): string {
-  return editor.command.trim().split(/\s+/)[0] || "";
-}
-
-function usesTerminalUi(editor: NonNullable<ReturnType<typeof resolveExternalEditor>>): boolean {
-  const bin = editorBinary(editor).split(/[\\/]/).pop()?.toLowerCase();
-
-  if (!bin) return true;
-
-  return ![
-    "code",
-    "code-insiders",
-    "cursor",
-    "windsurf",
-    "subl",
-    "zed",
-    "mate",
-    "idea",
-    "webstorm",
-    "pycharm",
-    "goland",
-    "clion",
-    "rubymine",
-    "fleet",
-    "notepad",
-    "notepad++",
-    "open",
-  ].includes(bin);
-}
-
-async function ensureSnippetDraft(name: string, projectDir?: string): Promise<string> {
-  const dir = await ensureSnippetsDir(projectDir);
-  const filePath = join(dir, `${name}${CONFIG.SNIPPET_EXTENSION}`);
-
-  try {
-    await access(filePath);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    await writeFile(filePath, EMPTY_SNIPPET, "utf8");
-  }
-
-  return filePath;
-}
-
-async function openExternalEditor(
-  api: TuiPluginApi,
-  filePath: string,
-  editor: ReturnType<typeof resolveExternalEditor>,
-): Promise<boolean> {
-  if (!editor) return false;
-
-  const interactive = usesTerminalUi(editor);
-
-  if (interactive) {
-    api.renderer.suspend();
-    api.renderer.currentRenderBuffer.clear();
-  }
-
-  try {
-    const cmd =
-      process.platform === "win32"
-        ? ["cmd", "/c", `${editor.command} "${filePath.replace(/"/g, '\\"')}"`]
-        : [...editor.command.split(" "), filePath];
-    const proc = spawn(cmd[0] ?? "", cmd.slice(1), {
-      stdio: interactive ? "inherit" : "ignore",
-      windowsHide: !interactive,
-    });
-    await new Promise<void>((resolve, reject) => {
-      proc.once("error", reject);
-      proc.once("close", () => resolve());
-    });
-    return true;
-  } finally {
-    if (interactive) {
-      api.renderer.currentRenderBuffer.clear();
-      api.renderer.resume();
-    }
-
-    api.renderer.requestRender();
-  }
-}
-
-function toPromptInfo(prompt: TuiPromptRef, input: string): TuiPromptInfo {
-  const current = prompt.current;
-  return {
-    input,
-    mode: current.mode,
-    parts: [...current.parts],
-  };
-}
-
-function setPromptInput(prompt: TuiPromptRef, input: string): void {
-  prompt.set(toPromptInfo(prompt, input));
-}
-
-function isSubmitKey(evt: { name: string; raw?: string; sequence?: string }): boolean {
+function isHostPrompt(
+  editor: EditBufferRenderable | null | undefined,
+): editor is EditBufferRenderable {
+  if (!editor || editor.isDestroyed) return false;
+  const traits = editor.traits;
+  // These identity fields are host extensions to OpenTUI's core EditorTraits.
+  // Do not gate on suspend: OC2's keymap adapter sets it on every managed
+  // textarea to take over built-in bindings, including the editable prompt.
   return (
-    evt.name === "return" ||
-    evt.name === "linefeed" ||
-    evt.name === "enter" ||
-    evt.raw === "\r" ||
-    evt.raw === "\n" ||
-    evt.sequence === "\r" ||
-    evt.sequence === "\n" ||
-    evt.raw === "\x1bOM" ||
-    evt.sequence === "\x1bOM"
+    "owner" in traits && traits.owner === "opencode" && "role" in traits && traits.role === "prompt"
   );
 }
 
-async function getSnippets(api: TuiPluginApi): Promise<SnippetInfo[]> {
-  const registry = await loadSnippets(api.state.path.directory);
-  return sortSnippets(listSnippets(registry));
-}
+const plugin = Plugin.define({
+  id: "opencode-snippets:autocomplete",
+  async setup(context) {
+    const directory = context.location?.directory ?? process.cwd();
+    const globalDirectory =
+      typeof context.options.globalDirectory === "string"
+        ? context.options.globalDirectory
+        : undefined;
+    const loadSkills = async () =>
+      (await context.client.skill.list({ location: { directory } })).data.map((skill) => ({
+        name: skill.id,
+        description: skill.description,
+      }));
+    let snippets = await loadSnippets(directory, globalDirectory);
+    let skills = await loadSkills();
 
-async function reloadSnippetsInTui(api: TuiPluginApi): Promise<number> {
-  const registry = await loadSnippets(api.state.path.directory);
-  await markSnippetReloadRequested(api.state.path.directory);
-  return listSnippets(registry).length;
-}
-
-function executeReloadInPrompt(
-  api: TuiPluginApi,
-  ref: TuiPromptRef,
-  clear: () => void,
-  refresh: () => Promise<unknown> | undefined,
-) {
-  void (async () => {
-    const count = await reloadSnippetsInTui(api);
-    await refresh();
-    clear();
-    ref.focus();
-    api.renderer.requestRender();
-    setTimeout(() => {
-      api.ui.toast({
-        variant: "success",
-        title: "Snippets reloaded",
-        message: `Reloaded ${count} snippet${count === 1 ? "" : "s"}.`,
-        duration: 3000,
-      });
-      api.renderer.requestRender();
-    }, 0);
-  })();
-}
-
-async function getSkills(api: TuiPluginApi): Promise<SkillInfo[]> {
-  const native = api.client as unknown as OpenCodeSkillApi;
-  if (native.app?.skills) {
-    const response = await native.app.skills({ directory: api.state.path.directory });
-    if (response.data) return sortSkills(response.data.map(nativeSkillInfo));
-  }
-
-  if (native.global?.skills) {
-    const response = await native.global.skills({ directory: api.state.path.directory });
-    if (response.data) return sortSkills(response.data.map(nativeSkillInfo));
-  }
-
-  if (native.client?.get) {
-    const response = await native.client.get({
-      url: "/api/skill",
-      query: { directory: api.state.path.directory },
-    });
-    const skills = response.data?.data;
-    if (skills) {
-      return sortSkills(skills.map(nativeSkillInfo));
-    }
-  }
-
-  const response = await api.client.config.get({ directory: api.state.path.directory });
-  const cfg = (response.data || api.state.config) as OpenCodeConfigWithSkillPaths;
-  const registry = await loadSkills(api.state.path.directory, {
-    opencodeSkillDirs: cfg.skills?.paths,
-  });
-  return sortSkills([...registry.values()]);
-}
-
-function nativeSkillInfo(skill: OpenCodeNativeSkill): SkillInfo {
-  return {
-    name: skill.name,
-    content: skill.content.trim(),
-    description: skill.description,
-    source: "global",
-    filePath: skill.location,
-  };
-}
-
-function skillDescription(skill: SkillInfo): string {
-  return (skill.description || skill.content).replace(/\s+/g, " ").trim();
-}
-
-type AutocompleteItem =
-  | {
-      kind: "snippet";
-      id: string;
-      label: string;
-      description: string;
-      aliases: string[];
-      snippet: SnippetInfo;
-    }
-  | {
-      kind: "skill";
-      id: string;
-      label: string;
-      description: string;
-      aliases: string[];
-      skill: SkillInfo;
+    const reload = async () => {
+      snippets = await loadSnippets(directory, globalDirectory);
+      skills = await loadSkills();
     };
 
-function PromptWithSnippetAutocomplete(props: {
-  api: TuiPluginApi;
-  bindPrompt: (ref: TuiPromptRef | undefined) => void;
-  hostRef?: (ref: TuiPromptRef | undefined) => void;
-  sessionID?: string;
-  workspaceID?: string;
-  visible?: boolean;
-  disabled?: boolean;
-  onSubmit?: () => void;
-  placeholders?: {
-    normal?: string[];
-    shell?: string[];
-  };
-  right?: unknown;
-}) {
-  const [prompt, setPrompt] = createSignal<TuiPromptRef>();
-  const [dismissed, setDismissed] = createSignal<string>();
-  const [selected, setSelected] = createSignal(0);
-  const [inputMode, setInputMode] = createSignal<"keyboard" | "mouse">("keyboard");
-  const [ignoreMouseUntil, setIgnoreMouseUntil] = createSignal(0);
-  const [lastMousePos, setLastMousePos] = createSignal<{ x: number; y: number }>();
-  const [input, setInput] = createSignal("");
-  const [syncingPrompt, setSyncingPrompt] = createSignal(false);
-  const [menuEpoch, setMenuEpoch] = createSignal(0);
-  const [creating, setCreating] = createSignal(false);
-  const [dialogOpen, setDialogOpen] = createSignal(false);
-  const [dialogHandoffUntil, setDialogHandoffUntil] = createSignal(0);
-  const [snippets, { refetch: refetchSnippets }] = createResource(
-    () => props.api.state.path.directory,
-    () => getSnippets(props.api),
-    {
-      initialValue: [] as SnippetInfo[],
-    },
-  );
-  const [skills] = createResource(
-    () => props.api.state.path.directory,
-    () => getSkills(props.api),
-    {
-      initialValue: [] as SkillInfo[],
-    },
-  );
-
-  const bind = (ref: TuiPromptRef | undefined) => {
-    setPrompt(ref);
-    props.bindPrompt(ref);
-    props.hostRef?.(ref);
-  };
-
-  const refreshSnippetOptions = async () => {
-    await refetchSnippets();
-  };
-
-  let pendingPromptSync: ReturnType<typeof setTimeout> | undefined;
-  let pendingPromptFocus: ReturnType<typeof setTimeout> | undefined;
-  let pendingDialogHandoff: ReturnType<typeof setTimeout> | undefined;
-  onCleanup(() => {
-    if (pendingPromptSync) clearTimeout(pendingPromptSync);
-    if (pendingPromptFocus) clearTimeout(pendingPromptFocus);
-    if (pendingDialogHandoff) clearTimeout(pendingDialogHandoff);
-  });
-
-  const lockKeyboardSelection = () => {
-    setInputMode("keyboard");
-    setIgnoreMouseUntil(Date.now() + MOUSE_HOVER_SUPPRESS_MS);
-  };
-
-  const allowMouseHover = () => Date.now() >= ignoreMouseUntil();
-  const dialogBlockingInput = () => isDialogInputBlocked(dialogOpen(), dialogHandoffUntil());
-  const beginDialogHandoff = () => {
-    if (pendingDialogHandoff) clearTimeout(pendingDialogHandoff);
-    setDialogHandoffUntil(Date.now() + 150);
-    pendingDialogHandoff = setTimeout(() => {
-      pendingDialogHandoff = undefined;
-      setDialogHandoffUntil(0);
-      props.api.renderer.requestRender();
-    }, 175);
-  };
-  const recordMouseMove = (x: number, y: number) => {
-    const last = lastMousePos();
-    if (last?.x === x && last.y === y) {
-      return false;
-    }
-
-    setLastMousePos({ x, y });
-    return true;
-  };
-
-  const restorePromptFocus = (ref: TuiPromptRef) => {
-    if (pendingPromptFocus) clearTimeout(pendingPromptFocus);
-    pendingPromptFocus = setTimeout(() => {
-      pendingPromptFocus = undefined;
-      ref.focus();
-    }, 175);
-  };
-
-  const syncPromptInput = (ref: TuiPromptRef, nextInput: string) => {
-    setPromptInput(ref, nextInput);
-    setInput(nextInput);
-    setSyncingPrompt(false);
-  };
-
-  const optionsForQuery = (value: string) => {
-    const snippetOptions = filterSnippets(snippets(), value).map((snippet) => ({
-      kind: "snippet" as const,
-      id: `snippet:${snippet.name}`,
-      label: `#${snippet.name}`,
-      description: snippetDescription(snippet),
-      aliases: matchedAliases(snippet, value),
-      snippet,
-    }));
-    const skillOptions = filterSkills(skills(), value).map((skill) => ({
-      kind: "skill" as const,
-      id: `skill:${skill.name}`,
-      label: `#skill(${skill.name})`,
-      description: skillDescription(skill),
-      aliases: [],
-      skill,
-    }));
-
-    return [...snippetOptions, ...skillOptions];
-  };
-
-  const schedulePromptSync = () => {
-    const ref = prompt();
-    if (!ref) return;
-    if (dialogBlockingInput()) return;
-
-    setSyncingPrompt(true);
-    setMenuEpoch((n) => n + 1);
-    if (pendingPromptSync) clearTimeout(pendingPromptSync);
-    pendingPromptSync = setTimeout(() => {
-      pendingPromptSync = undefined;
-      const next = ref.current.input;
-      setInput((prev) => (prev === next ? prev : next));
-      setSyncingPrompt(false);
-      props.api.renderer.requestRender();
-    }, 0);
-  };
-
-  createEffect(() => {
-    const ref = prompt();
-    if (!ref) {
-      setInput("");
-      setSyncingPrompt(false);
-      return;
-    }
-
-    // The prompt ref exposes current state but not an onInput hook, so mirror it.
-    const sync = () => {
-      const next = ref.current.input;
-      setInput((prev) => {
-        if (prev === next) return prev;
-        setSyncingPrompt(false);
-        return next;
-      });
+    const runCommand = async (input: string) => {
+      const output = await executeV2SnippetCommand(input, snippets, directory, globalDirectory);
+      await reload();
+      if (output) await context.ui.dialog.alert({ title: "Snippets", message: output });
     };
 
-    sync();
-    const timer = setInterval(sync, PROMPT_SYNC_MS);
-    onCleanup(() => clearInterval(timer));
-  });
+    const dispose = context.ui.slot({
+      append: "prompt.footer",
+      render: (footer) => {
+        const [dismissed, setDismissed] = createSignal<string>();
+        const [dialogOpen, setDialogOpen] = createSignal(false);
+        const [options, setOptions] = createSignal<TuiCompletionOption[]>([]);
+        const [trigger, setTrigger] = createSignal<ReturnType<typeof findHashtagTriggerAtCursor>>();
+        const [selected, setSelected] = createSignal(0);
+        const [position, setPosition] = createSignal({ top: 0, left: 0, width: 1 });
+        let anchor: BoxRenderable | undefined;
+        let scroll: ScrollBoxRenderable | undefined;
+        let ignoreMouseUntil = 0;
+        let lastMouse = "";
+        let lastKey = "";
 
-  const match = createMemo(() => {
-    if (props.disabled || props.visible === false) return;
-    return findTrailingHashtagTrigger(input());
-  });
-  const query = createMemo(() => match()?.query.trim() || "");
+        const activePrompt = () => {
+          const focused = context.renderer.currentFocusedEditor;
+          // A dialog can leave the prompt focused (e.g. confirmation dialogs).
+          // Respect the host input mode as well as the focused editor's identity.
+          if (footer.mode !== "normal" || context.keymap.mode.current() !== "base") return;
+          if (isHostPrompt(focused)) return focused;
+        };
 
-  const options = createMemo<AutocompleteItem[]>(() => {
-    const next = match();
-    if (!next) return [];
+        context.keymap.layer(() => ({
+          mode: "global",
+          commands: [
+            {
+              id: "snippets.manage",
+              title: "Manage snippets",
+              description: "List, add, or delete snippets",
+              palette: true,
+              slash: { name: "snippets", arguments: true },
+              run: (input) => runCommand(`/snippets ${input ?? ""}`),
+            },
+            {
+              id: "snippets.reload",
+              title: "Reload snippets",
+              palette: true,
+              slash: { name: "snippets:reload" },
+              run: () => runCommand("/snippets:reload"),
+            },
+          ],
+        }));
 
-    return optionsForQuery(next.query.trim());
-  });
-  const draftName = createMemo(() => normalizeSnippetName(query()));
-
-  const visible = createMemo(() => {
-    const next = match();
-    if (!next) return false;
-    if (syncingPrompt()) return false;
-    return dismissed() !== next.token;
-  });
-
-  const canCreate = createMemo(() => {
-    if (snippets.loading || skills.loading) return false;
-    if (options().length > 0) return false;
-    return !!query() && !!draftName();
-  });
-
-  const optionKey = createMemo(() =>
-    options()
-      .map((item) => item.id)
-      .join("\n"),
-  );
-  const menuHeight = createMemo(() =>
-    Math.min(MENU_MAX_HEIGHT, Math.max(1, options().length || 1)),
-  );
-  const activeRowId = createMemo(() => {
-    if (options().length > 0) return options()[selected()]?.id;
-    if (canCreate()) return "create-snippet";
-    return undefined;
-  });
-  let scroll: ScrollBoxRenderable | undefined;
-
-  createEffect(() => {
-    menuEpoch();
-    if (visible()) {
-      scroll = undefined;
-    }
-  });
-
-  createEffect((prev?: string) => {
-    const next = match();
-    if (!next) {
-      if (dismissed()) setDismissed(undefined);
-      return "";
-    }
-
-    const key = `${next.token}\n${optionKey()}`;
-    if (key !== prev) {
-      setSelected(0);
-      // Keep filtered keyboard navigation from getting stolen by synthetic mouse events.
-      lockKeyboardSelection();
-      setTimeout(() => {
-        scroll?.scrollTo(0);
-        const first = options()[0]?.id;
-        if (first) {
-          // Query changes can keep the same first row id, so force the scrollbox back to top.
-          scroll?.scrollChildIntoView(first);
-        }
-      }, 0);
-    }
-    return key;
-  });
-
-  createEffect(() => {
-    const row = activeRowId();
-    if (!visible() || !row) return;
-
-    setTimeout(() => {
-      scroll?.scrollChildIntoView(row);
-    }, 0);
-  });
-
-  const choose = (index = selected()) => {
-    const item = options()[index];
-    if (!item) return;
-    chooseItem(item);
-  };
-
-  const chooseItem = (item: AutocompleteItem) => {
-    const ref = prompt();
-    if (!ref) return;
-
-    const nextInput =
-      item.kind === "skill"
-        ? insertSkillLoad(ref.current.input, item.skill.name)
-        : insertSnippetTag(ref.current.input, preferredSnippetTag(ref.current.input, item.snippet));
-    syncPromptInput(ref, nextInput);
-    ref.focus();
-
-    setDismissed(undefined);
-  };
-
-  const handleNavigationKey = (evt: {
-    name?: string;
-    raw?: string;
-    sequence?: string;
-    preventDefault(): void;
-    stopPropagation(): void;
-  }) => {
-    if (dialogBlockingInput() || !visible()) return false;
-
-    const total = options().length;
-    if (total <= 0) return false;
-
-    if (isAutocompleteNavUpKey(evt)) {
-      lockKeyboardSelection();
-      setSelected(stepSelection(selected(), total, -1));
-      evt.preventDefault();
-      evt.stopPropagation();
-      return true;
-    }
-
-    if (isAutocompleteNavDownKey(evt)) {
-      lockKeyboardSelection();
-      setSelected(stepSelection(selected(), total, 1));
-      evt.preventDefault();
-      evt.stopPropagation();
-      return true;
-    }
-
-    return false;
-  };
-
-  createEffect(() => {
-    const ref = prompt();
-    if (!ref) return;
-
-    let dispose: (() => void) | undefined;
-    const timer = setTimeout(() => {
-      dispose = props.api.command.register(() => [
-        {
-          title: "Reload snippets",
-          value: "snippets.reload",
-          description: "Reload snippet files from disk",
-          category: "Prompt",
-          slash: { name: "snippets:reload" },
-          onSelect() {
-            executeReloadInPrompt(
-              props.api,
-              ref,
-              () => {
-                syncPromptInput(ref, "");
-                setDismissed(undefined);
-              },
-              refreshSnippetOptions,
-            );
-          },
-        },
-      ]);
-    }, 0);
-
-    onCleanup(() => {
-      clearTimeout(timer);
-      dispose?.();
-    });
-  });
-
-  createEffect(() => {
-    if (dialogBlockingInput() || !visible() || options().length === 0) return;
-
-    props.api.renderer.keyInput.prependListener("keypress", handleNavigationKey);
-    onCleanup(() => {
-      props.api.renderer.keyInput.removeListener("keypress", handleNavigationKey);
-    });
-  });
-
-  const createSnippetDraft = async (rawQuery?: string) => {
-    const ref = prompt();
-    const name = normalizeSnippetName(rawQuery ?? query());
-    if (!ref || !name || creating()) return;
-    const current = findTrailingHashtagTrigger(ref.current.input);
-    const nextInput = current ? `${ref.current.input.slice(0, current.start)}#${name}` : `#${name}`;
-    const dismissedToken = `#${name}`;
-
-    const editor = resolveExternalEditor();
-    if (!editor) {
-      props.api.ui.toast({
-        variant: "warning",
-        message: "Set VISUAL or EDITOR to create snippets from the TUI.",
-      });
-      return;
-    }
-
-    props.api.ui.dialog.setSize("medium");
-    setDialogOpen(true);
-    props.api.ui.dialog.replace(() => (
-      <props.api.ui.DialogConfirm
-        title={`Create snippet #${name}?`}
-        message={`This will create the snippet draft and open it in $${editor.env} (${editor.command}).`}
-        onCancel={() => {
-          setDialogOpen(false);
-          beginDialogHandoff();
-          props.api.ui.dialog.clear();
-          restorePromptFocus(ref);
-        }}
-        onConfirm={() => {
-          setDialogOpen(false);
-          beginDialogHandoff();
-          props.api.ui.dialog.clear();
-
-          void (async () => {
-            setCreating(true);
-
-            try {
-              syncPromptInput(ref, nextInput);
-
-              const filePath = await ensureSnippetDraft(name);
-              await addPendingDraft(props.api.state.path.directory, name);
-              setDismissed(dismissedToken);
-              setCreating(false);
-              const opened = await openExternalEditor(props.api, filePath, editor);
-              if (!opened) return;
-            } catch (error) {
-              props.api.ui.toast({
-                variant: "error",
-                message: `Failed to create snippet: ${error instanceof Error ? error.message : String(error)}`,
-              });
-              syncPromptInput(ref, nextInput);
-              setDismissed(undefined);
-            } finally {
-              setCreating(false);
-              restorePromptFocus(ref);
+        const sync = () => {
+          if (dialogOpen()) {
+            setTrigger(undefined);
+            return;
+          }
+          const focused = activePrompt();
+          if (!focused) {
+            setTrigger(undefined);
+            return;
+          }
+          const cursor = focused.cursorOffset;
+          const match = promptTrigger(focused);
+          if (!match || dismissed() === match.token) {
+            setTrigger(undefined);
+            if (!match) setDismissed(undefined);
+            lastKey = "";
+            return;
+          }
+          const next = buildTuiCompletionOptions(
+            listSnippets(snippets),
+            skills.values(),
+            match.query,
+          );
+          const key = `${focused.plainText}\n${cursor}\n${next.map((item) => item.title).join("\n")}`;
+          if (key !== lastKey) {
+            lastKey = key;
+            setOptions(next);
+            setSelected(0);
+            ignoreMouseUntil = Date.now() + 150;
+            scroll?.scrollTo(0);
+            if (dismissed() && dismissed() !== match.token) setDismissed(undefined);
+          }
+          setTrigger(match);
+          if (anchor) {
+            // Main overlays the entire Prompt wrapper, not its padded textarea.
+            // OC2's footer and editor share that wrapper; use their common ancestor
+            // so host padding, multiline growth and other footer slots remain intact.
+            const ancestors = new Set<Renderable>();
+            for (let parent = anchor.parent; parent; parent = parent.parent) ancestors.add(parent);
+            let container: Renderable = focused;
+            while (container.parent && !ancestors.has(container)) {
+              container = container.parent;
             }
-          })();
-        }}
-      />
-    ));
-  };
+            setPosition({
+              top: container.y - anchor.y - Math.min(10, Math.max(1, next.length)),
+              left: container.x - anchor.x,
+              width: container.width,
+            });
+          }
+        };
 
-  const acceptVisibleAutocomplete = () => {
-    const total = options().length;
-    const actionable = total > 0 || canCreate();
-    if (!visible() || !actionable) return false;
+        const closeMenu = () => {
+          setTrigger(undefined);
+        };
 
-    if (total > 0) {
-      choose(selected());
-    } else if (canCreate()) {
-      void createSnippetDraft();
-    }
-
-    return true;
-  };
-
-  onMount(() => {
-    const submitAutocomplete = (evt: KeyEvent) => {
-      if (!isSubmitKey(evt)) return;
-      if (dialogBlockingInput()) return;
-      if (!acceptVisibleAutocomplete()) return;
-      evt.preventDefault();
-      evt.stopPropagation();
-    };
-
-    props.api.renderer.keyInput.prependListener("keypress", submitAutocomplete);
-    onCleanup(() => {
-      props.api.renderer.keyInput.removeListener("keypress", submitAutocomplete);
-    });
-  });
-
-  useKeyboard((evt) => {
-    const ref = prompt();
-    const name = evt.name?.toLowerCase();
-
-    if (ref && isReloadCommand(ref.current.input) && (name === "return" || name === "enter")) {
-      executeReloadInPrompt(
-        props.api,
-        ref,
-        () => {
-          syncPromptInput(ref, "");
+        const insert = (
+          choice: TuiCompletionOption["value"],
+          confirmedPrompt?: EditBufferRenderable,
+        ) => {
+          const focused = confirmedPrompt ?? activePrompt();
+          if (!isHostPrompt(focused) || footer.mode !== "normal") return;
+          const match = promptTrigger(focused);
+          if (!match) return;
+          const cursor = focused.cursorOffset;
+          const tag = choice.kind === "skill" ? `#skill(${choice.name})` : `#${choice.name}`;
+          // Locate the ASCII '#' boundary in native display coordinates. Do not
+          // measure Unicode independently of the editor's configured width rules.
+          let start = 0;
+          let end = cursor;
+          while (start < end) {
+            const middle = Math.floor((start + end) / 2);
+            if (focused.getTextRange(0, middle).length < match.start) start = middle + 1;
+            else end = middle;
+          }
+          // Replacing the whole buffer clears host extmarks and their payload IDs.
+          // Only edit the hashtag; native edits relocate unrelated marks for us.
+          focused.setSelection(start, cursor);
+          focused.deleteSelection();
+          focused.insertText(`${tag} `);
+          focused.focus();
           setDismissed(undefined);
-        },
-        refreshSnippetOptions,
-      );
-      evt.preventDefault();
-      evt.stopPropagation();
-      return;
-    }
+          closeMenu();
+        };
 
-    if (dialogBlockingInput()) return;
-    if (!visible()) return;
+        const createUnmatched = async () => {
+          const focused = activePrompt();
+          if (!focused) return;
+          const match = promptTrigger(focused);
+          const name = normalizeUnmatchedTrigger(match?.query ?? "");
+          if (!name) return;
+          setDialogOpen(true);
+          closeMenu();
+          try {
+            const confirmed = await context.ui.dialog.confirm({
+              title: `Create #${name}?`,
+              message: "No matching snippet or skill exists. Create an empty project snippet?",
+              label: { confirm: "Create", cancel: "Cancel" },
+            });
+            if (!confirmed) return;
+            await createSnippet(name, "", {}, directory);
+            await reload();
+            insert({ kind: "snippet", name }, focused);
+          } finally {
+            setDialogOpen(false);
+            if (!focused.isDestroyed) focused.focus();
+            queueMicrotask(sync);
+          }
+        };
 
-    if (handleNavigationKey(evt)) {
-      return;
-    }
+        const keypress = (event: KeyEvent) => {
+          if (dialogOpen()) return;
+          // Read the editor before dispatch too: fast typing must not accept an
+          // option from the previous polling tick or leak Enter to host submission.
+          sync();
+          if (trigger()) {
+            const name = event.name?.toLowerCase();
+            const up = isAutocompleteNavUpKey(event);
+            const down = isAutocompleteNavDownKey(event);
+            if ((up || down) && options().length) {
+              ignoreMouseUntil = Date.now() + 150;
+              setSelected(stepSelection(selected(), options().length, up ? -1 : 1));
+              scroll?.scrollChildIntoView(`snippet-option-${selected()}`);
+            } else if (name === "escape") {
+              setDismissed(trigger()?.token);
+              closeMenu();
+            } else if (["tab", "return", "enter", "linefeed"].includes(name)) {
+              const item = options()[selected()];
+              if (item) insert(item.value);
+              else if (normalizeUnmatchedTrigger(trigger()?.query ?? "")) void createUnmatched();
+              else return;
+            } else {
+              queueMicrotask(sync);
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
+          queueMicrotask(sync);
+        };
 
-    if (name === "escape") {
-      setDismissed(match()?.token);
-      evt.preventDefault();
-      evt.stopPropagation();
-      return;
-    }
+        const timer = setInterval(sync, 25);
+        onMount(() => context.renderer.keyInput.prependListener("keypress", keypress));
+        onCleanup(() => {
+          clearInterval(timer);
+          context.renderer.keyInput.removeListener("keypress", keypress);
+          closeMenu();
+        });
 
-    if (name === "tab" || name === "return" || name === "linefeed" || name === "enter") {
-      if (!acceptVisibleAutocomplete()) return;
-      evt.preventDefault();
-      evt.stopPropagation();
-      return;
-    }
-
-    // Mirror the host prompt state right after normal typing so stale matches disappear.
-    schedulePromptSync();
-  });
-
-  const emptyLabel = createMemo(() => {
-    if ((snippets.loading || skills.loading) && options().length === 0) {
-      return "Loading snippets and skills...";
-    }
-
-    if (snippets().length === 0 && skills().length === 0) return "No snippets or skills found";
-    return "No matching snippets or skills";
-  });
-
-  const addSnippetLabel = createMemo(() => {
-    if (creating()) return "Creating snippet...";
-    return `Add new Snippet: #${draftName()}`;
-  });
-
-  const selectedFg = createMemo(() => selectedText(props.api.theme.current));
-
-  return (
-    <box>
-      <Show when={visible()}>
-        <box
-          position="absolute"
-          top={-menuHeight()}
-          left={0}
-          right={0}
-          zIndex={100}
-          borderColor={props.api.theme.current.border}
-          {...INLINE_BORDER}
-        >
-          <scrollbox
-            ref={(r: ScrollBoxRenderable) => {
-              scroll = r;
-            }}
-            backgroundColor={props.api.theme.current.backgroundMenu}
-            height={menuHeight()}
-            scrollbarOptions={{ visible: false }}
-          >
-            <Index
-              each={options()}
-              fallback={
-                <Show
-                  when={canCreate()}
-                  fallback={
-                    <box paddingLeft={1} paddingRight={1}>
-                      <text fg={props.api.theme.current.textMuted}>{emptyLabel()}</text>
-                    </box>
-                  }
+        const height = () => Math.min(10, Math.max(1, options().length));
+        // Native slash autocomplete uses the overlay context, including its
+        // focused action foreground. Neither agent colors nor custom contrast
+        // calculations belong here; read reactively so an open menu follows theme changes.
+        const palette = () => context.theme?.contextual?.overlay;
+        const primary = () => palette()?.background.action.primary.focused;
+        const text = () => palette()?.text.default;
+        const muted = () => palette()?.text.subdued;
+        const menuBackground = () => palette()?.background.default;
+        const selectedText = () => palette()?.text.action.primary.focused;
+        return (
+          <box ref={anchor} width={0} height={0}>
+            <Show when={trigger()}>
+              <box
+                position="absolute"
+                top={position().top}
+                left={position().left}
+                width={position().width}
+                height={height()}
+                zIndex={100}
+                border={["left", "right"]}
+                borderColor={palette()?.border.default}
+                customBorderChars={{
+                  topLeft: "",
+                  bottomLeft: "",
+                  vertical: "┃",
+                  topRight: "",
+                  bottomRight: "",
+                  horizontal: " ",
+                  bottomT: "",
+                  topT: "",
+                  cross: "",
+                  leftT: "",
+                  rightT: "",
+                }}
+              >
+                <scrollbox
+                  ref={scroll}
+                  height={height()}
+                  backgroundColor={menuBackground()}
+                  scrollbarOptions={{ visible: false }}
                 >
-                  {/* biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI rows intentionally handle mouse selection. */}
-                  <box
-                    id="create-snippet"
-                    paddingLeft={1}
-                    paddingRight={1}
-                    backgroundColor={props.api.theme.current.primary}
-                    onMouseMove={(event) => {
-                      if (!allowMouseHover()) return;
-                      if (!recordMouseMove(event.x, event.y)) return;
-                      setInputMode("mouse");
-                    }}
-                    onMouseDown={() => {
-                      setInputMode("mouse");
-                      setLastMousePos(undefined);
-                    }}
-                    onMouseUp={() => {
-                      void createSnippetDraft();
-                    }}
+                  <For
+                    each={options()}
+                    fallback={
+                      // biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI rows handle mouse selection; the prompt owns keyboard input.
+                      <box
+                        paddingLeft={1}
+                        backgroundColor={
+                          normalizeUnmatchedTrigger(trigger()?.query ?? "") ? primary() : undefined
+                        }
+                        onMouseUp={() => {
+                          if (normalizeUnmatchedTrigger(trigger()?.query ?? ""))
+                            void createUnmatched();
+                        }}
+                      >
+                        <text
+                          fg={
+                            normalizeUnmatchedTrigger(trigger()?.query ?? "")
+                              ? selectedText()
+                              : muted()
+                          }
+                        >
+                          {normalizeUnmatchedTrigger(trigger()?.query ?? "")
+                            ? `Add new Snippet: #${normalizeUnmatchedTrigger(trigger()?.query ?? "")}`
+                            : "No snippets or skills found"}
+                        </text>
+                      </box>
+                    }
                   >
-                    <text fg={selectedFg()}>{addSnippetLabel()}</text>
-                  </box>
-                </Show>
-              }
-            >
-              {(option, index) => (
-                // biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI rows intentionally handle mouse selection.
-                // biome-ignore lint/a11y/useKeyWithMouseEvents: OpenTUI boxes do not expose DOM-style focus events.
-                <box
-                  id={option().id}
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={
-                    index === selected() ? props.api.theme.current.primary : undefined
-                  }
-                  flexDirection="row"
-                  onMouseMove={(event) => {
-                    if (!allowMouseHover()) return;
-                    // User requirement: ignore synthetic hover churn when the list scrolls under a stationary mouse.
-                    if (!recordMouseMove(event.x, event.y)) return;
-                    setInputMode("mouse");
-                  }}
-                  onMouseOver={() => {
-                    if (!allowMouseHover()) return;
-                    if (inputMode() !== "mouse") return;
-                    setSelected(index);
-                  }}
-                  onMouseDown={() => {
-                    setInputMode("mouse");
-                    setLastMousePos(undefined);
-                    setSelected(index);
-                  }}
-                  onMouseUp={() => choose(index)}
-                >
-                  <text
-                    fg={index === selected() ? selectedFg() : props.api.theme.current.text}
-                    flexShrink={0}
-                    wrapMode="none"
-                  >
-                    {renderHighlighted(
-                      option().label,
-                      query(),
-                      index === selected() ? selectedFg() : props.api.theme.current.text,
+                    {(item, index) => (
+                      // biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI rows handle mouse selection; the prompt owns keyboard input.
+                      <box
+                        id={`snippet-option-${index()}`}
+                        paddingLeft={1}
+                        paddingRight={1}
+                        flexDirection="row"
+                        backgroundColor={selected() === index() ? primary() : undefined}
+                        onMouseMove={(event) => {
+                          const point = `${event.x},${event.y}`;
+                          if (Date.now() < ignoreMouseUntil || point === lastMouse) return;
+                          lastMouse = point;
+                          setSelected(index());
+                        }}
+                        onMouseUp={() => insert(item.value)}
+                      >
+                        <text
+                          fg={selected() === index() ? selectedText() : text()}
+                          flexShrink={0}
+                          wrapMode="none"
+                        >
+                          {item.title}
+                        </text>
+                        <text
+                          fg={selected() === index() ? selectedText() : muted()}
+                          wrapMode="none"
+                        >{`  ${item.description}`}</text>
+                      </box>
                     )}
-                  </text>
-                  <Show when={option().aliases.length > 0}>
-                    <text
-                      fg={index === selected() ? selectedFg() : props.api.theme.current.textMuted}
-                      wrapMode="none"
-                      flexShrink={0}
-                    >
-                      {renderHighlighted(
-                        `  ${option().aliases.length === 1 ? "alias" : "aliases"}: ${option().aliases.join(", ")}`,
-                        query(),
-                        index === selected() ? selectedFg() : props.api.theme.current.textMuted,
-                      )}
-                    </text>
-                  </Show>
-                  <Show when={option().description}>
-                    <text
-                      fg={index === selected() ? selectedFg() : props.api.theme.current.textMuted}
-                      wrapMode="none"
-                    >
-                      {renderHighlighted(
-                        `  ${option().description}`,
-                        query(),
-                        index === selected() ? selectedFg() : props.api.theme.current.textMuted,
-                      )}
-                    </text>
-                  </Show>
-                </box>
-              )}
-            </Index>
-          </scrollbox>
-        </box>
-      </Show>
-      <props.api.ui.Prompt
-        sessionID={props.sessionID}
-        workspaceID={props.workspaceID}
-        visible={props.visible}
-        disabled={props.disabled || dialogBlockingInput()}
-        onSubmit={props.onSubmit}
-        placeholders={props.placeholders}
-        ref={bind}
-        right={props.right}
-      />
-    </box>
-  );
-}
-
-const tui: TuiPlugin = async (api) => {
-  let currentPrompt: TuiPromptRef | undefined;
-
-  const bindPrompt = (ref: TuiPromptRef | undefined) => {
-    currentPrompt = ref;
-  };
-
-  api.command.register(() => [
-    {
-      title: "Insert snippet",
-      value: "snippets.insert",
-      description: "Insert a # trigger into the current prompt",
-      category: "Prompt",
-      hidden: !currentPrompt,
-      onSelect() {
-        if (!currentPrompt) return;
-
-        setPromptInput(currentPrompt, insertSnippetTrigger(currentPrompt.current.input));
-        currentPrompt.focus();
-      },
-    },
-  ]);
-
-  api.slots.register({
-    order: 100,
-    slots: {
-      home_prompt(_ctx, value) {
-        return (
-          <PromptWithSnippetAutocomplete
-            api={api}
-            bindPrompt={bindPrompt}
-            hostRef={value.ref}
-            workspaceID={value.workspace_id}
-            placeholders={HOME_PLACEHOLDERS}
-            right={<api.ui.Slot name="home_prompt_right" workspace_id={value.workspace_id} />}
-          />
+                  </For>
+                </scrollbox>
+              </box>
+            </Show>
+          </box>
         );
       },
-      session_prompt(_ctx, value) {
-        return (
-          <PromptWithSnippetAutocomplete
-            api={api}
-            bindPrompt={bindPrompt}
-            hostRef={value.ref}
-            sessionID={value.session_id}
-            visible={value.visible}
-            disabled={value.disabled}
-            onSubmit={value.on_submit}
-            right={<api.ui.Slot name="session_prompt_right" session_id={value.session_id} />}
-          />
-        );
-      },
-    },
-  });
-};
+    });
 
-const plugin: TuiPluginModule & { id: string } = {
-  id,
-  tui,
-};
+    return dispose;
+  },
+});
 
 export default plugin;

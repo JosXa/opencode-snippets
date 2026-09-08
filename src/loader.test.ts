@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PATHS } from "../src/constants.js";
 import { createSnippet, deleteSnippet, ensureSnippetsDir, loadSnippets } from "../src/loader.js";
@@ -84,6 +84,36 @@ Think step by step. Double-check your work.`,
   });
 
   describe("Project snippets only", () => {
+    it("skips a symlinked project snippet file even when its target is readable", async () => {
+      const outside = join(tempDir, "outside-file.md");
+      await writeFile(outside, "must not load");
+      await symlink(outside, join(projectSnippetDir, "linked.md"));
+
+      const snippets = await loadSnippets(projectDir, globalSnippetDir);
+
+      expect(snippets.has("linked")).toBe(false);
+    });
+
+    it("rejects a symlinked project snippet directory that escapes the canonical root", async () => {
+      const outside = join(tempDir, "outside");
+      await rm(projectSnippetDir, { recursive: true, force: true });
+      await mkdir(outside, { recursive: true });
+      await writeFile(join(outside, "escaped.md"), "must not load");
+      await symlink(outside, projectSnippetDir, "dir");
+
+      await expect(loadSnippets(projectDir, globalSnippetDir)).rejects.toThrow(
+        "must not be a symbolic link",
+      );
+      await expect(createSnippet("new", "must not write", {}, projectDir)).rejects.toThrow(
+        "must not be a symbolic link",
+      );
+      await expect(deleteSnippet("escaped", projectDir, globalSnippetDir)).rejects.toThrow(
+        "must not be a symbolic link",
+      );
+      expect(await Bun.file(join(outside, "escaped.md")).text()).toBe("must not load");
+      expect(await Bun.file(join(outside, "new.md")).exists()).toBe(false);
+    });
+
     it("should load snippets from project directory", async () => {
       await writeFile(
         join(projectSnippetDir, "project-specific.md"),

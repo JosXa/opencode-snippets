@@ -1,9 +1,159 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { PluginInput } from "@opencode-ai/plugin";
 import type { Config, Message, Part, UserMessage } from "@opencode-ai/sdk";
-import { SnippetsPlugin } from "./index.js";
+import plugin, { SnippetsPlugin, server } from "./index.js";
+import { createSnippet, deleteSnippet } from "./src/loader.js";
+import { resolveCompletionCursor } from "./src/tui-trigger.js";
+import { setupV2Snippets } from "./src/v2-request.js";
+
+function v2Context() {
+  let contextHook: ((request: Record<string, unknown>) => Promise<void>) | undefined;
+  const registration = { dispose: async () => undefined };
+  return {
+    get hook() {
+      return contextHook;
+    },
+    context: {
+      skill: { transform: async () => registration },
+      session: {
+        hook: async (_name: string, callback: typeof contextHook) => {
+          contextHook = callback;
+          return registration;
+        },
+      },
+      tool: { hook: async () => registration },
+      event: {
+        subscribe: ({ signal }: { signal: AbortSignal }) =>
+          (async function* () {
+            await new Promise<void>((resolve) =>
+              signal.addEventListener("abort", () => resolve(), { once: true }),
+            );
+          })(),
+      },
+    },
+  };
+}
+
+describe("OpenCode V2 plugin entry", () => {
+  it("exports a V2 plugin definition", () => {
+    expect(plugin.id).toBe("opencode-snippets");
+    expect(typeof plugin.setup).toBe("function");
+    expect(server).toBe(plugin);
+  });
+});
+
+describe("OpenCode V2 final regressions", () => {
+  let root: string;
+  let project: string;
+  let snippetDir: string;
+
+  beforeEach(async () => {
+    root = join(import.meta.dir, `.test-v2-final-${crypto.randomUUID()}`);
+    project = join(root, "project");
+    snippetDir = join(project, ".opencode", "snippet");
+    await mkdir(snippetDir, { recursive: true });
+    await writeFile(join(snippetDir, "greeting.md"), "hello durable world");
+  });
+
+  afterEach(async () => rm(root, { recursive: true, force: true }));
+
+  it("durably replays historical expansion and shell output after plugin restart", async () => {
+    const message = () => ({
+      id: "historical-message",
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "#greeting !`printf x >> shell-runs; printf stable-output`",
+        },
+      ],
+    });
+    const first = v2Context();
+    const cleanupFirst = await setupV2Snippets(first.context as never, {
+      directory: project,
+      globalDirectory: join(root, "global"),
+      homeDirectory: root,
+      skillDirectory: join(root, "skills"),
+    });
+    const firstRequest = { sessionID: "restart-session", messages: [message()] };
+    await first.hook?.(firstRequest);
+    await cleanupFirst();
+
+    const second = v2Context();
+    const cleanupSecond = await setupV2Snippets(second.context as never, {
+      directory: project,
+      globalDirectory: join(root, "global"),
+      homeDirectory: root,
+      skillDirectory: join(root, "skills"),
+    });
+    const secondRequest = { sessionID: "restart-session", messages: [message()] };
+    await second.hook?.(secondRequest);
+
+    expect(secondRequest.messages[0].content[0].text).toBe(
+      firstRequest.messages[0].content[0].text,
+    );
+    expect(secondRequest.messages[0].content[0].text).toContain(
+      "hello durable world stable-output",
+    );
+    expect(await readFile(join(project, "shell-runs"), "utf8")).toBe("x");
+    await cleanupSecond();
+  });
+
+  it("does not repeat a historical management mutation after restart", async () => {
+    const original = () => ({
+      id: "management-message",
+      role: "user",
+      content: [{ type: "text", text: '/snippets add restart-safe "initial value"' }],
+    });
+    const first = v2Context();
+    const firstCleanup = await setupV2Snippets(first.context as never, {
+      directory: project,
+      globalDirectory: join(root, "global"),
+      homeDirectory: root,
+      skillDirectory: join(root, "skills"),
+    });
+    await first.hook?.({ sessionID: "management-session", messages: [original()] });
+    await firstCleanup();
+    await writeFile(join(snippetDir, "restart-safe.md"), "changed after processing");
+
+    const second = v2Context();
+    const secondCleanup = await setupV2Snippets(second.context as never, {
+      directory: project,
+      globalDirectory: join(root, "global"),
+      homeDirectory: root,
+      skillDirectory: join(root, "skills"),
+    });
+    await second.hook?.({ sessionID: "management-session", messages: [original()] });
+    expect(await readFile(join(snippetDir, "restart-safe.md"), "utf8")).toBe(
+      "changed after processing",
+    );
+    await secondCleanup();
+  });
+
+  it("rejects traversal names and symlink targets for add and delete", async () => {
+    await expect(createSnippet("../escape", "bad", {}, project)).rejects.toThrow(
+      "Invalid snippet name",
+    );
+    await expect(deleteSnippet("../escape", project)).rejects.toThrow("Invalid snippet name");
+    const outside = join(root, "outside.md");
+    await writeFile(outside, "outside");
+    await symlink(outside, join(snippetDir, "linked.md"));
+    await expect(createSnippet("linked", "replacement", {}, project)).rejects.toThrow(
+      "escapes its configured directory",
+    );
+    await expect(deleteSnippet("linked", project)).rejects.toThrow(
+      "escapes its configured directory",
+    );
+    expect(await readFile(outside, "utf8")).toBe("outside");
+  });
+
+  it("uses OpenTUI native cursor offsets unchanged for Unicode input", () => {
+    expect(resolveCompletionCursor("🙂 #greeting", 3)).toBe(3);
+    expect(resolveCompletionCursor("🙂 #greeting", 99)).toBe("🙂 #greeting".length);
+  });
+});
 
 /** Temp directory for test snippets */
 let tempDir: string;

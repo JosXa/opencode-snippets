@@ -22,7 +22,13 @@ const tui = await Bun.build({
   entrypoints: ["./tui.tsx"],
   outdir: "./dist",
   target: "node",
-  external: ["@opencode-ai/plugin/tui", "@opentui/core", "@opentui/solid", "solid-js"],
+  external: [
+    "@opencode-ai/plugin/tui",
+    "@opentui/core",
+    "@opentui/keymap",
+    "@opentui/solid",
+    "solid-js",
+  ],
   plugins: [solidPlugin],
 });
 if (!tui.success) {

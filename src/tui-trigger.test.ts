@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildTuiCompletionOptions,
+  findHashtagTriggerAtCursor,
   findTrailingHashtagTrigger,
   insertSkillLoad,
   insertSnippetTag,
@@ -8,8 +10,11 @@ import {
   isAutocompleteNavUpKey,
   isDialogInputBlocked,
   isReloadCommand,
+  normalizeUnmatchedTrigger,
   preferredSnippetTag,
+  replaceHashtagAtCursor,
   replaceTrailingHashtag,
+  resolveCompletionCursor,
   stepSelection,
   truncateSnippetPreview,
 } from "./tui-trigger.js";
@@ -57,6 +62,117 @@ describe("findTrailingHashtagTrigger", () => {
       query: "reivew",
       token: "#reivew",
     });
+  });
+});
+
+describe("cursor-position hashtag completion", () => {
+  test("uses OpenTUI's native end-of-input cursor offset", () => {
+    const input = "use #rev";
+    const cursor = resolveCompletionCursor(input, input.length);
+    expect(cursor).toBe(input.length);
+    expect(replaceHashtagAtCursor(input, cursor, "#review")).toEqual({
+      text: "use #review ",
+      cursor: 12,
+    });
+  });
+
+  test("uses the native Unicode cursor offset without byte conversion", () => {
+    const input = "use #café";
+    const cursor = resolveCompletionCursor(input, input.length);
+    expect(cursor).toBe(input.length);
+    expect(replaceHashtagAtCursor(input, cursor, "#cafe-template")?.text).toBe(
+      "use #cafe-template ",
+    );
+  });
+
+  test("does not mistake a cursor before the final character for end-of-input", () => {
+    const input = "use #rev!";
+    const cursor = resolveCompletionCursor(input, input.length - 1);
+    expect(cursor).toBe(input.length - 1);
+  });
+
+  test("finds the trigger immediately before the cursor", () => {
+    expect(findHashtagTriggerAtCursor("before #rev after", 11)).toEqual({
+      start: 7,
+      end: 11,
+      query: "rev",
+      token: "#rev",
+    });
+  });
+
+  test("replaces only the trigger and preserves text after the cursor", () => {
+    expect(replaceHashtagAtCursor("before #rev after", 11, "#review")).toEqual({
+      text: "before #review  after",
+      cursor: 15,
+    });
+  });
+
+  test("supports skill completion in the middle of a prompt", () => {
+    expect(replaceHashtagAtCursor("use #ski now", 8, "#skill(testing)")).toEqual({
+      text: "use #skill(testing)  now",
+      cursor: 20,
+    });
+  });
+});
+
+describe("V2 autocomplete choices", () => {
+  test("includes both snippet and skill completions", () => {
+    const options = buildTuiCompletionOptions(
+      [
+        {
+          name: "review",
+          aliases: ["rev"],
+          content: "Review this",
+          source: "project",
+          filePath: "/tmp/review.md",
+        },
+      ],
+      [
+        {
+          name: "reviewer",
+          description: "Review skill",
+          content: "instructions",
+          source: "project",
+          filePath: "/tmp/reviewer/SKILL.md",
+        },
+      ],
+      "rev",
+    );
+    expect(options.map((option) => option.value)).toEqual([
+      { kind: "snippet", name: "review" },
+      { kind: "skill", name: "reviewer" },
+    ]);
+  });
+
+  test("treats #skill( as a skill-only completion prefix", () => {
+    const options = buildTuiCompletionOptions(
+      [
+        {
+          name: "skill-helper",
+          aliases: [],
+          content: "Not a native skill",
+          source: "project",
+          filePath: "/tmp/skill-helper.md",
+        },
+      ],
+      [
+        {
+          name: "testing",
+          description: "Test skill",
+          content: "instructions",
+          source: "global",
+          filePath: "/tmp/testing/SKILL.md",
+        },
+      ],
+      "skill(te",
+    );
+
+    expect(options.map((option) => option.value)).toEqual([{ kind: "skill", name: "testing" }]);
+  });
+
+  test("normalizes an unmatched trigger into a creatable snippet name", () => {
+    expect(normalizeUnmatchedTrigger(" New Review! ")).toBe("new-review");
+    expect(normalizeUnmatchedTrigger("!!!")).toBeUndefined();
   });
 });
 

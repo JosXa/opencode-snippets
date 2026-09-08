@@ -11,3 +11,6 @@ dist/
 .dolt/
 *.db
 .beads-credential-key
+
+# Legacy V2 state was project-local. Current releases keep private state in the user data dir.
+.opencode/.opencode-snippets-v2-state.json*
