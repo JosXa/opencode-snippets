@@ -153,6 +153,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
           const skillLoadResult = await expandSkillLoads(part.text || "", skills, snippets, {
             expandSkillTagsInContent: config.experimental.skillRendering,
             extractInject: config.experimental.injectBlocks,
+            directory: ctx.directory,
           });
           part.text = skillLoadResult.text;
           skillPayloads.push(...skillLoadResult.payloads);
@@ -491,6 +492,7 @@ export const SnippetsPlugin: Plugin = async (ctx) => {
     const recovered = await buildSkillPayloadsFromVisibleText(text, skills, snippets, {
       expandSkillTagsInContent: config.experimental.skillRendering,
       extractInject: config.experimental.injectBlocks,
+      directory: ctx.directory,
     });
 
     if (recovered.length > 0) {
