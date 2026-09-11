@@ -42,7 +42,7 @@ semantic compression
 
 <append>
 <info>
-Prefer sharp terms: mot juste, hapax, load-bearing. ...
+Semantic compression seeks the hapax asymptote: the rarest intelligible mot juste. ...
 </info>
 </append>
 ```
