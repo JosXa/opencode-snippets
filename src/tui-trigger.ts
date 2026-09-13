@@ -70,7 +70,10 @@ export function buildTuiCompletionOptions(
 ): TuiCompletionOption[] {
   const normalized = query.toLowerCase();
   const skillQuery = normalized.match(/^skill\(([^)]*)$/)?.[1];
+  // Filesystem enumeration order differs across hosts. Keep keyboard selection
+  // stable when the same snippets or skills are loaded on another machine.
   const snippetOptions = [...snippets]
+    .sort((left, right) => left.name.localeCompare(right.name))
     .filter(() => skillQuery === undefined)
     .filter(
       (snippet) =>
@@ -83,6 +86,7 @@ export function buildTuiCompletionOptions(
       value: { kind: "snippet" as const, name: snippet.name },
     }));
   const skillOptions = [...skills]
+    .sort((left, right) => left.name.localeCompare(right.name))
     .filter(
       (skill) =>
         skill.name.toLowerCase().includes(skillQuery ?? normalized) ||

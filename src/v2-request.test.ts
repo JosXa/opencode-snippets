@@ -1163,12 +1163,13 @@ describe("V2 request expansion", () => {
     );
     await writeFile(join(snippetDirectory, "inject.md"), "<inject>ACTIVE</inject>");
 
-    const queued: unknown[] = [];
+    const queued: { event: unknown; done: () => void }[] = [];
     let wake: (() => void) | undefined;
     const emit = (event: unknown) => {
-      queued.push(event);
+      const handled = new Promise<void>((done) => queued.push({ event, done }));
       wake?.();
       wake = undefined;
+      return handled;
     };
     let contextHook: ((request: Record<string, unknown>) => Promise<void>) | undefined;
     const registration = { dispose: async () => {} };
@@ -1194,7 +1195,10 @@ describe("V2 request expansion", () => {
               }
               if (signal.aborted) return;
               const event = queued.shift();
-              if (event) yield event;
+              if (event) {
+                yield event.event;
+                event.done();
+              }
             }
           },
         }),
@@ -1221,7 +1225,7 @@ describe("V2 request expansion", () => {
       await Bun.file(store.path).exists();
       await import("node:fs/promises").then(({ rename }) => rename(store.directory, dataBackup));
       await writeFile(store.directory, "blocks durable cleanup");
-      emit({ type: "session.deleted", data: { sessionID: "failed-session" } });
+      const deletion = emit({ type: "session.deleted", data: { sessionID: "failed-session" } });
 
       let cleared = false;
       for (let attempt = 0; attempt < 50; attempt++) {
@@ -1238,15 +1242,13 @@ describe("V2 request expansion", () => {
       }
       expect(cleared).toBe(true);
 
+      // Memory clears before filesystem cleanup settles. Keep the failure in
+      // place until the event consumer finishes handling the deletion.
+      await deletion;
       await rm(store.directory, { force: true });
       await import("node:fs/promises").then(({ rename }) => rename(dataBackup, store.directory));
       await activate("successful-session", "successful-message");
-      emit({ type: "session.deleted", data: { sessionID: "successful-session" } });
-      for (let attempt = 0; attempt < 50; attempt++) {
-        const state = JSON.parse(await readFile(store.path, "utf8"));
-        if (Object.keys(state.sessions).length === 1) break;
-        await Bun.sleep(10);
-      }
+      await emit({ type: "session.deleted", data: { sessionID: "successful-session" } });
       expect(Object.keys(JSON.parse(await readFile(store.path, "utf8")).sessions)).toHaveLength(1);
       await cleanup();
     } finally {
