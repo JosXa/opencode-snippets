@@ -210,6 +210,47 @@ aliases: safe
 
 You can also use JSON array style: `aliases: ["cp", "pick"]`
 
+### Fields and forms
+
+Snippets declare typed inputs in YAML frontmatter and reference answers with ordinary Handlebars variables:
+
+```markdown
+---
+fields:
+  app:
+    label: App name
+    required: true
+---
+MyApps (search for {{app}})
+```
+
+Accept a completion or type a space after an exact snippet name to fill its form. Confirming writes a readable reference such as `#myapps(app="Payroll")` into the composer; sending the message expands it. Cancel preserves the original reference. Use **Edit snippet fields** for the invocation under the cursor to change answers.
+
+Autocomplete marks snippets that open forms with `☷` after their name. Forms support text, multiline text, numbers, checkboxes, and selection lists, with defaults and validation. The action row is **OK · Cancel · Help**. Help reveals keyboard shortcuts and navigation instructions; these stay hidden by default. Tab/Shift+Tab move between fields and buttons, arrows select, Space toggles a checkbox, Ctrl+J inserts a newline, Enter confirms, and Escape cancels.
+
+```markdown
+---
+fields:
+  count:
+    label: Options
+    type: number
+    default: 5
+    min: 0
+    integer: true
+---
+{{#if (gt count 0)}}give me {{count}} {{plural count "option" "options"}} to choose from{{/if}}
+```
+
+Metadata does not print answers; body variables and conditions control the output. Conditions use typed answers; this example emits nothing for zero and uses singular wording for one. For a preset, put `#options(count=10)` in `ten-options.md`. An explicit outer answer such as `#ten-options(count=2)` overrides that default. Nested snippets share their parent's answers; separate invocations remain independent.
+
+The `fields` mapping determines input order and opts the body into Handlebars. Use `fields: {}` to render a body with no inputs of its own. Body references do not declare fields, and legacy snippets without their own mapping or an inline skill helper retain literal placeholders. Select options use YAML arrays, such as `options: [quick, normal, thorough]`.
+
+Arguments use named keys, JSON-quoted text, finite numbers, and `yes`/`no` booleans. Answers stay literal even when they contain hashtags, shell commands, or template syntax. Headless invocations use defaults and reject missing required answers before effects run.
+
+See [field authoring and natural-language examples](skill/snippets/references/fields-and-forms.md) for all field types, constraints, escaping, repeated values, and conditional prose. The [example templates](examples/forms/) include review, reword, and options presets. Review emits no directive for zero reviewers or zero cycles; one reviewer omits parallelism and one cycle omits repetition. Reword and options also omit their requests for zero.
+
+For inline skill content in a snippet, use `{{skill "review"}}`. Existing XML skill tags remain supported; `#skill(review)` continues to load hidden context with a visible marker.
+
 ### Shell Command Substitution
 
 The plugin adds shell substitution to regular OpenCode prompts, not just snippet files. Use ``!`command` `` for output-only injection and ``!>`command` `` when you want the executed command shown too:
@@ -511,7 +552,29 @@ Logs are written to `~/.config/opencode/logs/snippets/daily/` when enabled.
 
 ## Contributing
 
-Contributions welcome! Please open an issue or PR on GitHub. 
+### Runtime tests for OpenCode 2
+
+Run the unit and renderer tests with `bun test`. To exercise the built plugin in
+real OpenCode 2 processes, install the CLI version matching `@opencode/plugin`
+in `package.json`, then run:
+
+```bash
+bun run test:v2
+```
+
+Set `OPENCODE2_BIN` to test a specific CLI executable. The runtime suite uses
+isolated home/config/data directories and a local deterministic model endpoint.
+It verifies saved messages and actual model requests across CLI submissions,
+native attachments, skill-tool calls, queued input, commands, restarts, forks,
+and project boundaries. Failed tests retain their temporary directory and print
+its path, including provider requests, session exports, and process logs.
+
+The CLI and native prompt API have separate coverage because `run` serializes
+multiword arguments with quotes and inlines text supplied by `--file`; native
+API files remain attachments. Update these explicit CLI compatibility assertions
+when the host changes that behavior.
+
+Contributions welcome! Please open an issue or PR on GitHub.
 👥 [Discord Forum](https://discord.com/channels/1391832426048651334/1463378026833379409)
 
 ## License

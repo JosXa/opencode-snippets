@@ -25,6 +25,10 @@ export interface SnippetInfo {
   content: string;
   aliases: string[];
   description?: string;
+  /** Raw YAML schema, validated by form discovery before effects. */
+  fields?: unknown;
+  /** Keep malformed frontmatter addressable so invocation reports the parse error. */
+  metadataError?: string;
   filePath: string;
   source: "global" | "project";
 }
@@ -38,6 +42,7 @@ export type SnippetRegistry = Map<string, SnippetInfo>;
  * Frontmatter data from snippet files
  */
 export interface SnippetFrontmatter {
+  fields?: unknown;
   /** Alternative hashtags for this snippet (plural form, preferred) */
   aliases?: string | string[];
   /** Alternative hashtags for this snippet (singular form, also accepted) */

@@ -12,6 +12,70 @@ const output = {
 };
 
 describe("V2 durable processing state", () => {
+  test("preparation can retry after restart, completed replay skips it, and interrupted effects remain blocked", async () => {
+    const root = await mkdtemp(join(tmpdir(), "snippets-v2-prepare-"));
+    const store = () => new DurableStore(join(root, "project"), { dataDirectory: root });
+    let preparations = 0;
+    let effects = 0;
+    const execute = async (value: string) => {
+      expect(value).toBe("validated");
+      effects++;
+      return output;
+    };
+    try {
+      await expect(
+        store().process("session", "message", {
+          prepare: async () => {
+            throw new Error("invalid field");
+          },
+          execute,
+        }),
+      ).rejects.toThrow("invalid field");
+      expect(await Bun.file(store().path).exists()).toBe(false);
+      expect(effects).toBe(0);
+      expect(
+        await store().process("session", "message", {
+          prepare: async () => {
+            preparations++;
+            return "validated";
+          },
+          execute,
+        }),
+      ).toEqual(output);
+      expect(
+        await store().process("session", "message", {
+          prepare: async () => {
+            throw new Error("definition is now invalid");
+          },
+          execute,
+        }),
+      ).toEqual(output);
+      expect(preparations).toBe(1);
+      expect(effects).toBe(1);
+      await expect(
+        store().process("session", "interrupted", {
+          prepare: async () => "validated",
+          execute: async () => {
+            effects++;
+            throw new Error("interrupted effect");
+          },
+        }),
+      ).rejects.toThrow("interrupted effect");
+      await expect(
+        store().process("session", "interrupted", {
+          prepare: async () => {
+            preparations++;
+            return "validated";
+          },
+          execute,
+        }),
+      ).rejects.toThrow("refusing to repeat side effects");
+      expect(preparations).toBe(1);
+      expect(effects).toBe(2);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   test("an explicit home stays isolated from the process XDG data directory", async () => {
     const root = await mkdtemp(join(tmpdir(), "snippets-v2-home-isolation-"));
     const previous = process.env.XDG_DATA_HOME;

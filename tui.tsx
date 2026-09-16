@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { Plugin } from "@opencode-ai/plugin/tui";
+import { Plugin } from "@opencode/plugin/tui";
 import type {
   BoxRenderable,
   EditBufferRenderable,
@@ -8,23 +8,33 @@ import type {
   ScrollBoxRenderable,
 } from "@opentui/core";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { type FieldValues, getSnippetForm } from "./src/fields.js";
+import { serializeInvocation } from "./src/invocation.js";
 import { createSnippet, listSnippets, loadSnippets } from "./src/loader.js";
+import { SnippetForm } from "./src/tui-form.js";
+import {
+  exactSnippetTrigger,
+  findEditableInvocation,
+  formAwareTrigger,
+  replaceReferenceRange,
+} from "./src/tui-form-state.js";
 import {
   buildTuiCompletionOptions,
-  findHashtagTriggerAtCursor,
+  type findHashtagTriggerAtCursor,
   isAutocompleteNavDownKey,
   isAutocompleteNavUpKey,
   normalizeUnmatchedTrigger,
   stepSelection,
   type TuiCompletionOption,
 } from "./src/tui-trigger.js";
+import type { SnippetRegistry } from "./src/types.js";
 import { executeV2SnippetCommand } from "./src/v2-command.js";
 
-function promptTrigger(editor: EditBufferRenderable) {
+function promptTrigger(editor: EditBufferRenderable, snippets: SnippetRegistry) {
   // Native offsets count display columns, not UTF-16 units. Let OpenTUI decode
   // the prefix so wide glyphs, combining marks and newlines use its own rules.
   const prefix = editor.getTextRange(0, editor.cursorOffset);
-  return findHashtagTriggerAtCursor(prefix, prefix.length);
+  return formAwareTrigger(editor.plainText, prefix.length, snippets);
 }
 
 function isHostPrompt(
@@ -55,9 +65,24 @@ const plugin = Plugin.define({
       }));
     let snippets = await loadSnippets(directory, globalDirectory);
     let skills = await loadSkills();
+    const forms = new Map<string, boolean>();
+    const hasForm = (name: string) => {
+      const cached = forms.get(name);
+      if (cached !== undefined) return cached;
+      try {
+        const result = getSnippetForm(name, snippets).fields.length > 0;
+        forms.set(name, result);
+        return result;
+      } catch {
+        // Invalid definitions report their error when invoked, not while browsing.
+        forms.set(name, false);
+        return false;
+      }
+    };
 
     const reload = async () => {
       snippets = await loadSnippets(directory, globalDirectory);
+      forms.clear();
       skills = await loadSkills();
     };
 
@@ -81,18 +106,36 @@ const plugin = Plugin.define({
         let ignoreMouseUntil = 0;
         let lastMouse = "";
         let lastKey = "";
+        let prompt: EditBufferRenderable | undefined;
+        let handoff = false;
 
         const activePrompt = () => {
           const focused = context.renderer.currentFocusedEditor;
           // A dialog can leave the prompt focused (e.g. confirmation dialogs).
           // Respect the host input mode as well as the focused editor's identity.
           if (footer.mode !== "normal" || context.keymap.mode.current() !== "base") return;
-          if (isHostPrompt(focused)) return focused;
+          if (isHostPrompt(focused)) {
+            prompt = focused;
+            return focused;
+          }
         };
 
         context.keymap.layer(() => ({
           mode: "global",
+          bindings: ["snippets.edit-fields"],
           commands: [
+            {
+              id: "snippets.edit-fields",
+              title: "Edit snippet fields",
+              description: "Edit the snippet invocation under the composer cursor",
+              palette: true,
+              slash: { name: "snippets:edit" },
+              bind: "ctrl+g",
+              run: (_input, event) => {
+                if (event && !activePrompt()) return false;
+                editFields();
+              },
+            },
             {
               id: "snippets.manage",
               title: "Manage snippets",
@@ -122,7 +165,7 @@ const plugin = Plugin.define({
             return;
           }
           const cursor = focused.cursorOffset;
-          const match = promptTrigger(focused);
+          const match = promptTrigger(focused, snippets);
           if (!match || dismissed() === match.token) {
             setTrigger(undefined);
             if (!match) setDismissed(undefined);
@@ -166,30 +209,109 @@ const plugin = Plugin.define({
           setTrigger(undefined);
         };
 
+        const report = (error: unknown) =>
+          context.ui.toast.show({
+            title: "Snippet fields",
+            message: error instanceof Error ? error.message : String(error),
+            variant: "error",
+          });
+
+        const openForm = (
+          focused: EditBufferRenderable,
+          name: string,
+          range: { start: number; end: number },
+          supplied: FieldValues = {},
+          suffix = "",
+        ) => {
+          try {
+            const form = getSnippetForm(name, snippets, supplied);
+            if (!form.fields.length) return false;
+            // Leave the original range intact until Save. Escape, outside clicks,
+            // and host dialog dismissal all preserve the exact prior answers.
+            const original = focused.plainText;
+            setDialogOpen(true);
+            closeMenu();
+            context.ui.dialog.set({ size: "large", centered: true });
+            context.ui.dialog.show(
+              () => (
+                <SnippetForm
+                  context={context}
+                  name={name}
+                  fields={form.fields}
+                  values={form.values}
+                  cancel={() => context.ui.dialog.clear()}
+                  save={(values) => {
+                    if (!isHostPrompt(focused)) return context.ui.dialog.clear();
+                    if (focused.plainText !== original) {
+                      report(
+                        new Error(
+                          "The composer changed while the form was open. Cancel and reopen the fields.",
+                        ),
+                      );
+                      return;
+                    }
+                    replaceReferenceRange(
+                      focused,
+                      range,
+                      `${serializeInvocation(name, values)}${suffix}`,
+                    );
+                    context.ui.dialog.clear();
+                  }}
+                />
+              ),
+              () => {
+                setDialogOpen(false);
+                // Closing a dialog can restore focus during the confirming key's
+                // dispatch. Do not interpret that same event as a composer key.
+                handoff = true;
+                queueMicrotask(() => {
+                  handoff = false;
+                });
+                setDismissed(original.slice(range.start, range.end));
+                if (isHostPrompt(focused)) focused.focus();
+                queueMicrotask(sync);
+              },
+            );
+            return true;
+          } catch (error) {
+            report(error);
+            return true;
+          }
+        };
+
+        const editFields = () => {
+          if (dialogOpen()) return;
+          // Palette actions run while the palette is handing focus back. Keep
+          // the last verified host prompt rather than using the palette input.
+          const focused = activePrompt() ?? prompt;
+          if (!isHostPrompt(focused) || footer.mode !== "normal") return;
+          try {
+            const cursor = focused.getTextRange(0, focused.cursorOffset).length;
+            const invocation = findEditableInvocation(focused.plainText, cursor, snippets);
+            if (invocation && openForm(focused, invocation.name, invocation, invocation.values))
+              return;
+            context.ui.toast.show({
+              message: "Place the cursor in a snippet reference with fields, then press Ctrl+G.",
+              variant: "info",
+            });
+          } catch (error) {
+            report(error);
+          }
+        };
+
         const insert = (
           choice: TuiCompletionOption["value"],
           confirmedPrompt?: EditBufferRenderable,
         ) => {
           const focused = confirmedPrompt ?? activePrompt();
           if (!isHostPrompt(focused) || footer.mode !== "normal") return;
-          const match = promptTrigger(focused);
+          const match = promptTrigger(focused, snippets);
           if (!match) return;
-          const cursor = focused.cursorOffset;
           const tag = choice.kind === "skill" ? `#skill(${choice.name})` : `#${choice.name}`;
-          // Locate the ASCII '#' boundary in native display coordinates. Do not
-          // measure Unicode independently of the editor's configured width rules.
-          let start = 0;
-          let end = cursor;
-          while (start < end) {
-            const middle = Math.floor((start + end) / 2);
-            if (focused.getTextRange(0, middle).length < match.start) start = middle + 1;
-            else end = middle;
-          }
+          if (choice.kind === "snippet" && openForm(focused, choice.name, match, {}, " ")) return;
           // Replacing the whole buffer clears host extmarks and their payload IDs.
           // Only edit the hashtag; native edits relocate unrelated marks for us.
-          focused.setSelection(start, cursor);
-          focused.deleteSelection();
-          focused.insertText(`${tag} `);
+          replaceReferenceRange(focused, match, `${tag} `);
           focused.focus();
           setDismissed(undefined);
           closeMenu();
@@ -198,7 +320,7 @@ const plugin = Plugin.define({
         const createUnmatched = async () => {
           const focused = activePrompt();
           if (!focused) return;
-          const match = promptTrigger(focused);
+          const match = promptTrigger(focused, snippets);
           const name = normalizeUnmatchedTrigger(match?.query ?? "");
           if (!name) return;
           setDialogOpen(true);
@@ -221,10 +343,25 @@ const plugin = Plugin.define({
         };
 
         const keypress = (event: KeyEvent) => {
-          if (dialogOpen()) return;
+          if (dialogOpen() || handoff) return;
           // Read the editor before dispatch too: fast typing must not accept an
           // option from the previous polling tick or leak Enter to host submission.
           sync();
+          const focused = activePrompt();
+          // Space accepts exact registry names/aliases only, even if the menu
+          // was dismissed. Partial names must stay ordinary composer text.
+          if (focused && event.name === "space" && !event.ctrl && !event.meta) {
+            const match = exactSnippetTrigger(
+              focused.plainText,
+              focused.getTextRange(0, focused.cursorOffset).length,
+              snippets,
+            );
+            if (match && openForm(focused, match.query, match, {}, " ")) {
+              event.preventDefault();
+              event.stopPropagation();
+              return;
+            }
+          }
           if (trigger()) {
             const name = event.name?.toLowerCase();
             const up = isAutocompleteNavUpKey(event);
@@ -352,6 +489,7 @@ const plugin = Plugin.define({
                           wrapMode="none"
                         >
                           {item.title}
+                          {item.value.kind === "snippet" && hasForm(item.value.name) ? " ☷" : ""}
                         </text>
                         <text
                           fg={selected() === index() ? selectedText() : muted()}

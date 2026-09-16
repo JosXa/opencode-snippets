@@ -2,7 +2,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Context, SlotClaim } from "@opencode-ai/plugin/tui";
 import {
   type BoxRenderable,
   type ExtmarksController,
@@ -16,12 +15,15 @@ import { render } from "@opentui/solid";
 import { createStore } from "solid-js/store";
 import plugin from "./tui.js";
 
+type Context = Parameters<typeof plugin.setup>[0];
+type SlotClaim = Parameters<Context["ui"]["slot"]>[0];
+
 const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-async function setup(background = RGBA.fromHex("#101820")) {
+async function setup(background = RGBA.fromHex("#101820"), files: Record<string, string> = {}) {
   const directory = await mkdtemp(join(import.meta.dir, ".test-inline-"));
   cleanups.push(() => rm(directory, { recursive: true, force: true }));
   const globalDirectory = join(directory, "global");
@@ -31,6 +33,9 @@ async function setup(background = RGBA.fromHex("#101820")) {
       join(globalDirectory, `${name}.md`),
       `${name === "review" ? '---\naliases: ["中rev", "rév"]\n---\n' : ""}Description for ${name}`,
     );
+  }
+  for (const [name, content] of Object.entries(files)) {
+    await Bun.write(join(globalDirectory, `${name}.md`), content);
   }
   const screen = await createTestRenderer({ width: 80, height: 24 });
   cleanups.push(() => screen.renderer.destroy());
@@ -159,6 +164,22 @@ async function setup(background = RGBA.fromHex("#101820")) {
     setTheme,
   };
 }
+
+test("INLINE marks direct and nested forms without marking ordinary snippets", async () => {
+  const ui = await setup(undefined, {
+    "form-direct": "---\nfields:\n  name: {}\n---\n{{name}}",
+    "form-preset": '#form-direct(name="preset")',
+    "form-plain": "Ordinary snippet",
+  });
+  await ui.mockInput.typeText("#form-");
+  await ui.settle();
+  const frame = ui.captureCharFrame();
+  expect(frame).toContain("#form-direct ☷");
+  expect(frame).toContain("#form-preset ☷");
+  expect(frame).toContain("#form-plain");
+  expect(frame).not.toContain("#form-plain ☷");
+  expect(ui.submissions()).toBe(0);
+});
 
 test("INLINE popover aligns with the entire prompt container above its padding, including after resize and multiline growth", async () => {
   const ui = await setup();

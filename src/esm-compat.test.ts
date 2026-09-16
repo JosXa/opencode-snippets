@@ -22,7 +22,7 @@ import { resolve } from "node:path";
 const ROOT = resolve(import.meta.dir, "..");
 
 /** CJS-only packages used by this project that lack proper ESM exports */
-const CJS_ONLY_PACKAGES = ["gray-matter", "jsonc-parser"];
+const CJS_ONLY_PACKAGES = ["gray-matter", "jsonc-parser", "handlebars"];
 
 /**
  * Match any static `import` from a CJS-only package:

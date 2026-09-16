@@ -29,6 +29,31 @@ function createAliasedRegistry(
 }
 
 describe("expandHashtags - Recursive Includes and Loop Detection", () => {
+  it("preserves unmatched closing tags and continues parsing later blocks", () => {
+    expect(parseSnippetBlocks("</append>")).toEqual({
+      inline: "</append>",
+      prepend: [],
+      append: [],
+      inject: [],
+    });
+    expect(parseSnippetBlocks("before </append> <append>after</append> </inject>")).toEqual({
+      inline: "before </append>  </inject>",
+      prepend: [],
+      append: ["after"],
+      inject: [],
+    });
+    const registry: SnippetRegistry = new Map([
+      [
+        "conditional",
+        {
+          ...snippet("{{#if enabled}}<append>{{/if}}tail</append>", "conditional"),
+          fields: { enabled: { type: "checkbox" } },
+        },
+      ],
+    ]);
+    expect(expandHashtags("#conditional(enabled=no)", registry).text).toBe("tail</append>");
+    expect(expandHashtags("#conditional(enabled=yes)", registry).append).toEqual(["tail"]);
+  });
   describe("Basic expansion", () => {
     it("should expand a single hashtag", () => {
       const registry = createRegistry([["greeting", "Hello, World!"]]);

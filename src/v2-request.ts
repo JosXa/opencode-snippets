@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { join } from "node:path";
-import type { Plugin } from "@opencode-ai/plugin";
-import type { Plugin as EffectPlugin } from "@opencode-ai/plugin/effect";
+import type { Plugin } from "@opencode/plugin";
+import type { Plugin as EffectPlugin } from "@opencode/plugin/effect";
 import { Effect, type Scope, Stream } from "effect";
 import { loadConfig } from "./config.js";
 import { assembleMessage, expandHashtags } from "./expander.js";
+import { getSnippetForm } from "./fields.js";
+import { type Invocation, parseInvocation } from "./invocation.js";
+import { LiteralStore } from "./literals.js";
 import { loadSnippets } from "./loader.js";
 import { logger } from "./logger.js";
 import { executeShellCommands } from "./shell.js";
@@ -13,7 +16,7 @@ import { loadFromDirectory, type SkillRegistry } from "./skill-loader.js";
 import { expandSkillLoads } from "./skill-loading.js";
 import { expandSkillTags } from "./skill-renderer.js";
 import type { SnippetRegistry } from "./types.js";
-import { executeV2SnippetCommand } from "./v2-command.js";
+import { executeV2SnippetCommand, isV2SnippetCommand } from "./v2-command.js";
 import { nativeSkillRegistry } from "./v2-skills.js";
 import { type Processed as DurableProcessed, DurableStore, type TextPatch } from "./v2-state.js";
 
@@ -121,14 +124,13 @@ export async function setupV2Snippets(
     logger.debugEnabled ||= config.logging.debug;
     // TUI commands and draft edits happen in another process. Read current files
     // for new work; durable results retain the original expansion on replay.
-    const [snippets, skills] = await Promise.all([
-      loadSnippets(directory, options.globalDirectory),
-      config.experimental.skillLoading || config.experimental.skillRendering
-        ? context.skill
-            .list({ location: { directory } })
-            .then(({ data }) => nativeSkillRegistry(data))
-        : Promise.resolve(new Map()),
-    ]);
+    const snippets = await loadSnippets(directory, options.globalDirectory);
+    const skills =
+      config.experimental.skillLoading ||
+      config.experimental.skillRendering ||
+      [...snippets.values()].some((snippet) => /\{\{[~#]?\s*skill\b/.test(snippet.content))
+        ? nativeSkillRegistry((await context.skill.list({ location: { directory } })).data)
+        : new Map();
     return { directory, config, snippets, skills };
   };
 
@@ -155,44 +157,95 @@ export async function setupV2Snippets(
       store = new DurableStore(directory, options);
       stores.set(directory, store);
     }
-    const durableResult = await store.process(sessionID, key, async () => {
-      const { config, snippets, skills } = await runtimeFor(sessionID);
-      const injections: Processed["injections"] = [];
-      const hidden: string[] = [];
-      const transformedText: string[] = [];
-      for (const original of originalText) {
-        const command = await executeV2SnippetCommand(
-          original,
-          snippets,
-          directory,
-          options.globalDirectory,
-        );
-        if (command !== undefined) {
-          transformedText.push(`[opencode-snippets command completed]\n${command}`);
-          continue;
+    const durableResult = await store.process(sessionID, key, {
+      prepare: async () => {
+        const { config, snippets, skills } = await runtimeFor(sessionID);
+        const executionSnippets = new Map(snippets);
+        const overlay = new Map<string, string | null>();
+        const injections: Processed["injections"] = [];
+        const hidden: string[] = [];
+        const parts: Array<{ command: string } | { text: string; literals: LiteralStore }> = [];
+        for (const original of originalText) {
+          if (isV2SnippetCommand(original)) {
+            // Use the same command and loader logic over virtual files, so later
+            // parts see creations, aliases and deletion fallbacks before effects.
+            await executeV2SnippetCommand(
+              original,
+              snippets,
+              directory,
+              options.globalDirectory,
+              overlay,
+            );
+            if (
+              !skills.size &&
+              [...snippets.values()].some((snippet) => /\{\{[~#]?\s*skill\b/.test(snippet.content))
+            ) {
+              for (const [name, skill] of nativeSkillRegistry(
+                (await context.skill.list({ location: { directory } })).data,
+              ))
+                skills.set(name, skill);
+            }
+            parts.push({ command: original });
+            continue;
+          }
+          const literals = new LiteralStore();
+          let text = assembleMessage(
+            expandHashtags(
+              config.experimental.skillRendering
+                ? renderDirectSkillTags(original, snippets, skills)
+                : original,
+              snippets,
+              new Map(),
+              {
+                literals,
+                skill: (name) => {
+                  const skill = skills.get(name.toLowerCase());
+                  if (!skill) throw new Error(`Unknown inline skill '${name}'`);
+                  return skill.content;
+                },
+                extractInject: config.experimental.injectBlocks,
+                onInjectBlock: (block) =>
+                  injections.push({
+                    name: block.snippetName,
+                    content: literals.restore(block.content),
+                  }),
+              },
+            ),
+          );
+          // Hashtag expansion reserves #skill(...). Resolve all loads together so
+          // direct, recursive, prepend and append loads follow the visible order.
+          if (config.experimental.skillLoading) {
+            const loaded = await expandSkillLoads(text, skills, snippets, {
+              expandSkillTagsInContent: config.experimental.skillRendering,
+              extractInject: config.experimental.injectBlocks,
+            });
+            text = loaded.text;
+            hidden.push(...loaded.payloads.map((payload) => literals.restore(payload)));
+          }
+          parts.push({ text, literals });
         }
-        let text = original;
-        if (config.experimental.skillRendering) text = expandSkillTags(text, skills);
-        text = assembleMessage(
-          expandHashtags(text, snippets, new Map(), {
-            extractInject: config.experimental.injectBlocks,
-            onInjectBlock: (block) =>
-              injections.push({ name: block.snippetName, content: block.content }),
-          }),
-        );
-        // Hashtag expansion reserves #skill(...). Resolve all loads together so
-        // direct, recursive, prepend and append loads follow the visible order.
-        if (config.experimental.skillLoading) {
-          const loaded = await expandSkillLoads(text, skills, snippets, {
-            expandSkillTagsInContent: config.experimental.skillRendering,
-            extractInject: config.experimental.injectBlocks,
-          });
-          text = loaded.text;
-          hidden.push(...loaded.payloads);
+        return { parts, snippets: executionSnippets, hidden, injections };
+      },
+      execute: async ({ parts, snippets, hidden, injections }) => {
+        const transformedText: string[] = [];
+        // Prepare every text part before commands or shell from any part can run.
+        for (const part of parts) {
+          if ("command" in part) {
+            const command = await executeV2SnippetCommand(
+              part.command,
+              snippets,
+              directory,
+              options.globalDirectory,
+            );
+            transformedText.push(`[opencode-snippets command completed]\n${command}`);
+            continue;
+          }
+          transformedText.push(
+            part.literals.restore(await executeShellCommands(part.text, { directory })),
+          );
         }
-        transformedText.push(await executeShellCommands(text, { directory }));
-      }
-      return minimizeProcessed(originalText, { text: transformedText, hidden, injections });
+        return minimizeProcessed(originalText, { text: transformedText, hidden, injections });
+      },
     });
     return restoreProcessed(originalText, durableResult);
   };
@@ -501,9 +554,22 @@ function expandToolResult(
   for (const key of ["output", "text", "value"] as const) {
     const record = value as Record<string, unknown>;
     if (typeof record[key] !== "string") continue;
-    let text = record[key] as string;
-    if (renderSkills) text = expandSkillTags(text, skills);
-    record[key] = assembleMessage(expandHashtags(text, snippets, new Map(), { extractInject }));
+    const literals = new LiteralStore();
+    const source = renderSkills
+      ? renderDirectSkillTags(record[key] as string, snippets, skills)
+      : (record[key] as string);
+    const text = assembleMessage(
+      expandHashtags(source, snippets, new Map(), {
+        extractInject,
+        literals,
+        skill: (name) => {
+          const skill = skills.get(name.toLowerCase());
+          if (!skill) throw new Error(`Unknown inline skill '${name}'`);
+          return skill.content;
+        },
+      }),
+    );
+    record[key] = literals.restore(text);
   }
   for (const child of Object.values(value)) {
     if (Array.isArray(child)) {
@@ -513,6 +579,35 @@ function expandToolResult(
       expandToolResult(child, snippets, skills, renderSkills, extractInject);
     }
   }
+}
+
+/** Retain the legacy XML stage while excluding the self-contained argument text. */
+function renderDirectSkillTags(
+  text: string,
+  snippets: SnippetRegistry,
+  skills: SkillRegistry,
+): string {
+  const literals = new LiteralStore();
+  let end = 0;
+  let masked = "";
+  for (const match of text.matchAll(/#([a-z0-9][a-z0-9_-]*)/gi)) {
+    if (
+      match.index < end ||
+      !snippets.has(match[1].toLowerCase()) ||
+      match[1].toLowerCase() === "skill"
+    )
+      continue;
+    if (
+      !getSnippetForm(match[1], snippets).fields.length &&
+      !/^\(\s*[A-Za-z][A-Za-z0-9_]*\s*=/.test(text.slice(match.index + match[0].length))
+    )
+      continue;
+    const invocation = parseInvocation(text, match.index) as Invocation;
+    masked +=
+      text.slice(end, match.index) + literals.protect(text.slice(match.index, invocation.end));
+    end = invocation.end;
+  }
+  return literals.restore(expandSkillTags(masked + text.slice(end), skills));
 }
 
 /** Small deterministic seam used by tests and the V2 request-context hook. */
@@ -557,8 +652,13 @@ async function expandPlainText(
   snippets: SnippetRegistry,
   directory?: string,
 ): Promise<string> {
-  return executeShellCommands(
-    assembleMessage(expandHashtags(text, snippets, new Map(), { extractInject: false })),
-    { directory },
+  const literals = new LiteralStore();
+  return literals.restore(
+    await executeShellCommands(
+      assembleMessage(
+        expandHashtags(text, snippets, new Map(), { extractInject: false, literals }),
+      ),
+      { directory },
+    ),
   );
 }

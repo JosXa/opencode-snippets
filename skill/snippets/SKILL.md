@@ -38,6 +38,8 @@ Content here
 ## Authoring rules
 
 - Read [Creating snippets](./references/creating-snippets.md) before creating or restructuring a snippet.
+- When users ask for inputs, choices, defaults, or conditional wording, read [Fields and forms](./references/fields-and-forms.md). Translate their ordinary language into typed fields; add only requested constraints.
+- Define fields in a YAML frontmatter `fields` mapping; use ordinary Handlebars variables and conditions in the body. Keep familiar names as nested preset snippets when consolidating variants.
 - Use `!>` rather than `` !`cmd` `` when the command itself helps the model interpret its output.
 - Use `<inject>` only for context that must persist for the whole turn.
 - Treat `#skill(...)` as hidden context injection, not inline expansion.

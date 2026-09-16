@@ -1,4 +1,7 @@
 import { PATTERNS } from "./constants.js";
+import { type FieldValues, getSnippetForm, renderSnippet, validateFields } from "./fields.js";
+import { parseInvocation } from "./invocation.js";
+import { LiteralStore } from "./literals.js";
 import { logger } from "./logger.js";
 import type { ExpansionResult, ParsedSnippetContent, SnippetRegistry } from "./types.js";
 
@@ -21,11 +24,17 @@ export interface InjectBlockInfo {
 }
 
 export interface ExpandOptions {
+  /** Carry this table through skill and shell processing, then restore literals. */
+  literals?: LiteralStore;
+  /** Resolve an inline skill helper while rendering a snippet. */
+  skill?: (name: string) => string;
   /** Whether to extract inject blocks (default: true). If false, inject tags are left as-is. */
   extractInject?: boolean;
   /** Optional callback invoked for each expanded inject block with its source snippet name. */
   onInjectBlock?: (block: InjectBlockInfo) => void;
 }
+
+type ExpansionContext = ExpandOptions & { literals: LiteralStore; values?: FieldValues };
 
 interface BlockCollector {
   prepend: BlockRecord[];
@@ -87,7 +96,7 @@ function expandBlock(
   block: string,
   registry: SnippetRegistry,
   expansionCounts: Map<string, number>,
-  options: ExpandOptions,
+  options: ExpansionContext,
 ): { content: string; nested: BlockCollector } {
   const nested = createCollector();
   const content = expandText(block, registry, expansionCounts, nested, {
@@ -103,82 +112,94 @@ function expandText(
   registry: SnippetRegistry,
   expansionCounts: Map<string, number>,
   collector: BlockCollector,
-  options: ExpandOptions,
+  options: ExpansionContext,
 ): string {
   const { onInjectBlock } = options;
-  let expanded = text;
-  let hasChanges = true;
+  const pattern = new RegExp(PATTERNS.HASHTAG.source, "gi");
+  let expanded = "";
+  let end = 0;
+  for (const match of text.matchAll(pattern)) {
+    const offset = match.index;
+    if (offset < end) continue;
+    const name = match[1];
+    if (
+      name.startsWith("_") ||
+      (name.toLowerCase() === "skill" && text[offset + match[0].length] === "(")
+    )
+      continue;
+    const snippet = registry.get(name.toLowerCase());
+    if (!snippet) continue;
+    const form = getSnippetForm(name, registry);
+    const parameterized =
+      form.fields.length > 0 ||
+      Object.hasOwn(snippet, "fields") ||
+      /^\(\s*[A-Za-z][A-Za-z0-9_]*\s*=/.test(text.slice(offset + match[0].length));
+    const invocation = parameterized ? parseInvocation(text, offset) : undefined;
+    const values = options.values ?? getSnippetForm(name, registry, invocation?.values).values;
+    const errors = validateFields(
+      form.fields,
+      Object.fromEntries(
+        Object.entries(values).filter(([key]) => form.fields.some((field) => field.name === key)),
+      ),
+    );
+    if (Object.keys(errors).length)
+      throw new Error(
+        `#${name}: ${Object.values(errors).join("; ")}. Edit snippet fields or supply named arguments.`,
+      );
+    const scoped = { ...options, values };
+    const key = snippet.name.toLowerCase();
+    const count = (expansionCounts.get(key) || 0) + 1;
+    if (count > MAX_EXPANSION_COUNT) {
+      logger.warn(
+        `Loop detected: snippet '#${key}' expanded ${count} times (max: ${MAX_EXPANSION_COUNT})`,
+      );
+      continue;
+    }
+    expansionCounts.set(key, count);
+    const content = renderSnippet(snippet, values, options.literals, options.skill);
+    const parsed = parseSnippetBlocks(content, scoped);
+    if (parsed === null) {
+      logger.warn(`Failed to parse snippet '${key}', leaving hashtag unchanged`);
+      continue;
+    }
 
-  while (hasChanges) {
-    const previous = expanded;
-    let loopDetected = false;
+    if (
+      !form.fields.length &&
+      !Object.hasOwn(snippet, "fields") &&
+      parsed.inline === "" &&
+      parsed.prepend.length === 0 &&
+      parsed.append.length === 0 &&
+      parsed.inject.length === 0
+    ) {
+      continue;
+    }
 
-    PATTERNS.HASHTAG.lastIndex = 0;
+    // User requirement: inline snippet text should replace every hashtag occurrence,
+    // but prepend/append/inject side effects should only be inserted once per snippet block.
+    for (const block of parsed.prepend) {
+      const expanded = expandBlock(block, registry, expansionCounts, scoped);
+      addBlock(collector, "prepend", snippet.name, expanded.content, onInjectBlock);
+      addNestedBlocks(collector, expanded.nested, onInjectBlock);
+    }
 
-    expanded = expanded.replace(PATTERNS.HASHTAG, (match, name, offset, input) => {
-      if (name.toLowerCase() === "skill" && input[offset + match.length] === "(") {
-        return match;
-      }
+    for (const block of parsed.append) {
+      const expanded = expandBlock(block, registry, expansionCounts, scoped);
+      addBlock(collector, "append", snippet.name, expanded.content, onInjectBlock);
+      addNestedBlocks(collector, expanded.nested, onInjectBlock);
+    }
 
-      const snippet = registry.get(name.toLowerCase());
-      if (snippet === undefined) {
-        return match;
-      }
+    for (const block of parsed.inject) {
+      const expanded = expandBlock(block, registry, expansionCounts, scoped);
+      addBlock(collector, "inject", snippet.name, expanded.content, onInjectBlock);
+      addNestedBlocks(collector, expanded.nested, onInjectBlock);
+    }
 
-      const key = snippet.name.toLowerCase();
-      const count = (expansionCounts.get(key) || 0) + 1;
-      if (count > MAX_EXPANSION_COUNT) {
-        logger.warn(
-          `Loop detected: snippet '#${key}' expanded ${count} times (max: ${MAX_EXPANSION_COUNT})`,
-        );
-        loopDetected = true;
-        return match;
-      }
-
-      expansionCounts.set(key, count);
-
-      const parsed = parseSnippetBlocks(snippet.content, options);
-      if (parsed === null) {
-        logger.warn(`Failed to parse snippet '${key}', leaving hashtag unchanged`);
-        return match;
-      }
-
-      if (
-        parsed.inline === "" &&
-        parsed.prepend.length === 0 &&
-        parsed.append.length === 0 &&
-        parsed.inject.length === 0
-      ) {
-        return match;
-      }
-
-      // User requirement: inline snippet text should replace every hashtag occurrence,
-      // but prepend/append/inject side effects should only be inserted once per snippet block.
-      for (const block of parsed.prepend) {
-        const expanded = expandBlock(block, registry, expansionCounts, options);
-        addBlock(collector, "prepend", snippet.name, expanded.content, onInjectBlock);
-        addNestedBlocks(collector, expanded.nested, onInjectBlock);
-      }
-
-      for (const block of parsed.append) {
-        const expanded = expandBlock(block, registry, expansionCounts, options);
-        addBlock(collector, "append", snippet.name, expanded.content, onInjectBlock);
-        addNestedBlocks(collector, expanded.nested, onInjectBlock);
-      }
-
-      for (const block of parsed.inject) {
-        const expanded = expandBlock(block, registry, expansionCounts, options);
-        addBlock(collector, "inject", snippet.name, expanded.content, onInjectBlock);
-        addNestedBlocks(collector, expanded.nested, onInjectBlock);
-      }
-
-      return expandText(parsed.inline, registry, expansionCounts, collector, options);
-    });
-
-    hasChanges = expanded !== previous && !loopDetected;
+    expanded +=
+      text.slice(end, offset) +
+      expandText(parsed.inline, registry, expansionCounts, collector, scoped);
+    end = invocation?.end ?? offset + match[0].length;
   }
-
-  return expanded;
+  return expanded + text.slice(end);
 }
 
 /**
@@ -209,8 +230,7 @@ export function parseSnippetBlocks(
   let lastIndex = 0;
   let currentBlock: { type: BlockType; startIndex: number; contentStart: number } | null = null;
 
-  let match = tagPattern.exec(content);
-  while (match !== null) {
+  for (const match of content.matchAll(tagPattern)) {
     const isClosing = match[1] === "/";
     const tagName = match.groups?.tagName?.toLowerCase() as BlockType;
     const tagStart = match.index;
@@ -254,7 +274,6 @@ export function parseSnippetBlocks(
       inline += inlinePart;
       currentBlock = { type: tagName, startIndex: tagStart, contentStart: tagEnd };
     }
-    match = tagPattern.exec(content);
   }
 
   // Handle unclosed tag (lenient: treat rest as block content)
@@ -301,14 +320,21 @@ export function expandHashtags(
   options: ExpandOptions = {},
 ): ExpansionResult {
   const collector = createCollector();
-
-  const expanded = expandText(text, registry, expansionCounts, collector, options);
+  const literals = options.literals ?? new LiteralStore();
+  const restore = (text: string) => (options.literals ? text : literals.restore(text));
+  const expanded = expandText(text, registry, expansionCounts, collector, {
+    ...options,
+    literals,
+    onInjectBlock: options.onInjectBlock
+      ? (block) => options.onInjectBlock?.({ ...block, content: restore(block.content) })
+      : undefined,
+  });
 
   return {
-    text: expanded,
-    prepend: collector.prepend.map((block) => block.content),
-    append: collector.append.map((block) => block.content),
-    inject: collector.inject.map((block) => block.content),
+    text: restore(expanded),
+    prepend: collector.prepend.map((block) => restore(block.content)),
+    append: collector.append.map((block) => restore(block.content)),
+    inject: collector.inject.map((block) => restore(block.content)),
   };
 }
 

@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Plugin } from "@opencode-ai/plugin";
+import type { Plugin } from "@opencode/plugin";
 import { Effect, Queue, Stream } from "effect";
+import { serializeInvocation } from "./invocation.js";
 import type { SnippetRegistry } from "./types.js";
 import { expandRequestMessages, setupV2Snippets, setupV2SnippetsEffect } from "./v2-request.js";
 import { DurableStore } from "./v2-state.js";
@@ -127,6 +128,444 @@ async function submissionFixture() {
 }
 
 describe("native OC2 submitted messages", () => {
+  test.each([
+    false,
+    true,
+  ])("multipart global symlink writes and reverse reads persist with a linked directory=%s", async (linkedDir) => {
+    const host = await submissionFixture();
+    try {
+      const globalDir = join(host.directory, "global");
+      const targetDir = linkedDir ? join(host.directory, "dotfiles", "snippets") : globalDir;
+      await Bun.write(join(targetDir, "bar.md"), "OLD");
+      if (linkedDir) await symlink(targetDir, globalDir);
+      await symlink(linkedDir ? join(targetDir, "bar.md") : "bar.md", join(globalDir, "foo.md"));
+      const texts = [
+        '/snippets add foo "NEW"',
+        "#bar #foo",
+        '/snippets add bar "REVERSE"',
+        "#foo #bar",
+        "/snippets delete foo",
+        "#foo #bar",
+      ];
+      const original = {
+        sessionID: "linked-write",
+        messages: [
+          { id: "multipart", role: "user", content: texts.map((text) => ({ type: "text", text })) },
+        ],
+      };
+      const request = structuredClone(original);
+      await host.invoke("context", request);
+      expect(request.messages[0].content[1].text).toBe("NEW NEW");
+      expect(request.messages[0].content[3].text).toBe("REVERSE REVERSE");
+      expect(request.messages[0].content[5].text).toBe("#foo REVERSE");
+      expect(await Bun.file(join(globalDir, "bar.md")).text()).toBe("REVERSE");
+      await host.restart();
+      const replay = structuredClone(original);
+      await host.invoke("context", replay);
+      expect(replay.messages[0].content).toEqual(request.messages[0].content);
+    } finally {
+      await host.dispose();
+    }
+  });
+  test("a created inline skill template resolves before reservation with legacy flags disabled", async () => {
+    const host = await submissionFixture();
+    try {
+      await Bun.write(join(host.directory, ".opencode", "snippet", "config.jsonc"), "{}");
+      const body = '{{skill "hidden"}}';
+      const request = {
+        sessionID: "planned-skill",
+        messages: [
+          {
+            id: "multipart",
+            role: "user",
+            content: [
+              { type: "text", text: `/snippets add inline ${JSON.stringify(body)} --project` },
+              { type: "text", text: "#inline" },
+            ],
+          },
+        ],
+      };
+      await host.invoke("context", request);
+      expect(request.messages[0].content[1].text).toBe("DURABLE_HIDDEN_SKILL");
+      expect(await Bun.file(join(host.directory, ".opencode", "snippet", "inline.md")).text()).toBe(
+        body,
+      );
+    } finally {
+      await host.dispose();
+    }
+  });
+  test("multipart commands preserve sequential creation, overwrite, aliases and deletion fallbacks", async () => {
+    const host = await submissionFixture();
+    try {
+      const texts = [
+        '/snippets add created "CREATED #chosen" --project --aliases fresh --desc "Created description"',
+        "#created #fresh",
+        '/snippets add created "UPDATED" --project --aliases newest',
+        "#created #fresh #newest",
+        '/snippets add victim "GLOBAL" --aliases lower',
+        '/snippets add victim "!`printf BAD >> deleted-ran`" --project --aliases upper',
+        "/snippets delete victim",
+        "#victim #lower #upper",
+        "/snippets delete victim",
+        "#victim #lower",
+        '/snippets add unexpanded "#chosen !`printf BAD >> body-ran`" --project',
+      ];
+      const original = {
+        sessionID: "command-order",
+        messages: [
+          { id: "multipart", role: "user", content: texts.map((text) => ({ type: "text", text })) },
+        ],
+      };
+      const request = structuredClone(original);
+      await host.invoke("context", request);
+      const output = request.messages[0].content;
+      expect(output[1].text).toBe("CREATED CHOSEN_TEXT CREATED CHOSEN_TEXT");
+      expect(output[3].text).toBe("UPDATED #fresh UPDATED");
+      expect(output[7].text).toBe("GLOBAL GLOBAL #upper");
+      expect(output[9].text).toBe("#victim #lower");
+      expect(await Bun.file(join(host.directory, "deleted-ran")).exists()).toBe(false);
+      expect(await Bun.file(join(host.directory, "body-ran")).exists()).toBe(false);
+      expect(
+        await Bun.file(join(host.directory, ".opencode", "snippet", "unexpanded.md")).text(),
+      ).toBe("#chosen !`printf BAD >> body-ran`");
+      await host.restart();
+      const replay = structuredClone(original);
+      await host.invoke("context", replay);
+      expect(replay.messages[0].content).toEqual(output);
+    } finally {
+      await host.dispose();
+    }
+  });
+
+  test("deletion exposes the plural-directory definition and its aliases without executing the removed body", async () => {
+    const host = await submissionFixture();
+    try {
+      await Bun.write(
+        join(host.directory, ".opencode", "snippets", "layer.md"),
+        "---\naliases: [lower]\n---\nFALLBACK",
+      );
+      await Bun.write(
+        join(host.directory, ".opencode", "snippet", "layer.md"),
+        "---\naliases: [upper]\n---\n!`printf BAD >> removed-body`",
+      );
+      const request = {
+        sessionID: "plural-fallback",
+        messages: [
+          {
+            id: "multipart",
+            role: "user",
+            content: [
+              { type: "text", text: "/snippets delete layer" },
+              { type: "text", text: "#layer #lower #upper" },
+            ],
+          },
+        ],
+      };
+      await host.invoke("context", request);
+      expect(request.messages[0].content[1].text).toBe("FALLBACK FALLBACK #upper");
+      expect(await Bun.file(join(host.directory, "removed-body")).exists()).toBe(false);
+    } finally {
+      await host.dispose();
+    }
+  });
+
+  test("planned definitions validate later parts before creating, overwriting, deleting or running shell", async () => {
+    const host = await submissionFixture();
+    try {
+      const directory = join(host.directory, ".opencode", "snippet");
+      await Bun.write(join(directory, "victim.md"), "KEEP");
+      const field = "---\nfields:\n  target:\n    required: true\n---\n{{target}}";
+      const original = {
+        sessionID: "planned-validation",
+        messages: [
+          {
+            id: "same",
+            role: "user",
+            content: [
+              { type: "text", text: '/snippets add chosen "OVERWRITTEN" --project' },
+              { type: "text", text: "/snippets delete victim" },
+              {
+                type: "text",
+                text: `/snippets add required "${field}" --project --aliases need`,
+              },
+              { type: "text", text: "!`printf BAD >> planned-effects`" },
+              { type: "text", text: "#need" },
+            ],
+          },
+        ],
+      };
+      await expect(host.invoke("context", structuredClone(original))).rejects.toThrow("required");
+      expect(await Bun.file(join(directory, "chosen.md")).text()).toBe("CHOSEN_TEXT");
+      expect(await Bun.file(join(directory, "victim.md")).text()).toBe("KEEP");
+      expect(await Bun.file(join(directory, "required.md")).exists()).toBe(false);
+      expect(await Bun.file(join(host.directory, "planned-effects")).exists()).toBe(false);
+    } finally {
+      await host.dispose();
+    }
+  });
+  test("multipart validation precedes commands and shell, and the exact failed key can retry after correction", async () => {
+    const host = await submissionFixture();
+    try {
+      const directory = join(host.directory, ".opencode", "snippet");
+      await Bun.write(join(directory, "review.md"), "Old review definition");
+      const original = {
+        sessionID: "retry-context",
+        messages: [
+          {
+            id: "same-message",
+            role: "user",
+            content: [
+              { type: "text", text: '/snippets add created "CREATED" --project' },
+              { type: "text", text: "!`printf x >> retry-effects; printf EFFECT`" },
+              { type: "text", text: "#review(reviewers=3)" },
+            ],
+          },
+        ],
+      };
+      await expect(host.invoke("context", structuredClone(original))).rejects.toThrow(
+        "unknown field 'reviewers'",
+      );
+      expect(await Bun.file(join(directory, "created.md")).exists()).toBe(false);
+      expect(await Bun.file(join(host.directory, "retry-effects")).exists()).toBe(false);
+      await Bun.write(
+        join(directory, "review.md"),
+        '---\nfields:\n  reviewers:\n    type: number\n---\n{{reviewers}} {{skill "missing"}}',
+      );
+      await host.restart();
+      await expect(host.invoke("context", structuredClone(original))).rejects.toThrow(
+        "Unknown inline skill 'missing'",
+      );
+      expect(await Bun.file(join(directory, "created.md")).exists()).toBe(false);
+      expect(await Bun.file(join(host.directory, "retry-effects")).exists()).toBe(false);
+      host.skills.push({ ...host.skills[0], id: "missing", name: "missing", content: "RESOLVED" });
+      await host.restart();
+      const corrected = structuredClone(original);
+      await host.invoke("context", corrected);
+      expect(corrected.messages[0].content[2].text).toBe("3 RESOLVED");
+      expect(await Bun.file(join(directory, "created.md")).exists()).toBe(true);
+      expect(await Bun.file(join(host.directory, "retry-effects")).text()).toBe("x");
+      await Bun.write(join(directory, "review.md"), "---\nfields: null\n---\nBroken");
+      await host.restart();
+      const replay = structuredClone(original);
+      await host.invoke("context", replay);
+      expect(replay.messages[0].content).toEqual(corrected.messages[0].content);
+      expect(await Bun.file(join(host.directory, "retry-effects")).text()).toBe("x");
+    } finally {
+      await host.dispose();
+    }
+  });
+
+  test("a failed prompt with unchanged identity can retry when its required default is corrected", async () => {
+    const host = await submissionFixture();
+    try {
+      const path = join(host.directory, ".opencode", "snippet", "retry.md");
+      await Bun.write(
+        path,
+        "---\nfields:\n  target:\n    required: true\n---\n{{target}} !`printf x >> prompt-retry`",
+      );
+      const original = { sessionID: "retry-prompt", messageID: "same", prompt: { text: "#retry" } };
+      await expect(host.invoke("prompt", structuredClone(original))).rejects.toThrow("required");
+      await Bun.write(
+        path,
+        "---\nfields:\n  target:\n    required: true\n    default: fixed\n---\n{{target}} !`printf x >> prompt-retry`",
+      );
+      await host.restart();
+      const corrected = structuredClone(original);
+      await host.invoke("prompt", corrected);
+      expect(corrected.prompt.text).toContain("fixed");
+      await host.restart();
+      await host.invoke("prompt", structuredClone(original));
+      expect(await Bun.file(join(host.directory, "prompt-retry")).text()).toBe("x");
+    } finally {
+      await host.dispose();
+    }
+  });
+  test("field answers remain literal through XML, hidden skill, shell, injection and durable replay", async () => {
+    const host = await submissionFixture();
+    try {
+      const directory = join(host.directory, ".opencode", "snippet");
+      await Bun.write(
+        join(directory, "config.jsonc"),
+        JSON.stringify({
+          experimental: { injectBlocks: true, skillLoading: true, skillRendering: true },
+        }),
+      );
+      await Bun.write(
+        join(directory, "form.md"),
+        '---\nfields:\n  text:\n    type: textarea\n    required: true\n---\n{{text}}/{{text}}<append>{{text}}</append><inject>{{text}}</inject> !`printf x >> effects; printf EFFECT` {{skill "hidden"}} #skill(hidden)',
+      );
+      const answer =
+        '#chosen #skill(hidden) <skill name="hidden" /> <append>INJECTED</append> <inject>INJECTED</inject> {{field "oops"}} !`printf BAD >> hostile`\n"🙂"';
+      const raw = serializeInvocation("form", { text: answer });
+      const submission = { sessionID: "literal", messageID: "first", prompt: { text: raw } };
+      await host.invoke("prompt", submission);
+      expect(submission.prompt.text).toBe(
+        `${answer}/${answer} EFFECT DURABLE_HIDDEN_SKILL ↳ Loaded hidden\n\n${answer}`,
+      );
+      expect(await Bun.file(join(host.directory, "hostile")).exists()).toBe(false);
+      expect(await Bun.file(join(host.directory, "effects")).text()).toBe("x");
+      const request = { sessionID: "literal", messages: [nativeUser(submission)] };
+      await host.invoke("context", request);
+      expect(request.messages[0].content[0].text).toBe(answer);
+      expect(request.messages[2].content[0].text.match(/<skill_content /g)).toHaveLength(1);
+      await host.restart();
+      const replay = { sessionID: "literal", messageID: "first", prompt: { text: raw } };
+      await host.invoke("prompt", replay);
+      expect(replay.prompt.text).toBe(submission.prompt.text);
+      expect(await Bun.file(join(host.directory, "effects")).text()).toBe("x");
+      const edited = {
+        sessionID: "literal",
+        messageID: "first",
+        prompt: { text: serializeInvocation("form", { text: "edited" }) },
+      };
+      await host.invoke("prompt", edited);
+      expect(edited.prompt.text).toStartWith("edited/edited EFFECT");
+      expect(await Bun.file(join(host.directory, "effects")).text()).toBe("xx");
+    } finally {
+      await host.dispose();
+    }
+  });
+
+  test("headless required, type and malformed errors reject before shell effects; zero admits empty text", async () => {
+    const host = await submissionFixture();
+    try {
+      const directory = join(host.directory, ".opencode", "snippet");
+      await Bun.write(
+        join(directory, "required.md"),
+        "---\nfields:\n  target:\n    label: Review target\n    required: true\n---\n{{target}} !`printf BAD >> invalid-effect`",
+      );
+      await Bun.write(
+        join(directory, "zero.md"),
+        "---\nfields:\n  count:\n    type: number\n    min: 0\n    default: 1\n---\n{{#if (gt count 0)}}Review{{/if}}",
+      );
+      for (const text of [
+        "#required",
+        '#required(target="  ")',
+        "#required(target=3)",
+        '#required(target="broken)',
+        "#required(unknown=yes)",
+      ]) {
+        await expect(
+          host.invoke("prompt", { sessionID: "validation", messageID: text, prompt: { text } }),
+        ).rejects.toThrow();
+      }
+      expect(await Bun.file(join(host.directory, "invalid-effect")).exists()).toBe(false);
+      const zero = {
+        sessionID: "validation",
+        messageID: "zero",
+        prompt: { text: "#zero(count=0)" },
+      };
+      await host.invoke("prompt", zero);
+      expect(zero.prompt.text).toBe("");
+      await host.restart();
+      const replay = {
+        sessionID: "validation",
+        messageID: "zero",
+        prompt: { text: "#zero(count=0)" },
+      };
+      await host.invoke("prompt", replay);
+      expect(replay.prompt.text).toBe("");
+    } finally {
+      await host.dispose();
+    }
+  });
+  test("invalid YAML schemas reject before earlier multipart effects and remain retryable", async () => {
+    const host = await submissionFixture();
+    try {
+      const path = join(host.directory, ".opencode", "snippet", "schema.md");
+      const original = {
+        sessionID: "schema-retry",
+        messages: [
+          {
+            id: "same",
+            role: "user",
+            content: [
+              { type: "text", text: "!`printf x >> schema-effect`" },
+              { type: "text", text: "#schema" },
+            ],
+          },
+        ],
+      };
+      for (const fields of [
+        "null",
+        "[]",
+        "{x: {render: false}}",
+        "{x: {type: select, options: [one, false]}}",
+        "{x: null}",
+      ]) {
+        await Bun.write(path, `---\nfields: ${fields}\n---\n{{x}}`);
+        await expect(host.invoke("context", structuredClone(original))).rejects.toThrow();
+        expect(await Bun.file(join(host.directory, "schema-effect")).exists()).toBe(false);
+      }
+      for (const yaml of ["fields:\n  x: {}\n  x: {default: duplicate}", "fields: [unclosed"]) {
+        await Bun.write(path, `---\n${yaml}\n---\n!\`printf x >> schema-body-effect\``);
+        for (let attempt = 0; attempt < 3; attempt++) {
+          await expect(host.invoke("context", structuredClone(original))).rejects.toThrow(
+            "invalid frontmatter",
+          );
+          expect(await Bun.file(join(host.directory, "schema-effect")).exists()).toBe(false);
+          expect(await Bun.file(join(host.directory, "schema-body-effect")).exists()).toBe(false);
+          await host.restart();
+        }
+      }
+      await Bun.write(path, "---\nfields:\n  x:\n    default: fixed\n---\n{{x}}");
+      const fixed = structuredClone(original);
+      await host.invoke("context", fixed);
+      expect(fixed.messages[0].content[1].text).toBe("fixed");
+      expect(await Bun.file(join(host.directory, "schema-effect")).text()).toBe("x");
+    } finally {
+      await host.dispose();
+    }
+  });
+
+  test("malformed YAML command metadata rejects every retry before writes or shell effects", async () => {
+    const host = await submissionFixture();
+    try {
+      for (const yaml of ["fields:\n  x: {}\n  x: {}", "fields: [unclosed"]) {
+        const original = {
+          sessionID: "command-yaml-retry",
+          messages: [
+            {
+              id: "same",
+              role: "user",
+              content: [
+                { type: "text", text: "!`printf x >> command-yaml-effect`" },
+                {
+                  type: "text",
+                  text: `/snippets add broken "---\n${yaml}\n---\nBODY" --project --aliases bad`,
+                },
+              ],
+            },
+          ],
+        };
+        for (let attempt = 0; attempt < 3; attempt++) {
+          await expect(host.invoke("context", structuredClone(original))).rejects.toThrow();
+          expect(await Bun.file(join(host.directory, "command-yaml-effect")).exists()).toBe(false);
+          expect(
+            await Bun.file(join(host.directory, ".opencode", "snippet", "broken.md")).exists(),
+          ).toBe(false);
+          await host.restart();
+        }
+      }
+    } finally {
+      await host.dispose();
+    }
+  });
+
+  test("inline skills work without legacy experimental skill flags", async () => {
+    const host = await submissionFixture();
+    try {
+      const directory = join(host.directory, ".opencode", "snippet");
+      await Bun.write(join(directory, "config.jsonc"), "{}");
+      await Bun.write(join(directory, "inline.md"), '{{skill "hidden"}}');
+      const submission = { sessionID: "inline", messageID: "first", prompt: { text: "#inline" } };
+      await host.invoke("prompt", submission);
+      expect(submission.prompt.text).toBe("DURABLE_HIDDEN_SKILL");
+    } finally {
+      await host.dispose();
+    }
+  });
+
   test("keeps mixed direct, recursive and block skill payloads in visible order", async () => {
     const host = await submissionFixture();
     try {

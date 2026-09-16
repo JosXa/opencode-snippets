@@ -54,6 +54,12 @@ export interface DurableStoreOptions {
   homeDirectory?: string;
 }
 
+export type PreparedOperation<T> = {
+  /** Read and validate only. A failure here must remain safe to retry. */
+  prepare: () => Promise<T>;
+  execute: (prepared: T) => Promise<Processed>;
+};
+
 export class DurableStore {
   readonly path: string;
   readonly directory: string;
@@ -70,10 +76,10 @@ export class DurableStore {
     this.path = join(root, `${project}.json`);
   }
 
-  async process(
+  async process<T>(
     sessionID: string,
     key: string,
-    operation: () => Promise<Processed>,
+    operation: (() => Promise<Processed>) | PreparedOperation<T>,
   ): Promise<Processed> {
     return this.lock(async () => {
       const state = await this.read();
@@ -87,6 +93,13 @@ export class DurableStore {
         );
       }
 
+      // Cached and interrupted operations skip preparation. Only new work may
+      // validate without a reservation; every effect still follows durable pending.
+      const execute =
+        typeof operation === "function"
+          ? operation
+          : await operation.prepare().then((prepared) => () => operation.execute(prepared));
+
       state.sessions[durableSessionID] ??= {};
       state.sessions[durableSessionID][durableKey] = {
         status: "pending",
@@ -94,7 +107,7 @@ export class DurableStore {
       };
       await this.write(state);
 
-      const result = await operation();
+      const result = await execute();
       state.sessions[durableSessionID][durableKey] = {
         status: "completed",
         updatedAt: Date.now(),

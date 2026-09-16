@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PATHS } from "../src/constants.js";
+import { expandHashtags } from "../src/expander.js";
+import { getSnippetForm } from "../src/fields.js";
 import { createSnippet, deleteSnippet, ensureSnippetsDir, loadSnippets } from "../src/loader.js";
 
 describe("loadSnippets - Dual Path Support", () => {
@@ -55,6 +57,83 @@ describe("loadSnippets - Dual Path Support", () => {
   });
 
   describe("Global snippets only", () => {
+    it("loads ordered YAML fields, unused toggles, select arrays and aliases without changing the body", async () => {
+      await Bun.write(
+        join(globalSnippetDir, "form.md"),
+        `---
+aliases: [ask]
+fields:
+  task:
+    label: Task description
+    type: textarea
+    required: true
+  useGoal:
+    type: checkbox
+    default: true
+  mode:
+    type: select
+    options: [quick, normal, thorough]
+    default: normal
+---
+{{task}} / {{mode}}`,
+      );
+      const snippets = await loadSnippets(undefined, globalSnippetDir);
+      expect(snippets.get("ask")).toBe(snippets.get("form"));
+      expect(snippets.get("form")?.content).toBe("{{task}} / {{mode}}");
+      const form = getSnippetForm("ask", snippets);
+      expect(form.fields.map((field) => field.name)).toEqual(["task", "useGoal", "mode"]);
+      expect(form.fields[1].label).toBe("Use Goal");
+      expect(form.fields[2].options).toEqual(["quick", "normal", "thorough"]);
+      expect(form.values).toEqual({ task: "", useGoal: true, mode: "normal" });
+      expect(expandHashtags('#ask(task="line1\\nline2")', snippets).text).toBe(
+        "line1\nline2 / normal",
+      );
+    });
+    it("distinguishes omitted fields from an explicit empty mapping", async () => {
+      await Bun.write(join(globalSnippetDir, "legacy.md"), "{{session_id}}");
+      await Bun.write(
+        join(globalSnippetDir, "declared.md"),
+        "---\nfields: {}\n---\n{{session_id}}",
+      );
+      const snippets = await loadSnippets(undefined, globalSnippetDir);
+      expect(Object.hasOwn(snippets.get("legacy") ?? {}, "fields")).toBe(false);
+      expect(snippets.get("declared")?.fields).toEqual({});
+      expect(expandHashtags("#legacy #declared", snippets).text).toBe("{{session_id}} ");
+    });
+    it.each([
+      "fields:\n  target: {}\n  target: {required: true}",
+      "fields: {}\nfields: {target: {}}",
+      "fields:\n  target:\n    default: one\n    default: two",
+      "fields: [unclosed",
+    ])("keeps malformed YAML addressable and rejects it before expansion: %s", async (yaml) => {
+      await Bun.write(join(globalSnippetDir, "broken.md"), `---\n${yaml}\n---\n!\`exit 99\``);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const snippets = await loadSnippets(undefined, globalSnippetDir);
+        expect(snippets.get("broken")?.metadataError).toBeTruthy();
+        expect(() => getSnippetForm("broken", snippets)).toThrow("invalid frontmatter");
+        expect(() => expandHashtags("#broken", snippets)).toThrow("invalid frontmatter");
+      }
+    });
+    it.each([
+      "null",
+      "[]",
+      "text",
+      "{x: null}",
+      "{x: {render: false}}",
+      "{x: {type: select, options: [quick, 3]}}",
+      "{constructor: {}}",
+      "{x: {unknown: true}}",
+    ])("retains invalid YAML fields for actionable discovery errors: %s", async (schema) => {
+      await Bun.write(
+        join(globalSnippetDir, "invalid.md"),
+        `---\nfields: ${schema}\n---\nBody !\`exit 99\``,
+      );
+      const snippets = await loadSnippets(undefined, globalSnippetDir);
+      expect(snippets.has("invalid")).toBe(true);
+      expect(Object.hasOwn(snippets.get("invalid") ?? {}, "fields")).toBe(true);
+      expect(() => getSnippetForm("invalid", snippets)).toThrow();
+      expect(() => expandHashtags("#invalid", snippets)).toThrow();
+    });
     it("should load snippets with aliases", async () => {
       await writeFile(
         join(globalSnippetDir, "careful.md"),

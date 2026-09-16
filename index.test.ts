@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { PluginInput } from "@opencode-ai/plugin";
 import type { Config, Message, Part, UserMessage } from "@opencode-ai/sdk";
 import plugin, { SnippetsPlugin, server } from "./index.js";
 import { createSnippet, deleteSnippet } from "./src/loader.js";
 import { resolveCompletionCursor } from "./src/tui-trigger.js";
 import { setupV2Snippets } from "./src/v2-request.js";
+
+type PluginInput = Parameters<typeof SnippetsPlugin>[0];
 
 function v2Context() {
   let contextHook: ((request: Record<string, unknown>) => Promise<void>) | undefined;
