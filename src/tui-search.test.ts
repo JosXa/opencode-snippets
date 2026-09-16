@@ -31,6 +31,27 @@ function skill(overrides: Partial<SkillInfo> & Pick<SkillInfo, "name" | "content
 }
 
 describe("filterSnippets", () => {
+  test("ranks an exact browser alias before prefix and substring matches", () => {
+    const snippets = [
+      snippet({ name: "is-acceptable-answer", content: "is an acceptable answer" }),
+      snippet({ name: "beep", content: "Play a beep" }),
+      snippet({
+        name: "open-in-browser",
+        aliases: ["browse", "browser", "b"],
+        content: "open in my default browser (OS-appropriate command)",
+      }),
+    ];
+
+    for (const query of ["b", "B", "browser", "open-in-browser"]) {
+      expect(filterSnippets(snippets, query)[0]?.name).toBe("open-in-browser");
+    }
+    expect(filterSnippets(snippets, "b").map((item) => item.name)).toEqual([
+      "open-in-browser",
+      "beep",
+      "is-acceptable-answer",
+    ]);
+  });
+
   test("prefers prefix matches before substring matches", () => {
     const result = filterSnippets(
       [
