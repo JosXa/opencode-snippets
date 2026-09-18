@@ -111,7 +111,12 @@ export async function fixture() {
   const api = async <T>(operation: string, args: string[] = []) =>
     JSON.parse(await execute(["api", "--standalone", operation, ...args])) as T;
   const exported = async (sessionID: string) =>
-    (await api<{ data: Export }>("v2.session.export", ["--param", `sessionID=${sessionID}`])).data;
+    (
+      await api<{ data: Export }>("experimental.session.export", [
+        "--param",
+        `sessionID=${sessionID}`,
+      ])
+    ).data;
   const start = async () => {
     const process = Bun.spawn([cli, "serve", "--hostname", "127.0.0.1", "--port", "0"], {
       cwd: directory,
@@ -198,8 +203,10 @@ export async function fixture() {
         files: options.file ? [{ uri: pathToFileURL(options.file).href }] : [],
         skills: options.skills?.map((id) => ({ id })),
       });
-      await native.request(`/api/session/${session}/wait`, {});
-      const saved = (await native.request<{ data: Export }>(`/api/session/${session}/export`)).data;
+      await native.request(`/api/experimental/session/${session}/wait`, {});
+      const saved = (
+        await native.request<{ data: Export }>(`/api/experimental/session/${session}/export`)
+      ).data;
       await Bun.write(join(root, `export-${session}.json`), JSON.stringify(saved, null, 2));
       const user = saved.messages.findLast((message) => message.type === "user");
       assert.ok(user, `No persisted user message: ${root}`);
@@ -276,8 +283,8 @@ export async function fixture() {
       `import { Plugin } from ${JSON.stringify(import.meta.resolve("@opencode/plugin"))};
 export default Plugin.define({id:"runtime-fixture",async setup(ctx){
   await ctx.skill.transform(editor => {
-    editor.add({id:"host:proof",name:"Host proof",description:"Native registry fixture",location:${JSON.stringify(join(root, "native", "SKILL.md"))},content:"HOST_BODY #chosen"});
-    editor.add({id:"host:tool",name:"Host tool",description:"Tool fixture",location:${JSON.stringify(join(root, "native", "SKILL.md"))},content:"#tool-output"});
+    editor.add({id:"host:proof",name:"Host proof",description:"Native registry fixture",path:${JSON.stringify(join(root, "native", "SKILL.md"))},content:"HOST_BODY #chosen"});
+    editor.add({id:"host:tool",name:"Host tool",description:"Tool fixture",path:${JSON.stringify(join(root, "native", "SKILL.md"))},content:"#tool-output"});
   });
 }});`,
     ),
@@ -322,7 +329,7 @@ export default Plugin.define({id:"runtime-fixture",async setup(ctx){
     configure,
     verify: async () => {
       const version = (await execute(["--version"])).trim();
-      const config = await api<unknown>("v2.config.get");
+      const config = await api<unknown>("config.get");
       assert.ok(JSON.stringify(config).includes(plugin), "Resolved config did not load built dist");
       await Bun.write(
         join(root, "runtime.json"),

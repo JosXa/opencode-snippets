@@ -178,6 +178,8 @@ Project snippet directories are resolved against the canonical project root. A s
 
 New submissions read the current snippet files, including nested references and completed drafts. Changes made through TUI commands or an editor apply to the next submission. Replayed messages retain their original expansion and skill content.
 
+If snippet processing fails, V2 preserves the original message and logs a warning. Invalid arguments, templates, or old snippet references must not block new conversation turns. Validation completes before shell commands or snippet writes run; a validation failure discards the message's planned expansions and effects. Correct the snippet or its arguments and submit it again to expand it. Snippet failures in skill tool results also preserve the original result.
+
 V2 records a bounded amount of processing output so rebuilt request history and server restarts cannot repeat shell or management side effects. State lives under the user's private data directory (`$XDG_DATA_HOME/opencode/opencode-snippets/v2`, or `~/.local/share/opencode/opencode-snippets/v2`) rather than inside a project. Directories use mode `0700` and records use `0600`.
 
 Only hashed project/message identifiers, completion status, timestamps, and output needed for replay are retained; raw input prompts and project paths are not stored. Records older than 30 days are pruned, with additional limits of 100 sessions per project and 1,000 messages per session. Deleting an OpenCode session removes that session's records immediately.

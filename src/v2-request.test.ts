@@ -128,6 +128,27 @@ async function submissionFixture() {
 }
 
 describe("native OC2 submitted messages", () => {
+  test("a broken nested snippet leaves skill tool output intact", async () => {
+    const host = await submissionFixture();
+    try {
+      await Bun.write(
+        join(host.directory, ".opencode", "snippet", "broken.md"),
+        "---\nfields:\n  extra: {type: textarea}\n---\n{{extra}}",
+      );
+      const event = {
+        sessionID: "tool-failure",
+        tool: "skill",
+        status: "completed",
+        result: { content: [{ text: "#chosen" }, { text: '#broken(extra="bad\nJSON")' }] },
+      };
+      const original = structuredClone(event.result);
+      await host.invoke("execute.after", event);
+      expect(event.result).toEqual(original);
+    } finally {
+      await host.dispose();
+    }
+  });
+
   test.each([
     false,
     true,
@@ -294,7 +315,9 @@ describe("native OC2 submitted messages", () => {
           },
         ],
       };
-      await expect(host.invoke("context", structuredClone(original))).rejects.toThrow("required");
+      const unchanged = structuredClone(original);
+      await host.invoke("context", unchanged);
+      expect(unchanged.messages[0].content).toEqual(original.messages[0].content);
       expect(await Bun.file(join(directory, "chosen.md")).text()).toBe("CHOSEN_TEXT");
       expect(await Bun.file(join(directory, "victim.md")).text()).toBe("KEEP");
       expect(await Bun.file(join(directory, "required.md")).exists()).toBe(false);
@@ -322,9 +345,9 @@ describe("native OC2 submitted messages", () => {
           },
         ],
       };
-      await expect(host.invoke("context", structuredClone(original))).rejects.toThrow(
-        "unknown field 'reviewers'",
-      );
+      const unknown = structuredClone(original);
+      await host.invoke("context", unknown);
+      expect(unknown.messages[0].content).toEqual(original.messages[0].content);
       expect(await Bun.file(join(directory, "created.md")).exists()).toBe(false);
       expect(await Bun.file(join(host.directory, "retry-effects")).exists()).toBe(false);
       await Bun.write(
@@ -332,9 +355,9 @@ describe("native OC2 submitted messages", () => {
         '---\nfields:\n  reviewers:\n    type: number\n---\n{{reviewers}} {{skill "missing"}}',
       );
       await host.restart();
-      await expect(host.invoke("context", structuredClone(original))).rejects.toThrow(
-        "Unknown inline skill 'missing'",
-      );
+      const missing = structuredClone(original);
+      await host.invoke("context", missing);
+      expect(missing.messages[0].content).toEqual(original.messages[0].content);
       expect(await Bun.file(join(directory, "created.md")).exists()).toBe(false);
       expect(await Bun.file(join(host.directory, "retry-effects")).exists()).toBe(false);
       host.skills.push({ ...host.skills[0], id: "missing", name: "missing", content: "RESOLVED" });
@@ -364,7 +387,9 @@ describe("native OC2 submitted messages", () => {
         "---\nfields:\n  target:\n    required: true\n---\n{{target}} !`printf x >> prompt-retry`",
       );
       const original = { sessionID: "retry-prompt", messageID: "same", prompt: { text: "#retry" } };
-      await expect(host.invoke("prompt", structuredClone(original))).rejects.toThrow("required");
+      const unchanged = structuredClone(original);
+      await host.invoke("prompt", unchanged);
+      expect(unchanged.prompt.text).toBe(original.prompt.text);
       await Bun.write(
         path,
         "---\nfields:\n  target:\n    required: true\n    default: fixed\n---\n{{target}} !`printf x >> prompt-retry`",
@@ -426,7 +451,7 @@ describe("native OC2 submitted messages", () => {
     }
   });
 
-  test("headless required, type and malformed errors reject before shell effects; zero admits empty text", async () => {
+  test("headless field errors preserve input without shell effects; zero admits empty text", async () => {
     const host = await submissionFixture();
     try {
       const directory = join(host.directory, ".opencode", "snippet");
@@ -445,9 +470,9 @@ describe("native OC2 submitted messages", () => {
         '#required(target="broken)',
         "#required(unknown=yes)",
       ]) {
-        await expect(
-          host.invoke("prompt", { sessionID: "validation", messageID: text, prompt: { text } }),
-        ).rejects.toThrow();
+        const submission = { sessionID: "validation", messageID: text, prompt: { text } };
+        await host.invoke("prompt", submission);
+        expect(submission.prompt.text).toBe(text);
       }
       expect(await Bun.file(join(host.directory, "invalid-effect")).exists()).toBe(false);
       const zero = {
@@ -469,7 +494,7 @@ describe("native OC2 submitted messages", () => {
       await host.dispose();
     }
   });
-  test("invalid YAML schemas reject before earlier multipart effects and remain retryable", async () => {
+  test("invalid YAML schemas preserve input before multipart effects and remain retryable", async () => {
     const host = await submissionFixture();
     try {
       const path = join(host.directory, ".opencode", "snippet", "schema.md");
@@ -494,15 +519,18 @@ describe("native OC2 submitted messages", () => {
         "{x: null}",
       ]) {
         await Bun.write(path, `---\nfields: ${fields}\n---\n{{x}}`);
-        await expect(host.invoke("context", structuredClone(original))).rejects.toThrow();
+        const unchanged = structuredClone(original);
+        await host.invoke("context", unchanged);
+        expect(unchanged.messages[0].content).toEqual(original.messages[0].content);
         expect(await Bun.file(join(host.directory, "schema-effect")).exists()).toBe(false);
+        await host.restart();
       }
       for (const yaml of ["fields:\n  x: {}\n  x: {default: duplicate}", "fields: [unclosed"]) {
         await Bun.write(path, `---\n${yaml}\n---\n!\`printf x >> schema-body-effect\``);
         for (let attempt = 0; attempt < 3; attempt++) {
-          await expect(host.invoke("context", structuredClone(original))).rejects.toThrow(
-            "invalid frontmatter",
-          );
+          const unchanged = structuredClone(original);
+          await host.invoke("context", unchanged);
+          expect(unchanged.messages[0].content).toEqual(original.messages[0].content);
           expect(await Bun.file(join(host.directory, "schema-effect")).exists()).toBe(false);
           expect(await Bun.file(join(host.directory, "schema-body-effect")).exists()).toBe(false);
           await host.restart();
@@ -518,7 +546,7 @@ describe("native OC2 submitted messages", () => {
     }
   });
 
-  test("malformed YAML command metadata rejects every retry before writes or shell effects", async () => {
+  test("malformed YAML command metadata preserves input before writes or shell effects", async () => {
     const host = await submissionFixture();
     try {
       for (const yaml of ["fields:\n  x: {}\n  x: {}", "fields: [unclosed"]) {
@@ -539,7 +567,9 @@ describe("native OC2 submitted messages", () => {
           ],
         };
         for (let attempt = 0; attempt < 3; attempt++) {
-          await expect(host.invoke("context", structuredClone(original))).rejects.toThrow();
+          const unchanged = structuredClone(original);
+          await host.invoke("context", unchanged);
+          expect(unchanged.messages[0].content).toEqual(original.messages[0].content);
           expect(await Bun.file(join(host.directory, "command-yaml-effect")).exists()).toBe(false);
           expect(
             await Bun.file(join(host.directory, ".opencode", "snippet", "broken.md")).exists(),

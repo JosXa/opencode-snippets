@@ -3,7 +3,34 @@ import { join } from "node:path";
 import { text, withFixture } from "./v2-runtime.fixture";
 
 describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("snippet forms in OpenCode V2", () => {
-  test("a failed session retries after field and inline skill definitions are corrected", async () => {
+  test("malformed historical JSON cannot block a new prompt after restart", async () => {
+    await withFixture(async (host) => {
+      // Seed a pre-plugin message with no submitted metadata, as in migrated history.
+      const path = join(host.root, "config/opencode/opencode.json");
+      const config = await Bun.file(path).json();
+      await Bun.write(path, JSON.stringify({ ...config, plugins: [] }));
+      const malformed = '#generate-prompt(extra="first line\nsecond line")';
+      const old = await host.submit(malformed);
+      await host.write(
+        "generate-prompt",
+        "---\nfields:\n  extra: {type: textarea}\n---\n{{extra}} !`printf BAD >> malformed-effect`",
+      );
+      await Bun.write(path, JSON.stringify(config));
+      await host.verify();
+      for (const prompt of ["continue #chosen", "another turn"]) {
+        const result = await host.submit(prompt, { session: old.session });
+        expect(result.calls.at(-1)?.messages.some((message) => text(message) === malformed)).toBe(
+          true,
+        );
+        expect(result.user.text).toBe(prompt.replace("#chosen", "PROJECT_CHOSEN"));
+      }
+      const fresh = await host.submit(malformed, { session: old.session });
+      expect(fresh.user.text).toBe(malformed);
+      expect(await Bun.file(join(host.directory, "malformed-effect")).exists()).toBe(false);
+    });
+  }, 120_000);
+
+  test("invalid snippets allow continued conversation and corrected new submissions", async () => {
     await withFixture(async (host) => {
       const expectRetryable = async () => {
         // Prompt retries receive new host message IDs. Inspect the isolated
@@ -26,14 +53,14 @@ describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("snippet forms in OpenCode
       await native.stop();
       await host.write("retry", "Old definition");
       const prompt = "#retry(reviewers=3)";
-      await expect(host.submit(prompt, { session })).rejects.toThrow();
+      expect((await host.submit(prompt, { session })).user.text).toBe(prompt);
       await expectRetryable();
-      expect(host.requests.filter((request) => request.tools?.length)).toHaveLength(0);
+      expect((await host.submit("continue", { session })).user.text).toBe("continue");
       await host.write(
         "retry",
         '---\nfields:\n  reviewers:\n    type: number\n---\n{{reviewers}} {{skill "missing"}} !`printf x >> retry-runs.txt`',
       );
-      await expect(host.submit(prompt, { session })).rejects.toThrow();
+      expect((await host.submit(prompt, { session })).user.text).toBe(prompt);
       await expectRetryable();
       expect(await Bun.file(join(host.directory, "retry-runs.txt")).exists()).toBe(false);
       await host.write(
@@ -88,7 +115,7 @@ describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("snippet forms in OpenCode
     });
   }, 120_000);
 
-  test("validates every invocation before shell effects and reports headless errors", async () => {
+  test("invalid invocations reach the model literally without shell effects", async () => {
     await withFixture(async (host) => {
       await host.write(
         "bounded",
@@ -102,10 +129,13 @@ describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("snippet forms in OpenCode
         "#bounded(count=2, typo=yes)",
         "#bounded(count=2) #bounded(count=4)",
       ]) {
-        await expect(host.submit(invocation)).rejects.toThrow();
+        const result = await host.submit(invocation);
+        expect(result.user.text).toBe(invocation);
+        expect(result.calls.at(-1)?.messages.some((message) => text(message) === invocation)).toBe(
+          true,
+        );
         expect(await Bun.file(join(host.directory, "invalid-ran.txt")).exists()).toBe(false);
       }
-      expect(host.requests.filter((request) => request.tools?.length)).toHaveLength(0);
     });
   }, 120_000);
 
@@ -156,7 +186,7 @@ describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("snippet forms in OpenCode
         "invalid-schema",
         "---\nfields:\n  value: {render: false}\n---\n!`printf BAD >> schema-ran.txt`",
       );
-      await expect(host.submit("#invalid-schema")).rejects.toThrow();
+      expect((await host.submit("#invalid-schema")).user.text).toBe("#invalid-schema");
       expect(await Bun.file(join(host.directory, "schema-ran.txt")).exists()).toBe(false);
     });
   }, 120_000);

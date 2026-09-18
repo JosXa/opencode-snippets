@@ -150,7 +150,7 @@ export async function setupV2Snippets(
   await loadFromDirectory(options.skillDirectory, bundledSkills, "global");
   // Processing submission text must not activate context effects: a queued
   // prompt may not belong to the turn currently being sent to the model.
-  const processText = async (sessionID: string, key: string, originalText: string[]) => {
+  const expandMessage = async (sessionID: string, key: string, originalText: string[]) => {
     const directory = await directoryFor(sessionID);
     let store = stores.get(directory);
     if (!store) {
@@ -250,6 +250,21 @@ export async function setupV2Snippets(
     return restoreProcessed(originalText, durableResult);
   };
 
+  const processText = async (sessionID: string, key: string, originalText: string[]) => {
+    try {
+      return await expandMessage(sessionID, key, originalText);
+    } catch (error) {
+      // Broken snippets in new prompts or old history must never prevent a turn.
+      // Keep the whole message literal: no partial injections or further shell
+      // execution. The durable store still prevents retrying interrupted effects.
+      logger.warn("Snippet processing failed; preserving original message", {
+        sessionID,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { text: originalText, hidden: [], injections: [] } satisfies Processed;
+    }
+  };
+
   const expandContext = async (request: { sessionID: string; messages: unknown[] }) => {
     const config = loadConfig(await directoryFor(request.sessionID), globalConfigFile);
     const sessionProcessed = processed.get(request.sessionID) ?? new Map<string, Processed>();
@@ -324,13 +339,16 @@ export async function setupV2Snippets(
   const registrations = await Promise.all([
     context.skill.transform((draft) => {
       for (const skill of bundledSkills.values()) {
-        draft.add({
+        // OpenCode 2.0.5 uses path; earlier V2 hosts require location.
+        const entry = {
           id: skill.filePath as never,
           name: skill.name as never,
           description: skill.description,
           location: skill.filePath as never,
+          path: skill.filePath,
           content: skill.content,
-        });
+        };
+        draft.add(entry);
       }
     }),
     context.session.hook("prompt", async (submission) => {
@@ -353,14 +371,23 @@ export async function setupV2Snippets(
     context.session.hook("context", expandContext),
     context.tool.hook("execute.after", async (event) => {
       if (event.tool !== "skill" || event.status !== "completed") return;
-      const { snippets, skills, config } = await runtimeFor(event.sessionID);
-      expandToolResult(
-        event.result as unknown,
-        snippets,
-        skills,
-        config.experimental.skillRendering,
-        config.experimental.injectBlocks,
-      );
+      try {
+        const { snippets, skills, config } = await runtimeFor(event.sessionID);
+        const result = structuredClone(event.result);
+        expandToolResult(
+          result,
+          snippets,
+          skills,
+          config.experimental.skillRendering,
+          config.experimental.injectBlocks,
+        );
+        event.result = result;
+      } catch (error) {
+        logger.warn("Snippet processing failed; preserving original skill result", {
+          sessionID: event.sessionID,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }),
   ]);
 
