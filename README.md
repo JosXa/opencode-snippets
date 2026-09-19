@@ -170,6 +170,14 @@ https://github.com/user-attachments/assets/ebb303b5-d41b-4d87-8f08-eb1d730db5c8
 
 ## Where to Store Snippets
 
+The global config root is `OPENCODE_CONFIG_DIR` when set, otherwise
+`$XDG_CONFIG_HOME/opencode`, otherwise `~/.config/opencode`. The paths below
+show the default root. Snippet files, `snippet/config.jsonc`, and plugin logs
+all follow the selected root. The server and TUI resolve it in their own
+process environment; when attaching to another machine, keep the snippet
+collections in those roots in sync. An explicit `globalDirectory` plugin
+option still overrides the snippet directory.
+
 Snippets can be global (`~/.config/opencode/snippet/*.md` or `~/.config/opencode/snippets/*.md`) or project-specific (`.opencode/snippet/*.md` or `.opencode/snippets/*.md`). Both singular and plural directory names are loaded automatically. Project snippets override global ones with the same name, and `snippet/` wins over `snippets/` within the same scope.
 
 Project snippet directories are resolved against the canonical project root. A symlinked project snippet directory, including one that points outside the project, is rejected rather than loaded or modified.

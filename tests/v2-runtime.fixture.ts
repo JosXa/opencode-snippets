@@ -272,7 +272,7 @@ export async function fixture() {
     write("persist", "VISIBLE_PERSIST<inject>PERSISTENT_CONTEXT</inject>"),
     write("tool-output", "TOOL_BEGIN #chosen <inject>TOOL_INJECTION</inject> TOOL_END"),
     configure(true),
-    Bun.write(join(root, "home", ".config", "opencode", "snippet", "chosen.md"), "GLOBAL_CHOSEN"),
+    Bun.write(join(config, "snippet", "chosen.md"), "GLOBAL_CHOSEN"),
     Bun.write(
       join(directory, ".opencode", "skills", "local", "SKILL.md"),
       "---\nname: local\ndescription: Local fixture\n---\nLOCAL_BODY #chosen !`printf BAD`",

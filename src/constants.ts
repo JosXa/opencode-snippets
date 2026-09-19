@@ -26,18 +26,23 @@ export const PATTERNS = {
 /**
  * File system paths
  */
+// Match the host's config root in both the server and the local TUI process.
+const configDir =
+  process.env.OPENCODE_CONFIG_DIR ||
+  join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "opencode");
+
 export const PATHS = {
   /** OpenCode configuration directory */
-  CONFIG_DIR: join(homedir(), ".config", "opencode"),
+  CONFIG_DIR: configDir,
 
   /** Preferred global snippets directory */
-  SNIPPETS_DIR: join(homedir(), ".config", "opencode", "snippet"),
+  SNIPPETS_DIR: join(configDir, "snippet"),
 
   /** Alternate global snippets directory */
-  SNIPPETS_DIR_ALT: join(homedir(), ".config", "opencode", "snippets"),
+  SNIPPETS_DIR_ALT: join(configDir, "snippets"),
 
   /** Global config file */
-  CONFIG_FILE_GLOBAL: join(homedir(), ".config", "opencode", "snippet", "config.jsonc"),
+  CONFIG_FILE_GLOBAL: join(configDir, "snippet", "config.jsonc"),
 } as const;
 
 /**

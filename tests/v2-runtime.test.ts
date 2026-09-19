@@ -6,6 +6,41 @@ import { text, withFixture } from "./v2-runtime.fixture";
 // Real host tests are opt-in: they need the installed CLI and a built distribution.
 // They capture provider requests rather than inferring hidden context from metadata.
 describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("OpenCode 2 runtime", () => {
+  for (const override of [false, true]) {
+    test(
+      `loads global snippets from ${override ? "OPENCODE_CONFIG_DIR" : "XDG_CONFIG_HOME"}`,
+      () =>
+        withFixture(async (host) => {
+          const config = join(host.root, "config", "opencode");
+          const selected = override ? join(host.root, "custom-config") : config;
+          if (override) {
+            host.env.OPENCODE_CONFIG_DIR = selected;
+            await Bun.write(
+              join(selected, "opencode.json"),
+              await Bun.file(join(config, "opencode.json")).text(),
+            );
+          }
+          await Bun.write(
+            join(host.root, "home", ".config", "opencode", "snippet", "global-proof.md"),
+            "WRONG_HOME",
+          );
+          await Bun.write(join(config, "snippet", "global-proof.md"), "WRONG_XDG");
+          await Bun.write(join(selected, "snippets", "plural-proof.md"), "PLURAL_SELECTED");
+          await Bun.write(
+            join(selected, "snippet", "global-proof.md"),
+            "SELECTED <append>GLOBAL_APPEND</append>",
+          );
+          const result = await host.run("#global-proof");
+          expect(result.user.text).toContain("SELECTED");
+          expect(result.user.text).toContain("GLOBAL_APPEND");
+          expect(JSON.stringify(result.calls)).not.toContain("WRONG_");
+          const plural = await host.submit("#plural-proof");
+          expect(plural.user.text).toBe("PLURAL_SELECTED");
+        }),
+      120_000,
+    );
+  }
+
   test(
     "runs single-token CLI prompts and resumes their session",
     () =>
