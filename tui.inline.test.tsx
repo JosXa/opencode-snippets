@@ -65,21 +65,20 @@ async function setup(background = RGBA.fromHex("#101820"), files: Record<string,
   const dialogs: string[] = [];
   const [theme, setTheme] = createStore({
     hue: { accent: { 500: RGBA.fromHex("#bb44ff") } },
-    border: { default: RGBA.fromHex("#607080") },
-    background: { default: background, surface: { overlay: RGBA.fromHex("#202830") } },
-    text: { default: RGBA.fromHex("#eeeeee"), subdued: RGBA.fromHex("#909090") },
-    contextual: {
-      overlay: {
-        border: { default: RGBA.fromHex("#a08060") },
-        background: {
-          default: RGBA.fromHex("#182838"),
-          action: { primary: { focused: RGBA.fromHex("#486878") } },
-        },
-        text: {
-          default: RGBA.fromHex("#d0e0f0"),
-          subdued: RGBA.fromHex("#8090a0"),
-          action: { primary: { focused: RGBA.fromHex("#f0e0c0") } },
-        },
+    border: { base: RGBA.fromHex("#607080") },
+    background: { base: background },
+    text: { base: RGBA.fromHex("#eeeeee"), muted: RGBA.fromHex("#909090") },
+    dialog: {
+      border: { base: RGBA.fromHex("#a08060") },
+      background: {
+        base: background,
+        raised: { high: RGBA.fromHex("#182838") },
+        action: { primary: { focused: RGBA.fromHex("#486878") } },
+      },
+      text: {
+        base: RGBA.fromHex("#d0e0f0"),
+        muted: RGBA.fromHex("#8090a0"),
+        action: { primary: { focused: RGBA.fromHex("#f0e0c0") } },
       },
     },
   });
@@ -88,7 +87,7 @@ async function setup(background = RGBA.fromHex("#101820"), files: Record<string,
     options: { globalDirectory, homeDirectory: directory },
     client: { skill: { list: async () => ({ data: [] }) } },
     renderer: screen.renderer,
-    theme,
+    theme: theme.dialog,
     keymap: { layer: () => {}, mode: { current: () => hostMode } },
     ui: {
       slot: (value: SlotClaim) => {
@@ -210,12 +209,12 @@ test("INLINE popover aligns with the entire prompt container above its padding, 
 });
 
 for (const transparent of [false, true]) {
-  test(`INLINE suggestions use the native slash autocomplete overlay palette (${transparent ? "transparent" : "opaque"} application background)`, async () => {
+  test(`INLINE suggestions use the native autocomplete raised palette (${transparent ? "transparent" : "opaque"} application background)`, async () => {
     const ui = await setup(RGBA.fromHex(transparent ? "#00000000" : "#101820"));
     await ui.mockInput.typeText("#re");
     await ui.settle();
     const assertPalette = (selected: string) => {
-      const palette = ui.theme.contextual.overlay;
+      const palette = ui.theme.dialog;
       for (const name of ["release", "review"]) {
         const row = ui
           .captureSpans()
@@ -224,22 +223,21 @@ for (const transparent of [false, true]) {
         const title = row.spans.find((span) => span.text.includes(`#${name}`));
         const description = row.spans.find((span) => span.text.includes(`Description for ${name}`));
         const active = name === selected;
-        const bg = active ? palette.background.action.primary.focused : palette.background.default;
-        // beta19157 bae() calls Ot("overlay"): both selected text elements use
-        // text.action.primary.focused; unselected rows inherit background.default.
-        // Distinct root, overlay, accent and agent colors detect the wrong context.
+        const bg = active
+          ? palette.background.action.primary.focused
+          : palette.background.raised.high;
+        // Distinct root and raised colors detect accidentally using the transparent
+        // application background instead of the menu surface.
         expect(
-          title?.fg.equals(active ? palette.text.action.primary.focused : palette.text.default),
+          title?.fg.equals(active ? palette.text.action.primary.focused : palette.text.base),
         ).toBe(true);
         expect(
-          description?.fg.equals(
-            active ? palette.text.action.primary.focused : palette.text.subdued,
-          ),
+          description?.fg.equals(active ? palette.text.action.primary.focused : palette.text.muted),
         ).toBe(true);
         expect(title?.bg.equals(bg)).toBe(true);
         expect(description?.bg.equals(bg)).toBe(true);
         for (const border of row.spans.filter((span) => span.text.includes("┃"))) {
-          expect(border.fg.equals(palette.border.default)).toBe(true);
+          expect(border.fg.equals(palette.border.base)).toBe(true);
         }
       }
     };
@@ -248,15 +246,15 @@ for (const transparent of [false, true]) {
     await ui.settle();
     assertPalette("review");
     // Theme changes must repaint the open menu without reopening or typing.
-    ui.setTheme("contextual", "overlay", {
-      border: { default: RGBA.fromHex("#507090") },
+    ui.setTheme("dialog", {
+      border: { base: RGBA.fromHex("#507090") },
       background: {
-        default: RGBA.fromHex("#283018"),
+        raised: { high: RGBA.fromHex("#283018") },
         action: { primary: { focused: RGBA.fromHex("#887050") } },
       },
       text: {
-        default: RGBA.fromHex("#f0d0b0"),
-        subdued: RGBA.fromHex("#b0a090"),
+        base: RGBA.fromHex("#f0d0b0"),
+        muted: RGBA.fromHex("#b0a090"),
         action: { primary: { focused: RGBA.fromHex("#182028") } },
       },
     });

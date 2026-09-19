@@ -43,8 +43,8 @@
   },
   "homepage": "https://github.com/JosXa/opencode-snippets#readme",
   "dependencies": {
-    "@opencode/plugin": "2.0.2",
     "@opencode-ai/plugin-v1": "npm:@opencode-ai/plugin@0.0.0-next-16671",
+    "@opencode/plugin": "2.0.9",
     "effect": "4.0.0-rc.112",
     "gray-matter": "^4.0.3",
     "handlebars": "^4.7.9",
@@ -57,6 +57,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.11",
+    "@opencode/theme": "2.0.9",
     "@opentui/core": "0.5.10",
     "@opentui/keymap": "0.5.10",
     "@opentui/solid": "0.5.10",

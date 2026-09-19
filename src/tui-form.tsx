@@ -26,12 +26,12 @@ export function SnippetForm(props: {
   let scroll: ScrollBoxRenderable | undefined;
   const editors = new Map<number, TextareaRenderable>();
   const selects = new Map<number, SelectRenderable>();
-  const palette = () => props.context.theme.contextual.overlay;
+  const palette = () => props.context.theme.surface("dialog");
   const colors = () => ({
-    backgroundColor: palette().background.default,
-    focusedBackgroundColor: palette().background.default,
-    textColor: palette().text.default,
-    focusedTextColor: palette().text.default,
+    backgroundColor: palette().background.base,
+    focusedBackgroundColor: palette().background.base,
+    textColor: palette().text.base,
+    focusedTextColor: palette().text.base,
   });
   const move = (index: number) => {
     setFocus(index);
@@ -96,7 +96,7 @@ export function SnippetForm(props: {
         if (this.maxHeight !== available) this.maxHeight = available;
       }}
     >
-      <text flexShrink={0} fg={palette().text.default}>
+      <text flexShrink={0} fg={palette().text.base}>
         <b>Fields for #{props.name}</b>
       </text>
       <scrollbox
@@ -118,9 +118,7 @@ export function SnippetForm(props: {
               return (
                 <box id={`snippet-field-${index()}`} flexShrink={0}>
                   <Show when={field.type !== "checkbox"}>
-                    <text
-                      fg={focus() === index() ? palette().text.default : palette().text.subdued}
-                    >
+                    <text fg={focus() === index() ? palette().text.base : palette().text.muted}>
                       {label()}
                     </text>
                   </Show>
@@ -190,9 +188,7 @@ export function SnippetForm(props: {
                           update(field.name, !draft()[field.name]);
                         }}
                       >
-                        <text
-                          fg={focus() === index() ? palette().text.default : palette().text.subdued}
-                        >
+                        <text fg={focus() === index() ? palette().text.base : palette().text.muted}>
                           {`${label()}  [${draft()[field.name] ? "x" : " "}]`}
                         </text>
                       </box>
@@ -212,7 +208,7 @@ export function SnippetForm(props: {
                     </Match>
                   </Switch>
                   <Show when={errors()[field.name]}>
-                    <text fg={props.context.theme.text.danger}>⚠ {errors()[field.name]}</text>
+                    <text fg={palette().text.feedback.error.base}>⚠ {errors()[field.name]}</text>
                   </Show>
                 </box>
               );
@@ -220,11 +216,11 @@ export function SnippetForm(props: {
           </For>
           <Show when={help()}>
             <box flexShrink={0}>
-              <text fg={palette().text.subdued}>Enter confirms · Escape cancels</text>
-              <text fg={palette().text.subdued}>
+              <text fg={palette().text.muted}>Enter confirms · Escape cancels</text>
+              <text fg={palette().text.muted}>
                 Tab / Shift+Tab move · arrows choose · Space toggles · Ctrl+J newline
               </text>
-              <text fg={palette().text.subdued}>
+              <text fg={palette().text.muted}>
                 Ctrl+G edits fields in the composer · * Required
               </text>
             </box>
@@ -236,7 +232,7 @@ export function SnippetForm(props: {
                 fg={
                   focus() === props.fields.length
                     ? palette().text.action.primary.focused
-                    : palette().text.default
+                    : palette().text.base
                 }
                 bg={
                   focus() === props.fields.length
@@ -254,7 +250,7 @@ export function SnippetForm(props: {
                 fg={
                   focus() === props.fields.length + 1
                     ? palette().text.action.primary.focused
-                    : palette().text.subdued
+                    : palette().text.muted
                 }
                 bg={
                   focus() === props.fields.length + 1
@@ -272,7 +268,7 @@ export function SnippetForm(props: {
                 fg={
                   focus() === props.fields.length + 2
                     ? palette().text.action.primary.focused
-                    : palette().text.subdued
+                    : palette().text.muted
                 }
                 bg={
                   focus() === props.fields.length + 2

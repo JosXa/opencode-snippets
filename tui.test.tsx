@@ -2,13 +2,19 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TextareaRenderable } from "@opentui/core";
+import { RGBA, TextareaRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { type JSX, render } from "@opentui/solid";
 import plugin from "./tui.js";
 
 let root: string | undefined;
 let destroyRenderer: (() => void) | undefined;
+const color = RGBA.fromHex("#808080");
+const theme = {
+  background: { base: color, raised: { high: color }, action: { primary: { focused: color } } },
+  text: { base: color, muted: color, action: { primary: { focused: color } } },
+  border: { base: color },
+};
 
 afterEach(async () => {
   destroyRenderer?.();
@@ -30,6 +36,7 @@ describe("V2 TUI plugin", () => {
 
     const dispose = await plugin.setup({
       location: { directory: project },
+      theme,
       options: { globalDirectory, homeDirectory: root },
       client: { skill: { list: async () => ({ data: [] }) } },
       ui: {
@@ -94,6 +101,7 @@ describe("V2 TUI plugin", () => {
 
     const dispose = await plugin.setup({
       location: { directory: project },
+      theme,
       options: { globalDirectory, homeDirectory: root },
       client: {
         skill: {

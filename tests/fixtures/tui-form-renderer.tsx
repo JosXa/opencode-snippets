@@ -10,17 +10,15 @@ function context(renderer: CliRenderer) {
   return {
     renderer,
     theme: {
-      text: { danger: "#ff0000" },
-      contextual: {
-        overlay: {
-          background: { default: "#000000", action: { primary: { focused: "#222222" } } },
-          text: {
-            default: "#ffffff",
-            subdued: "#aaaaaa",
-            action: { primary: { focused: "#ffffff" } },
-          },
+      surface: () => ({
+        background: { base: "#000000", action: { primary: { focused: "#222222" } } },
+        text: {
+          base: "#ffffff",
+          muted: "#aaaaaa",
+          feedback: { error: { base: "#ff0000" } },
+          action: { primary: { focused: "#ffffff" } },
         },
-      },
+      }),
     },
   } as Parameters<typeof SnippetForm>[0]["context"];
 }

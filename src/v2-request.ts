@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { join } from "node:path";
-import type { Plugin } from "@opencode/plugin";
+import type { Plugin, Skill } from "@opencode/plugin";
 import type { Plugin as EffectPlugin } from "@opencode/plugin/effect";
 import { Effect, type Scope, Stream } from "effect";
 import { loadConfig } from "./config.js";
@@ -345,7 +345,7 @@ export async function setupV2Snippets(
           name: skill.name as never,
           description: skill.description,
           location: skill.filePath as never,
-          path: skill.filePath,
+          path: skill.filePath as Skill.Info["path"],
           content: skill.content,
         };
         draft.add(entry);

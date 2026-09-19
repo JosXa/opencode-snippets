@@ -398,15 +398,15 @@ const plugin = Plugin.define({
         });
 
         const height = () => Math.min(10, Math.max(1, options().length));
-        // Native slash autocomplete uses the overlay context, including its
+        // Match native autocomplete's raised background and
         // focused action foreground. Neither agent colors nor custom contrast
         // calculations belong here; read reactively so an open menu follows theme changes.
-        const palette = () => context.theme?.contextual?.overlay;
-        const primary = () => palette()?.background.action.primary.focused;
-        const text = () => palette()?.text.default;
-        const muted = () => palette()?.text.subdued;
-        const menuBackground = () => palette()?.background.default;
-        const selectedText = () => palette()?.text.action.primary.focused;
+        const palette = () => context.theme;
+        const primary = () => palette().background.action.primary.focused;
+        const text = () => palette().text.base;
+        const muted = () => palette().text.muted;
+        const menuBackground = () => palette().background.raised.high;
+        const selectedText = () => palette().text.action.primary.focused;
         return (
           <box ref={anchor} width={0} height={0}>
             <Show when={trigger()}>
@@ -418,7 +418,7 @@ const plugin = Plugin.define({
                 height={height()}
                 zIndex={100}
                 border={["left", "right"]}
-                borderColor={palette()?.border.default}
+                borderColor={palette().border.base}
                 customBorderChars={{
                   topLeft: "",
                   bottomLeft: "",
