@@ -1,10 +1,14 @@
-import type { SkillInfo } from "@opencode-ai/client";
 import type { SkillRegistry } from "./skill-loader.js";
 
+type ResolvedSkill = {
+  id: string;
+  name: string;
+  description?: string;
+  content: string;
+} & ({ path: string } | { location: string });
+
 /** Use the host's resolved skills, including configured sources and plugin transforms. */
-export function nativeSkillRegistry(
-  skills: readonly (SkillInfo | (Omit<SkillInfo, "location"> & { path: string }))[],
-): SkillRegistry {
+export function nativeSkillRegistry(skills: readonly ResolvedSkill[]): SkillRegistry {
   const entries = skills.map((skill) => ({
     id: skill.id.toLowerCase(),
     info: {
