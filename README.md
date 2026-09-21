@@ -81,6 +81,12 @@ Build `/commit #conventional-commits #project-context` for context-aware commits
 
 ## Installation
 
+Version 3.1.0 supports OpenCode V1 1.18.29 and V2 2.0.12 through separate server and terminal adapters in the same package. Releases use normal versions on `latest`.
+
+For V2, add `"opencode-snippets"` to `plugins` in `opencode.json`. Its terminal plugin loads automatically. For V1, use the command below or add it to `plugin` in both `opencode.json` and `tui.json`.
+
+V1 retains its autocomplete interface. The field dialog is available in V2; named arguments such as `#review(topic="API")` work in both versions.
+
 ```bash
 opencode plugin opencode-snippets -gf
 ```
@@ -442,7 +448,7 @@ Quoted names are also supported:
 
 When enabled, the user-visible message shows `↳ Loaded name`, while the model receives an injected OpenCode-style `<skill_content>` payload immediately after that message. Multiple `#skill(...)` calls in one message are injected in their final visible order, including loads introduced by recursive snippets and prepend/append blocks.
 
-Expansion follows the V1 processing boundaries: XML skill tags render before hashtag expansion; `#skill(...)` loads resolve after recursive hashtag expansion; shell substitutions run last. Hidden skill bodies retain literal hashtag and shell examples. Within `<inject>` blocks, only hashtag references expand. Skill-tool results expand XML tags and recursive hashtags using the configured injection flag.
+XML skill tags render before hashtag expansion; `#skill(...)` loads resolve after recursive hashtag expansion; shell substitutions run last. Loaded skill bodies also expand snippet hashtags and shell substitutions. Within `<inject>` blocks, only hashtag references expand. Skill-tool results expand XML tags and recursive hashtags using the configured injection flag.
 
 Quick project-local demo in this repo:
 
@@ -528,7 +534,7 @@ A default config file is created automatically on first run.
 
 ```jsonc
 {
-  "$schema": "https://raw.githubusercontent.com/JosXa/opencode-snippets/v3.1.0-opencode-v2.1/schema/config.schema.json",
+  "$schema": "https://raw.githubusercontent.com/JosXa/opencode-snippets/v3.1.0/schema/config.schema.json",
   "logging": {
     "debug": false // Enable debug logging (logs: ~/.config/opencode/logs/snippets/daily/)
   },

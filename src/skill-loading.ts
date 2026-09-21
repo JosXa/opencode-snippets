@@ -2,7 +2,9 @@ import { readdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { PATTERNS } from "./constants.js";
+import { assembleMessage, expandHashtags } from "./expander.js";
 import { logger } from "./logger.js";
+import { executeShellCommands } from "./shell.js";
 import { getSkill, type SkillInfo, type SkillRegistry } from "./skill-loader.js";
 import { expandSkillTags } from "./skill-renderer.js";
 import type { SnippetRegistry } from "./types.js";
@@ -29,6 +31,7 @@ export async function expandSkillLoads(
   options: {
     expandSkillTagsInContent: boolean;
     extractInject: boolean;
+    directory?: string;
   },
 ): Promise<SkillLoadResult> {
   PATTERNS.SKILL_LOAD.lastIndex = 0;
@@ -77,6 +80,7 @@ export async function buildSkillPayloadsFromVisibleText(
   options: {
     expandSkillTagsInContent: boolean;
     extractInject: boolean;
+    directory?: string;
   },
 ): Promise<string[]> {
   if (!text.includes("↳ Loaded ")) {
@@ -138,17 +142,18 @@ function parseSkillName(input: string | undefined): string | null {
 async function buildSkillPayload(
   skill: SkillInfo,
   registry: SkillRegistry,
-  _snippets: SnippetRegistry,
+  snippets: SnippetRegistry,
   marker: string,
   options: {
     expandSkillTagsInContent: boolean;
     extractInject: boolean;
+    directory?: string;
   },
 ): Promise<string> {
   const dir = dirname(skill.filePath);
   const base = pathToFileURL(dir).href;
   const files = await listSkillFiles(dir, SKILL_FILE_LIMIT);
-  const content = renderSkillContent(skill.content, registry, options);
+  const content = await renderSkillContent(skill.content, registry, snippets, options);
 
   return [
     `<skill_content name="${skill.name}">`,
@@ -171,19 +176,29 @@ async function buildSkillPayload(
   ].join("\n");
 }
 
-function renderSkillContent(
+async function renderSkillContent(
   content: string,
   registry: SkillRegistry,
+  snippets: SnippetRegistry,
   options: {
     expandSkillTagsInContent: boolean;
+    extractInject: boolean;
+    directory?: string;
   },
-): string {
+): Promise<string> {
   let processed = content;
   if (options.expandSkillTagsInContent) {
     processed = expandSkillTags(processed, registry);
   }
 
-  return processed;
+  const expansion = expandHashtags(processed, snippets, new Map(), {
+    extractInject: options.extractInject,
+  });
+  // Match the skill-tool hook: prepend and append blocks frame the whole payload,
+  // rather than appearing at the point where the hashtag occurred.
+  processed = assembleMessage(expansion);
+
+  return executeShellCommands(processed, { directory: options.directory });
 }
 
 async function listSkillFiles(dir: string, limit: number): Promise<string[]> {

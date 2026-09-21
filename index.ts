@@ -2,7 +2,7 @@ import { access, rmdir, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Plugin } from "@opencode/plugin";
-import type { Plugin as LegacyPlugin } from "@opencode-ai/plugin-v1/v1";
+import type { Plugin as LegacyPlugin } from "@opencode-ai/plugin-v1";
 import { createCommandExecuteHandler } from "./src/commands.js";
 import { loadConfig } from "./src/config.js";
 import { assembleMessage, type ExpandOptions, expandHashtags } from "./src/expander.js";
@@ -162,6 +162,7 @@ export const SnippetsPlugin: LegacyPlugin = async (ctx) => {
           const skillLoadResult = await expandSkillLoads(part.text || "", skills, snippets, {
             expandSkillTagsInContent: config.experimental.skillRendering,
             extractInject: config.experimental.injectBlocks,
+            directory: ctx.directory,
           });
           part.text = skillLoadResult.text;
           skillPayloads.push(...skillLoadResult.payloads);
@@ -500,6 +501,7 @@ export const SnippetsPlugin: LegacyPlugin = async (ctx) => {
     const recovered = await buildSkillPayloadsFromVisibleText(text, skills, snippets, {
       expandSkillTagsInContent: config.experimental.skillRendering,
       extractInject: config.experimental.injectBlocks,
+      directory: ctx.directory,
     });
 
     if (recovered.length > 0) {
@@ -902,5 +904,7 @@ const plugin = Plugin.define({
   },
 });
 
-export const server = plugin;
-export default plugin;
+// OpenCode V1 selects server; V2 selects setup from the same package entry.
+const compatible = { ...plugin, server: SnippetsPlugin };
+export const server = compatible;
+export default compatible;

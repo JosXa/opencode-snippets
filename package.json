@@ -1,6 +1,6 @@
 {
   "name": "opencode-snippets",
-  "version": "3.1.0-opencode-v2.1",
+  "version": "3.1.0",
   "description": "Hashtag-based snippet expansion plugin for OpenCode - instant inline text shortcuts",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -43,7 +43,7 @@
   },
   "homepage": "https://github.com/JosXa/opencode-snippets#readme",
   "dependencies": {
-    "@opencode-ai/plugin-v1": "npm:@opencode-ai/plugin@0.0.0-next-16671",
+    "@opencode-ai/plugin-v1": "npm:@opencode-ai/plugin@1.18.29",
     "@opencode/plugin": "2.0.12",
     "effect": "4.0.0-rc.112",
     "gray-matter": "^4.0.3",
@@ -51,8 +51,8 @@
     "jsonc-parser": "^3.3.1"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.5.10",
-    "@opentui/solid": ">=0.5.10",
+    "@opentui/core": ">=0.1.99",
+    "@opentui/solid": ">=0.1.99",
     "solid-js": "1.9.12"
   },
   "devDependencies": {
@@ -68,6 +68,7 @@
   },
   "scripts": {
     "build": "bun scripts/build.ts",
+    "test:v1": "bun run build && SNIPPETS_TEST_V1=1 bun test ./tests/v1-runtime.test.ts",
     "test:v2": "bun run build && SNIPPETS_TEST_V2=1 bun test ./tests/*.test.ts",
     "test:tui": "bun run build && bun tests/tui-playground.ts",
     "typecheck": "tsc --noEmit",

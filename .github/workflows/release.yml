@@ -1,6 +1,8 @@
-name: Publish OpenCode V2 prerelease
+name: Publish
 
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       confirm_version:
@@ -14,12 +16,13 @@ permissions:
 
 jobs:
   publish:
-    # This branch intentionally publishes only the package's guarded V2 prerelease.
-    if: github.ref == 'refs/heads/opencode-v2'
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     environment: npm
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -34,9 +37,11 @@ jobs:
         env:
           CONFIRM_VERSION: ${{ inputs.confirm_version }}
         run: |
+          git merge-base --is-ancestor HEAD origin/main
           test "$(node -p "require('./package.json').name")" = "opencode-snippets"
-          test "$(node -p "require('./package.json').version")" = "$CONFIRM_VERSION"
-          node -e "const v=require('./package.json').version;if(!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-opencode-v2\.[1-9]\d*$/.test(v))process.exit(1)"
+          version="$(node -p "require('./package.json').version")"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then test "$GITHUB_REF" = "refs/tags/v$version"; else test "$version" = "$CONFIRM_VERSION"; fi
+          node -e "const v=require('./package.json').version;if(!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(v))process.exit(1)"
 
       - name: Install, validate, and build
         run: |
@@ -48,4 +53,4 @@ jobs:
           npm pack --dry-run
 
       - name: Publish with npm trusted publishing
-        run: npm publish --provenance --access public --tag opencode-v2
+        run: npm publish --provenance --access public --tag latest

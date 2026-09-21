@@ -64,6 +64,28 @@ jobs:
       - name: Run tests
         run: bun test
 
+  runtime-v1:
+    name: OpenCode 1 runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun add --global --trust opencode-ai@1.18.29
+      - run: bun run test:v1
+        env:
+          TMPDIR: ${{ runner.temp }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: opencode-v1-runtime
+          path: ${{ runner.temp }}/opencode/snippets-v1-runtime-*
+          include-hidden-files: true
+          if-no-files-found: ignore
+
   runtime-v2:
     name: OpenCode 2 runtime
     runs-on: ubuntu-24.04

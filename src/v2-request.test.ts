@@ -765,8 +765,8 @@ describe("native OC2 submitted messages", () => {
     }
   });
 
-  // These boundaries match origin/main's V1 pipeline and real V1 skill-tool output:
-  // XML renders before hashtags, hidden skill bodies retain literal markdown,
+  // These boundaries match the V1 pipeline:
+  // XML renders before hashtags, hidden skill bodies expand snippets and shell,
   // and injection blocks only recurse through snippet references.
   test("preserves V1 expansion boundaries around skill bodies, XML and injections", async () => {
     const host = await submissionFixture();
@@ -798,9 +798,7 @@ describe("native OC2 submitted messages", () => {
       expect(request.messages[0].content[0].text).toBe(
         "CHOSEN_TEXT #skill(hidden) !`printf NEVER`",
       );
-      expect(request.messages[2].content[0].text).toContain(
-        "#chosen #skill(hidden) !`printf NEVER`",
-      );
+      expect(request.messages[2].content[0].text).toContain("CHOSEN_TEXT #skill(hidden) NEVER");
     } finally {
       await host.dispose();
     }

@@ -17,6 +17,6 @@
     "resolveJsonModule": true,
     "isolatedModules": true
   },
-  "include": ["index.ts", "tui.tsx", "src/**/*.ts", "src/**/*.tsx"],
+  "include": ["index.ts", "tui.tsx", "tui-v1.tsx", "tui-v2.tsx", "src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "src/**/*.test.ts"]
 }

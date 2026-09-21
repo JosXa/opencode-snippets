@@ -216,6 +216,7 @@ export async function setupV2Snippets(
           // direct, recursive, prepend and append loads follow the visible order.
           if (config.experimental.skillLoading) {
             const loaded = await expandSkillLoads(text, skills, snippets, {
+              directory,
               expandSkillTagsInContent: config.experimental.skillRendering,
               extractInject: config.experimental.injectBlocks,
             });

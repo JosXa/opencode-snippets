@@ -6,7 +6,7 @@ description: MUST use when user asks to create, edit, manage, or share snippets,
 # Snippets
 
 Reusable text blocks expanded via `#hashtag` in messages. Use the plugin's
-[README](https://github.com/JosXa/opencode-snippets/blob/opencode-v2/README.md)
+[README](https://github.com/JosXa/opencode-snippets/blob/main/README.md)
 as the source of truth for installation, configuration, and supported syntax.
 
 ## Locations and configuration

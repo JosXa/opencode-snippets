@@ -22,7 +22,8 @@ if (!server.success) {
 }
 
 const tui = await Bun.build({
-  entrypoints: ["./tui.tsx"],
+  entrypoints: ["./tui.tsx", "./tui-v1.tsx", "./tui-v2.tsx"],
+  splitting: true,
   outdir: "./dist",
   target: "node",
   external: ["@opencode/plugin/tui", "@opentui/core", "@opentui/solid", "solid-js"],

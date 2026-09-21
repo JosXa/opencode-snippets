@@ -154,7 +154,7 @@ describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("OpenCode 2 runtime", () =
         );
         expect(visible).toBeGreaterThanOrEqual(0);
         expect(text(messages[visible + 1])).toContain('<skill_content name="Host proof">');
-        expect(text(messages[visible + 1])).toContain("HOST_BODY #chosen");
+        expect(text(messages[visible + 1])).toContain("HOST_BODY PROJECT_CHOSEN");
         expect(JSON.stringify(messages)).not.toContain("DISK_BODY_MUST_NOT_LOAD");
         expect(result.user.metadata?.["opencode-snippets:submitted"].hidden).toHaveLength(1);
       }),
@@ -225,7 +225,7 @@ describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("OpenCode 2 runtime", () =
           expect(
             messages.filter((message) => text(message).includes("PERSISTENT_CONTEXT")),
           ).toHaveLength(1);
-          expect(JSON.stringify(messages)).toContain("LOCAL_BODY #chosen");
+          expect(JSON.stringify(messages)).toContain("LOCAL_BODY PROJECT_CHOSEN");
           expect(JSON.stringify(messages)).not.toContain("CHANGED_SKILL_BODY");
           expect(await Bun.file(join(host.directory, "count.txt")).text()).toBe("x");
         }
