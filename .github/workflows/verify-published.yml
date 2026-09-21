@@ -1,0 +1,24 @@
+name: Verify published V2 package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/opencode-v2'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - name: Verify the published version and channel
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          test "$(npm view opencode-snippets@opencode-v2 version)" = "$version"
+          npm view "opencode-snippets@$version" name version dist.integrity --json
+          npm pack "opencode-snippets@$version" --ignore-scripts --json
