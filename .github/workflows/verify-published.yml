@@ -1,6 +1,9 @@
 name: Verify published V2 package
 
 on:
+  push:
+    branches: [opencode-v2]
+    paths: [.github/workflows/verify-published.yml]
   workflow_dispatch:
 
 permissions:
