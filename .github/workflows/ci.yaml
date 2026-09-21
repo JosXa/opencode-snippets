@@ -68,8 +68,6 @@ jobs:
     name: OpenCode 2 runtime
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    env:
-      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v6
 
@@ -85,6 +83,8 @@ jobs:
         run: bun add --global --trust "@opencode/cli@$(bun -p 'require("./package.json").dependencies["@opencode/plugin"]')"
 
       - name: Run runtime tests
+        env:
+          TMPDIR: ${{ runner.temp }}
         run: bun run test:v2
 
       - name: Upload failure artifacts
