@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  mkdtemp as temporary,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Plugin } from "@opencode/plugin";
@@ -8,6 +16,10 @@ import { serializeInvocation } from "./invocation.js";
 import type { SnippetRegistry } from "./types.js";
 import { expandRequestMessages, setupV2Snippets, setupV2SnippetsEffect } from "./v2-request.js";
 import { DurableStore } from "./v2-state.js";
+
+// macOS exposes /var as a symlink. Use the host's canonical project identity
+// in both mock expectations and durable storage paths.
+const mkdtemp = async (prefix: string) => realpath(await temporary(prefix));
 
 const snippets: SnippetRegistry = new Map([
   [

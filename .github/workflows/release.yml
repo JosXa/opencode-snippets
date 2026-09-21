@@ -15,7 +15,7 @@ permissions:
 jobs:
   publish:
     # This branch intentionally publishes only the package's guarded V2 prerelease.
-    if: github.ref == 'refs/heads/opencode-v2' && inputs.confirm_version == '3.0.0-opencode-v2'
+    if: github.ref == 'refs/heads/opencode-v2'
     runs-on: ubuntu-24.04
     environment: npm
     steps:
@@ -31,10 +31,12 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Verify release identity and version
+        env:
+          CONFIRM_VERSION: ${{ inputs.confirm_version }}
         run: |
           test "$(node -p "require('./package.json').name")" = "opencode-snippets"
-          test "$(node -p "require('./package.json').version")" = "${{ inputs.confirm_version }}"
-          node -e "const v=require('./package.json').version;if(!/^3\.0\.0-opencode-v2$/.test(v))process.exit(1)"
+          test "$(node -p "require('./package.json').version")" = "$CONFIRM_VERSION"
+          node -e "const v=require('./package.json').version;if(!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-opencode-v2\.[1-9]\d*$/.test(v))process.exit(1)"
 
       - name: Install, validate, and build
         run: |

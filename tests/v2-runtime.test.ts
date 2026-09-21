@@ -121,7 +121,7 @@ describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("OpenCode 2 runtime", () =
             "DELETE",
           );
           await native.request(`/api/session/${session}/prompt`, { text: "ACTIVE #chosen" });
-          await native.request(`/api/session/${session}/wait`, {});
+          await native.request(`/api/experimental/session/${session}/wait`, {});
           const call = host.requests.findLast((request) => request.tools?.length);
           expect(call).toBeDefined();
           expect(JSON.stringify(call)).not.toContain("PERSISTENT_CONTEXT");

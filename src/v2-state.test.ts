@@ -263,22 +263,36 @@ await unlink(lock);`,
     const data = join(root, "data");
     const events = join(root, "events.txt");
     const start = join(root, "start");
-    const script = join(root, "worker.ts");
+    const script = join(root, "worker.mjs");
     await mkdir(project);
     const store = new DurableStore(project, { dataDirectory: data });
     await mkdir(store.directory, { recursive: true });
     await writeFile(`${store.path}.lock`, JSON.stringify({ pid: 99_999_999, token: "stale" }));
-    const module = pathToFileURL(join(import.meta.dir, "v2-state.ts")).href;
+    // Exercise the shipped Node-compatible module. Launching 64 JSC runtimes
+    // exhausts the test host before the workers reach the lock under test.
+    const built = await Bun.build({
+      entrypoints: [join(import.meta.dir, "v2-state.ts")],
+      outdir: join(root, "built"),
+      target: "node",
+    });
+    expect(built.success).toBe(true);
+    const node = Bun.which("node");
+    if (!node) throw new Error("Node is required for the packaged worker test.");
+    const module = pathToFileURL(join(root, "built", "v2-state.js")).href;
+    await writeFile(join(root, "package.json"), '{"type":"module"}');
     await writeFile(
       script,
-      `import { appendFile } from "node:fs/promises";
+      `import { appendFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { setTimeout as delay } from "node:timers/promises";
 import { DurableStore } from ${JSON.stringify(module)};
 const [project, data, events, start, id] = process.argv.slice(2);
-while (!(await Bun.file(start).exists())) await Bun.sleep(1);
+await writeFile(start + ".ready-" + id, "ready");
+while (!existsSync(start)) await delay(1);
 const store = new DurableStore(project, { dataDirectory: data });
 await store.process("session-" + id, "message", async () => {
   await appendFile(events, "start " + id + "\\n");
-  await Bun.sleep(20);
+  await delay(20);
   await appendFile(events, "end " + id + "\\n");
   return ${JSON.stringify(output)};
 });`,
@@ -286,13 +300,30 @@ await store.process("session-" + id, "message", async () => {
 
     try {
       const workers = Array.from({ length: 64 }, (_, id) =>
-        Bun.spawn([process.execPath, script, project, data, events, start, String(id)]),
+        Bun.spawn([node, script, project, data, events, start, String(id)], {
+          stdout: "ignore",
+          stderr: "pipe",
+        }),
       );
+      const diagnostics = workers.map((worker) => new Response(worker.stderr).text());
+      const deadline = setTimeout(() => {
+        for (const worker of workers) worker.kill();
+      }, 45000);
       await Bun.sleep(100);
       await writeFile(start, "go");
-      expect(await Promise.all(workers.map((worker) => worker.exited))).toEqual(
-        Array.from({ length: 64 }, () => 0),
-      );
+      const exits = await Promise.all(workers.map((worker) => worker.exited));
+      clearTimeout(deadline);
+      const errors = await Promise.all(diagnostics);
+      if (exits.some((code) => code !== 0)) {
+        console.error({
+          ready: (await readdir(root)).filter((name) => name.includes(".ready-")).length,
+          events: await Bun.file(events)
+            .text()
+            .catch(() => "none"),
+          errors,
+        });
+      }
+      expect(exits).toEqual(Array.from({ length: 64 }, () => 0));
       const lines = (await readFile(events, "utf8")).trim().split("\n");
       const active = new Set<string>();
       for (const line of lines) {
