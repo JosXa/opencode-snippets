@@ -1,8 +1,8 @@
-name: Verify published V2 package
+name: Verify published package
 
 on:
   push:
-    branches: [opencode-v2]
+    branches: [main]
     paths: [.github/workflows/verify-published.yml]
   workflow_dispatch:
 
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   verify:
-    if: github.ref == 'refs/heads/opencode-v2'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -22,6 +22,6 @@ jobs:
       - name: Verify the published version and channel
         run: |
           version=$(node -p 'require("./package.json").version')
-          test "$(npm view opencode-snippets@opencode-v2 version)" = "$version"
+          test "$(npm view opencode-snippets@latest version)" = "$version"
           npm view "opencode-snippets@$version" name version dist.integrity --json
           npm pack "opencode-snippets@$version" --ignore-scripts --json
