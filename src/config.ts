@@ -84,7 +84,8 @@ const DEFAULT_CONFIG_CONTENT = `{
   // Logging settings
   "logging": {
     // Enable debug logging to file
-    // Logs are written to ~/.config/opencode/logs/snippets/daily/
+    // Logs are written to $OPENCODE_CONFIG_DIR/logs/snippets/daily/
+    // (defaults to ~/.config/opencode/ if OPENCODE_CONFIG_DIR is unset)
     // Values: true, false, "enabled", "disabled"
     // Default: false
     "debug": false
@@ -176,7 +177,7 @@ function ensureGlobalConfigExists(): void {
  *
  * Configuration priority (highest to lowest):
  * 1. Project-specific config (.opencode/snippet/config.jsonc)
- * 2. Global config (~/.config/opencode/snippet/config.jsonc)
+ * 2. Global config ($OPENCODE_CONFIG_DIR/snippet/config.jsonc)
  * 3. Default values
  *
  * @param projectDir - Optional project directory to check for project-specific config

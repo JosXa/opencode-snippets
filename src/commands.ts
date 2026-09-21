@@ -437,7 +437,8 @@ Commands:
   help                      Show this help message
 
 Snippet Locations:
-  Global:  ~/.config/opencode/snippet/ or ~/.config/opencode/snippets/
+  Global:  $OPENCODE_CONFIG_DIR/snippet/ or $OPENCODE_CONFIG_DIR/snippets/
+          (defaults to ~/.config/opencode/ if OPENCODE_CONFIG_DIR is unset)
   Project: <project>/.opencode/snippet/ or <project>/.opencode/snippets/
 
 Usage in messages:

@@ -6,6 +6,7 @@ import { importCjs } from "./cjs-interop.js";
 
 const matter = await importCjs<typeof import("gray-matter")>("gray-matter");
 
+import { _configDir } from "./constants.js";
 import { logger } from "./logger.js";
 
 /**
@@ -50,7 +51,7 @@ const __dirname = dirname(__filename);
  * https://opencode.ai/docs/skills/
  *
  * Official paths from current OpenCode docs:
- * - ~/.config/opencode/skills/<name>/SKILL.md
+ * - $OPENCODE_CONFIG_DIR/skills/<name>/SKILL.md
  * - ~/.claude/skills/<name>/SKILL.md
  * - ~/.agents/skills/<name>/SKILL.md
  * - .opencode/skills/<name>/SKILL.md
@@ -58,16 +59,19 @@ const __dirname = dirname(__filename);
  * - .agents/skills/<name>/SKILL.md
  *
  * Compatibility paths we intentionally keep because this repo and local setup still use them:
- * - ~/.config/opencode/skill/<name>/SKILL.md
+ * - $OPENCODE_CONFIG_DIR/skill/<name>/SKILL.md
  * - .opencode/skill/<name>/SKILL.md
  *
  * Compatibility paths are loaded before the official `.opencode/skills` variants so the
  * documented OpenCode locations still win if both singular and plural exist side by side.
  */
-function getGlobalSkillDirs(homeDir = homedir()): string[] {
+function getGlobalSkillDirs(homeDir = homedir(), configDirOverride?: string): string[] {
+  const configDir =
+    configDirOverride ||
+    (homeDir !== homedir() ? join(homeDir, ".config", "opencode") : _configDir());
   return [
-    join(homeDir, ".config", "opencode", "skill"),
-    join(homeDir, ".config", "opencode", "skills"),
+    join(configDir, "skill"),
+    join(configDir, "skills"),
     join(homeDir, ".claude", "skills"),
     join(homeDir, ".agents", "skills"),
   ];

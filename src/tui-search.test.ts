@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { SkillInfo } from "./skill-loader.js";
 import {
+  autocompleteLabelForSnippet,
   filterSkills,
   filterSnippets,
   highlightMatches,
@@ -208,6 +209,36 @@ describe("snippetDescription", () => {
         }),
       ),
     ).toBe("This is a much longer description that should stay intact");
+  });
+});
+
+describe("autocompleteLabelForSnippet", () => {
+  test("shows the best-matching alias in the menu label", () => {
+    expect(
+      autocompleteLabelForSnippet(
+        snippet({
+          name: "fanout-implement",
+          aliases: ["fanout", "fanout-implement"],
+          content: "x",
+        }),
+        "fan",
+      ),
+    ).toBe("#fanout");
+  });
+
+  test("falls back to filename when query matches the name only", () => {
+    expect(
+      autocompleteLabelForSnippet(
+        snippet({ name: "fanout-implement", aliases: ["fanout"], content: "x" }),
+        "fanout-implement",
+      ),
+    ).toBe("#fanout-implement");
+  });
+
+  test("uses snippet name when query is empty", () => {
+    expect(autocompleteLabelForSnippet(snippet({ name: "review", content: "x" }), "")).toBe(
+      "#review",
+    );
   });
 });
 

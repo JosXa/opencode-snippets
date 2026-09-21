@@ -10,14 +10,14 @@ Reusable text blocks expanded via `#hashtag` in messages.
 ## Locations
 
 ### Snippets
-- **Global directories**: `~/.config/opencode/snippet/` and `~/.config/opencode/snippets/`
+- **Global directories**: Run `echo $OPENCODE_CONFIG_DIR` to get the active config dir, then append `/snippet/`. If empty, check the launcher: `grep OPENCODE_CONFIG_DIR "$(which opencode)"`. Default fallback: `~/.config/opencode/snippet/`. Quick verify: `ls "$OPENCODE_CONFIG_DIR/snippet/"*.md 2>/dev/null` — existing files confirm the path.
 - **Project directories**: `.opencode/snippet/` and `.opencode/snippets/` (project overrides global, `snippet/` wins over `snippets/`)
 
 ### Configuration
-- **Global file**: `~/.config/opencode/snippet/config.jsonc`
+- **Global file**: Inside the active global dir, `snippet/config.jsonc`
 - **Project file**: `.opencode/snippet/config.jsonc` (merges with global, project takes priority)
 
-IMPORTANT: Snippets live only in those four snippet directories. Check those exact locations. Do not glob anywhere else in the repo or workspace.
+IMPORTANT: Snippets live only in those four snippet directories. Check those exact locations. Do not glob anywhere else in the repo or workspace. Always resolve `$OPENCODE_CONFIG_DIR` (or check the launcher if empty) before creating snippets to avoid writing to the wrong directory.
 
 IMPORTANT: Config files stay under `snippet/config.jsonc`. The plural `snippets/` support is for snippet markdown files only.
 
@@ -28,7 +28,7 @@ IMPORTANT: When modifying snippet configuration:
 4. If neither exists, create the global config
 
 ### Logs
-- **Debug logs**: `~/.config/opencode/logs/snippets/daily/YYYY-MM-DD.log`
+- **Debug logs**: Inside the active global config dir, `logs/snippets/daily/YYYY-MM-DD.log`
 
 ## Configuration
 
@@ -44,7 +44,7 @@ Full config example with all options:
   // Logging settings
   "logging": {
     // Enable debug logging to file
-    // Logs are written to ~/.config/opencode/logs/snippets/daily/
+    // Logs are written to <global-config-dir>/logs/snippets/daily/
     // Default: false
     "debug": false
   },
@@ -165,7 +165,7 @@ Enable in config:
 }
 ```
 
-Skills are loaded from OpenCode's standard directories (`~/.config/opencode/skill/` and `.opencode/skill/`).
+Skills are loaded from OpenCode's standard directories (active global config dir's `skill/` subdirectory and `.opencode/skill/`).
 
 ### Skill Loading (Experimental)
 

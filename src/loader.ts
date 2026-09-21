@@ -4,14 +4,55 @@ import { importCjs } from "./cjs-interop.js";
 
 const matter = await importCjs<typeof import("gray-matter")>("gray-matter");
 
-import { CONFIG, getProjectPaths, PATHS } from "./constants.js";
+import { _configDir, CONFIG, getProjectPaths, PATHS } from "./constants.js";
 import { logger } from "./logger.js";
 import type { SnippetFrontmatter, SnippetInfo, SnippetRegistry } from "./types.js";
 
+/**
+ * Snapshot of PATHS.SNIPPETS_DIR at module import time.
+ *
+ * Used to detect whether tests have patched PATHS via Object.defineProperty.
+ * If the current PATHS.SNIPPETS_DIR differs from this snapshot, tests are
+ * overriding PATHS and we should respect the patched values. Otherwise, we
+ * resolve the config dir lazily via _configDir() so that OPENCODE_CONFIG_DIR
+ * is always current (handles wrappers that set it after module load).
+ */
+const _importTimeSnippetDir = PATHS.SNIPPETS_DIR;
+
+/**
+ * Get global snippet paths, resolving OPENCODE_CONFIG_DIR lazily at call time.
+ *
+ * This re-reads OPENCODE_CONFIG_DIR on every call instead of relying on the
+ * import-time-frozen PATHS object. This ensures the correct config dir is used
+ * even when the env var is set by a wrapper after module load (e.g., the
+ * opencode-stable wrapper sets OPENCODE_CONFIG_DIR=~/.config/opencode-stable).
+ *
+ * If PATHS has been patched by tests (via Object.defineProperty), the patched
+ * values take priority to preserve backward compatibility with existing tests.
+ */
+function getGlobalPaths() {
+  // If PATHS was patched by tests, use the patched values
+  if (PATHS.SNIPPETS_DIR !== _importTimeSnippetDir) {
+    return { SNIPPETS_DIR: PATHS.SNIPPETS_DIR, SNIPPETS_DIR_ALT: PATHS.SNIPPETS_DIR_ALT };
+  }
+
+  // Otherwise, resolve lazily from the current OPENCODE_CONFIG_DIR value
+  const dir = _configDir();
+  return {
+    SNIPPETS_DIR: join(dir, "snippet"),
+    SNIPPETS_DIR_ALT: join(dir, "snippets"),
+  };
+}
+
+/**
+ * Resolve global snippet directories lazily at call time.
+ *
+ * @param globalDir - Optional override (used by tests to bypass PATHS entirely)
+ */
 function getGlobalSnippetDirs(globalDir?: string): string[] {
   if (globalDir) return [globalDir];
-
-  return [PATHS.SNIPPETS_DIR_ALT, PATHS.SNIPPETS_DIR];
+  const paths = getGlobalPaths();
+  return [paths.SNIPPETS_DIR_ALT, paths.SNIPPETS_DIR];
 }
 
 function getProjectSnippetDirs(projectDir: string): string[] {
@@ -28,10 +69,12 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
+/**
+ * Resolve the writable snippet directory, preferring existing directories.
+ * Uses lazy config dir resolution for the global case.
+ */
 async function resolveWritableSnippetDir(projectDir?: string): Promise<string> {
-  const paths = projectDir
-    ? getProjectPaths(projectDir)
-    : { SNIPPETS_DIR: PATHS.SNIPPETS_DIR, SNIPPETS_DIR_ALT: PATHS.SNIPPETS_DIR_ALT };
+  const paths = projectDir ? getProjectPaths(projectDir) : getGlobalPaths();
 
   // Support both snippet/ and snippets/. Reuse an existing directory first, then default to snippet/.
   for (const dir of [paths.SNIPPETS_DIR, paths.SNIPPETS_DIR_ALT]) {
@@ -277,8 +320,9 @@ export async function deleteSnippet(name: string, projectDir?: string): Promise<
     }
   }
 
-  // Try global directory
-  for (const dir of [PATHS.SNIPPETS_DIR, PATHS.SNIPPETS_DIR_ALT]) {
+  // Try global directory (resolve lazily so OPENCODE_CONFIG_DIR is current)
+  const globalPaths = getGlobalPaths();
+  for (const dir of [globalPaths.SNIPPETS_DIR, globalPaths.SNIPPETS_DIR_ALT]) {
     const filePath = join(dir, `${name}${CONFIG.SNIPPET_EXTENSION}`);
     try {
       await unlink(filePath);

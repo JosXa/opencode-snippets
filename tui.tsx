@@ -24,9 +24,10 @@ import {
 import { CONFIG } from "./src/constants.js";
 import { ensureSnippetsDir, listSnippets, loadSnippets } from "./src/loader.js";
 import { addPendingDraft } from "./src/pending-drafts.js";
-import { markSnippetReloadRequested } from "./src/reload-signal.js";
 import { loadSkills, type SkillInfo } from "./src/skill-loader.js";
+import { executeReloadInPrompt } from "./src/tui-reload.js";
 import {
+  autocompleteLabelForSnippet,
   filterSkills,
   filterSnippets,
   highlightMatches,
@@ -297,36 +298,6 @@ async function getSnippets(api: TuiPluginApi): Promise<SnippetInfo[]> {
   return sortSnippets(listSnippets(registry));
 }
 
-async function reloadSnippetsInTui(api: TuiPluginApi): Promise<number> {
-  const registry = await loadSnippets(api.state.path.directory);
-  await markSnippetReloadRequested(api.state.path.directory);
-  return listSnippets(registry).length;
-}
-
-function executeReloadInPrompt(
-  api: TuiPluginApi,
-  ref: TuiPromptRef,
-  clear: () => void,
-  refresh: () => Promise<unknown> | undefined,
-) {
-  void (async () => {
-    const count = await reloadSnippetsInTui(api);
-    await refresh();
-    clear();
-    ref.focus();
-    api.renderer.requestRender();
-    setTimeout(() => {
-      api.ui.toast({
-        variant: "success",
-        title: "Snippets reloaded",
-        message: `Reloaded ${count} snippet${count === 1 ? "" : "s"}.`,
-        duration: 3000,
-      });
-      api.renderer.requestRender();
-    }, 0);
-  })();
-}
-
 async function getSkills(api: TuiPluginApi): Promise<SkillInfo[]> {
   const native = api.client as unknown as OpenCodeSkillApi;
   if (native.app?.skills) {
@@ -495,7 +466,7 @@ function PromptWithSnippetAutocomplete(props: {
     const snippetOptions = filterSnippets(snippets(), value).map((snippet) => ({
       kind: "snippet" as const,
       id: `snippet:${snippet.name}`,
-      label: `#${snippet.name}`,
+      label: autocompleteLabelForSnippet(snippet, value),
       description: snippetDescription(snippet),
       aliases: matchedAliases(snippet, value),
       snippet,
@@ -684,40 +655,6 @@ function PromptWithSnippetAutocomplete(props: {
 
     return false;
   };
-
-  createEffect(() => {
-    const ref = prompt();
-    if (!ref) return;
-
-    let dispose: (() => void) | undefined;
-    const timer = setTimeout(() => {
-      dispose = props.api.command.register(() => [
-        {
-          title: "Reload snippets",
-          value: "snippets.reload",
-          description: "Reload snippet files from disk",
-          category: "Prompt",
-          slash: { name: "snippets:reload" },
-          onSelect() {
-            executeReloadInPrompt(
-              props.api,
-              ref,
-              () => {
-                syncPromptInput(ref, "");
-                setDismissed(undefined);
-              },
-              refreshSnippetOptions,
-            );
-          },
-        },
-      ]);
-    }, 0);
-
-    onCleanup(() => {
-      clearTimeout(timer);
-      dispose?.();
-    });
-  });
 
   createEffect(() => {
     if (dialogBlockingInput() || !visible() || options().length === 0) return;

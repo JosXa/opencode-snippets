@@ -26,18 +26,25 @@ export const PATTERNS = {
 /**
  * File system paths
  */
+export function _configDir(): string {
+  return (
+    (typeof process !== "undefined" && process.env && process.env.OPENCODE_CONFIG_DIR) ||
+    join(homedir(), ".config", "opencode")
+  );
+}
+
 export const PATHS = {
-  /** OpenCode configuration directory */
-  CONFIG_DIR: join(homedir(), ".config", "opencode"),
+  /** OpenCode configuration directory — respects OPENCODE_CONFIG_DIR env override */
+  CONFIG_DIR: _configDir(),
 
   /** Preferred global snippets directory */
-  SNIPPETS_DIR: join(homedir(), ".config", "opencode", "snippet"),
+  SNIPPETS_DIR: join(_configDir(), "snippet"),
 
   /** Alternate global snippets directory */
-  SNIPPETS_DIR_ALT: join(homedir(), ".config", "opencode", "snippets"),
+  SNIPPETS_DIR_ALT: join(_configDir(), "snippets"),
 
   /** Global config file */
-  CONFIG_FILE_GLOBAL: join(homedir(), ".config", "opencode", "snippet", "config.jsonc"),
+  CONFIG_FILE_GLOBAL: join(_configDir(), "snippet", "config.jsonc"),
 } as const;
 
 /**
