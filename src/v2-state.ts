@@ -143,8 +143,10 @@ export class DurableStore {
     await publish(contenderPath, choosing);
     let acquired = false;
     try {
-      const initial = await readContenders(contenders);
-      const ticket = Math.max(0, ...initial.map((contender) => contender.ticket)) + 1;
+      let ticket = 1;
+      for await (const contender of readContenders(contenders)) {
+        ticket = Math.max(ticket, contender.ticket + 1);
+      }
       await replaceContender(contenderPath, { ...owner, choosing: false, ticket });
       while (await hasPredecessor(contenders, owner.token, ticket)) {
         if (Date.now() - started >= LOCK_TIMEOUT_MS) {
@@ -254,9 +256,8 @@ async function replaceContender(path: string, contender: LockContender): Promise
   }
 }
 
-async function readContenders(directory: string): Promise<LockContender[]> {
+async function* readContenders(directory: string): AsyncGenerator<LockContender> {
   const names = await readdir(directory);
-  const contenders: LockContender[] = [];
   for (const name of names) {
     if (!name.endsWith(".json")) continue;
     const path = join(directory, name);
@@ -278,7 +279,7 @@ async function readContenders(directory: string): Promise<LockContender[]> {
       throw new Error(`Invalid durable snippet lock contender: ${path}`);
     }
     if (processIsAlive(contender.pid)) {
-      contenders.push(contender);
+      yield contender;
       continue;
     }
     // Tokens are random, immutable path identities and are never reused. Removing
@@ -287,18 +288,22 @@ async function readContenders(directory: string): Promise<LockContender[]> {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     });
   }
-  return contenders;
 }
 
 async function hasPredecessor(directory: string, token: string, ticket: number): Promise<boolean> {
-  const contenders = await readContenders(directory);
-  return contenders.some(
-    (contender) =>
+  // A single predecessor is enough to wait. Scanning every file on every poll
+  // makes contending processes delay the lock owner with redundant filesystem IO.
+  for await (const contender of readContenders(directory)) {
+    if (
       contender.token !== token &&
       (contender.choosing ||
         contender.ticket < ticket ||
-        (contender.ticket === ticket && contender.token < token)),
-  );
+        (contender.ticket === ticket && contender.token < token))
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function processIsAlive(pid: number): boolean {
