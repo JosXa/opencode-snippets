@@ -417,6 +417,7 @@ const plugin = Plugin.define({
                 width={position().width}
                 height={height()}
                 zIndex={100}
+                backgroundColor={menuBackground()}
                 border={["left", "right"]}
                 borderColor={palette().border.base}
                 customBorderChars={{
@@ -446,7 +447,9 @@ const plugin = Plugin.define({
                       <box
                         paddingLeft={1}
                         backgroundColor={
-                          normalizeUnmatchedTrigger(trigger()?.query ?? "") ? primary() : undefined
+                          normalizeUnmatchedTrigger(trigger()?.query ?? "")
+                            ? primary()
+                            : menuBackground()
                         }
                         onMouseUp={() => {
                           if (normalizeUnmatchedTrigger(trigger()?.query ?? ""))
@@ -474,7 +477,7 @@ const plugin = Plugin.define({
                         paddingLeft={1}
                         paddingRight={1}
                         flexDirection="row"
-                        backgroundColor={selected() === index() ? primary() : undefined}
+                        backgroundColor={selected() === index() ? primary() : menuBackground()}
                         onMouseMove={(event) => {
                           const point = `${event.x},${event.y}`;
                           if (Date.now() < ignoreMouseUntil || point === lastMouse) return;
