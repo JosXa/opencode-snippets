@@ -116,6 +116,17 @@ describe("cursor-position hashtag completion", () => {
 });
 
 describe("V2 autocomplete choices", () => {
+  test("matches showme to the show-me skill in autocomplete", () => {
+    const options = buildTuiCompletionOptions(
+      [],
+      [{ name: "show-me", description: "Show me" }],
+      "showme",
+    );
+
+    // Typing the skill name without its dash must still show the insertable skill tag.
+    expect(options.map((option) => option.title)).toContain("#skill(show-me)");
+  });
+
   test("includes both snippet and skill completions", () => {
     const options = buildTuiCompletionOptions(
       [

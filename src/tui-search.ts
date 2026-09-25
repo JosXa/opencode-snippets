@@ -40,6 +40,10 @@ function scoreText(input: string, query: string): number {
   return Number.POSITIVE_INFINITY;
 }
 
+export function matchesFuzzySearchText(input: string, query: string): boolean {
+  return Number.isFinite(scoreText(input, query));
+}
+
 function scoreSnippet(snippet: SnippetInfo, query: string): number {
   if (!query) return 0;
 

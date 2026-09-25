@@ -1,4 +1,5 @@
 import type { SkillInfo } from "./skill-loader.js";
+import { matchesFuzzySearchText } from "./tui-search.js";
 import type { SnippetInfo } from "./types.js";
 
 export type TuiCompletion = { kind: "snippet" | "skill"; name: string };
@@ -77,8 +78,8 @@ export function buildTuiCompletionOptions(
     .filter(() => skillQuery === undefined)
     .filter(
       (snippet) =>
-        snippet.name.toLowerCase().includes(normalized) ||
-        snippet.aliases.some((alias) => alias.toLowerCase().includes(normalized)),
+        matchesFuzzySearchText(snippet.name, normalized) ||
+        snippet.aliases.some((alias) => matchesFuzzySearchText(alias, normalized)),
     )
     .map((snippet) => ({
       title: `#${snippet.name}`,
@@ -89,7 +90,7 @@ export function buildTuiCompletionOptions(
     .sort((left, right) => left.name.localeCompare(right.name))
     .filter(
       (skill) =>
-        skill.name.toLowerCase().includes(skillQuery ?? normalized) ||
+        matchesFuzzySearchText(skill.name, skillQuery ?? normalized) ||
         skill.description?.toLowerCase().includes(skillQuery ?? normalized),
     )
     .map((skill) => ({
