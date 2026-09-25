@@ -10,17 +10,26 @@ function normalizeSearchText(input: string): string {
   return input.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function isSubsequence(input: string, query: string): boolean {
-  if (!query) return true;
+function scoreSubsequence(input: string, query: string): number {
+  const positions: number[] = [];
+  let index = 0;
+  let position = 0;
 
-  let i = 0;
   for (const c of input) {
-    if (c !== query[i]) continue;
-    i += 1;
-    if (i === query.length) return true;
+    if (c === query[index]) {
+      positions.push(position);
+      index += 1;
+      if (index === query.length) break;
+    }
+    position += 1;
   }
 
-  return false;
+  if (index !== query.length) return Number.POSITIVE_INFINITY;
+
+  const start = positions[0] ?? 0;
+  const gaps = (positions.at(-1) ?? 0) - start + 1 - query.length;
+  const length = input.length + 1;
+  return 6 + Math.min(0.99, (start / length) * 0.8 + (gaps / length) * 0.19);
 }
 
 function scoreText(input: string, query: string): number {
@@ -35,16 +44,12 @@ function scoreText(input: string, query: string): number {
   if (compactNeedle && compact.startsWith(compactNeedle)) return 3;
   if (raw.includes(needle)) return 4;
   if (compactNeedle && compact.includes(compactNeedle)) return 5;
-  if (compactNeedle && isSubsequence(compact, compactNeedle)) return 6;
+  if (compactNeedle) return scoreSubsequence(compact, compactNeedle);
 
   return Number.POSITIVE_INFINITY;
 }
 
-export function matchesFuzzySearchText(input: string, query: string): boolean {
-  return Number.isFinite(scoreText(input, query));
-}
-
-function scoreSnippet(snippet: SnippetInfo, query: string): number {
+export function scoreSnippet(snippet: SnippetInfo, query: string): number {
   if (!query) return 0;
 
   const description = (snippet.description || "").toLowerCase();
@@ -66,11 +71,11 @@ function sourceRank(item: { source: "global" | "project" }): number {
   return item.source === "project" ? 0 : 1;
 }
 
-function skillTag(skill: SkillInfo): string {
+function skillTag(skill: Pick<SkillInfo, "name">): string {
   return `skill(${skill.name})`;
 }
 
-function scoreSkill(skill: SkillInfo, query: string): number {
+export function scoreSkill(skill: Pick<SkillInfo, "name" | "description">, query: string): number {
   if (!query) return 0;
 
   const description = (skill.description || "").toLowerCase();

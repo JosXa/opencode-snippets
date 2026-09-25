@@ -100,6 +100,18 @@ describe("filterSnippets", () => {
     expect(result.map((item) => item.name)).toEqual(["abc-project", "abc-global"]);
   });
 
+  test("ranks fuzzy score before source when matches differ in quality", () => {
+    const result = filterSnippets(
+      [
+        snippet({ name: "abc-global", content: "x" }),
+        snippet({ name: "prefix-abc-project", content: "x", source: "project" }),
+      ],
+      "abc",
+    );
+
+    expect(result.map((item) => item.name)).toEqual(["abc-global", "prefix-abc-project"]);
+  });
+
   test("returns all matches instead of truncating to a fixed top slice", () => {
     const result = filterSnippets(
       Array.from({ length: 12 }, (_, index) =>
@@ -121,6 +133,19 @@ describe("filterSnippets", () => {
     );
 
     expect(result.map((item) => item.name)).toEqual(["skill-smoke"]);
+  });
+
+  test("ranks the closer autocomplete match before other fuzzy matches", () => {
+    const result = filterSnippets(
+      [
+        snippet({ name: "argocd-logs", content: "ArgoCD logs" }),
+        snippet({ name: "opencode-logs", content: "OpenCode logs" }),
+      ],
+      "oclogs",
+    );
+
+    // Users expect the closest fuzzy match to lead the list in the V1 menu.
+    expect(result.map((item) => item.name)).toEqual(["opencode-logs", "argocd-logs"]);
   });
 
   test("does not keep stale matches for unrelated garbage queries", () => {
@@ -186,6 +211,18 @@ describe("filterSkills", () => {
     const result = filterSkills([skill({ name: "opencode-config", content: "x" })], "opcocg");
 
     expect(result.map((item) => item.name)).toEqual(["opencode-config"]);
+  });
+
+  test("ranks closer fuzzy skill matches first", () => {
+    const result = filterSkills(
+      [
+        skill({ name: "argocd-logs", content: "ArgoCD logs" }),
+        skill({ name: "opencode-logs", content: "OpenCode logs" }),
+      ],
+      "oclogs",
+    );
+
+    expect(result.map((item) => item.name)).toEqual(["opencode-logs", "argocd-logs"]);
   });
 });
 

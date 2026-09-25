@@ -1,5 +1,5 @@
 import type { SkillInfo } from "./skill-loader.js";
-import { matchesFuzzySearchText } from "./tui-search.js";
+import { scoreSkill, scoreSnippet } from "./tui-search.js";
 import type { SnippetInfo } from "./types.js";
 
 export type TuiCompletion = { kind: "snippet" | "skill"; name: string };
@@ -74,26 +74,25 @@ export function buildTuiCompletionOptions(
   // Filesystem enumeration order differs across hosts. Keep keyboard selection
   // stable when the same snippets or skills are loaded on another machine.
   const snippetOptions = [...snippets]
-    .sort((left, right) => left.name.localeCompare(right.name))
     .filter(() => skillQuery === undefined)
-    .filter(
-      (snippet) =>
-        matchesFuzzySearchText(snippet.name, normalized) ||
-        snippet.aliases.some((alias) => matchesFuzzySearchText(alias, normalized)),
+    .map((snippet) => ({ snippet, score: scoreSnippet(snippet, normalized) }))
+    .filter((item) => Number.isFinite(item.score))
+    .sort(
+      (left, right) =>
+        left.score - right.score || left.snippet.name.localeCompare(right.snippet.name),
     )
-    .map((snippet) => ({
+    .map(({ snippet }) => ({
       title: `#${snippet.name}`,
       description: snippet.description || snippet.content.replace(/\s+/g, " ").slice(0, 100),
       value: { kind: "snippet" as const, name: snippet.name },
     }));
   const skillOptions = [...skills]
-    .sort((left, right) => left.name.localeCompare(right.name))
-    .filter(
-      (skill) =>
-        matchesFuzzySearchText(skill.name, skillQuery ?? normalized) ||
-        skill.description?.toLowerCase().includes(skillQuery ?? normalized),
+    .map((skill) => ({ skill, score: scoreSkill(skill, skillQuery ?? normalized) }))
+    .filter((item) => Number.isFinite(item.score))
+    .sort(
+      (left, right) => left.score - right.score || left.skill.name.localeCompare(right.skill.name),
     )
-    .map((skill) => ({
+    .map(({ skill }) => ({
       title: `#skill(${skill.name})`,
       description: skill.description || "Load skill instructions",
       value: { kind: "skill" as const, name: skill.name },

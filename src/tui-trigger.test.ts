@@ -127,6 +127,32 @@ describe("V2 autocomplete choices", () => {
     expect(options.map((option) => option.title)).toContain("#skill(show-me)");
   });
 
+  test("ranks the closer fuzzy match first in autocomplete", () => {
+    const options = buildTuiCompletionOptions(
+      [
+        {
+          name: "argocd-logs",
+          aliases: [],
+          content: "ArgoCD logs",
+          source: "global",
+          filePath: "/tmp/argocd-logs.md",
+        },
+        {
+          name: "opencode-logs",
+          aliases: [],
+          content: "OpenCode logs",
+          source: "global",
+          filePath: "/tmp/opencode-logs.md",
+        },
+      ],
+      [],
+      "oclogs",
+    );
+
+    // Users expect the closest fuzzy match to lead the list in the V2 menu.
+    expect(options.map((option) => option.title)).toEqual(["#opencode-logs", "#argocd-logs"]);
+  });
+
   test("includes both snippet and skill completions", () => {
     const options = buildTuiCompletionOptions(
       [
