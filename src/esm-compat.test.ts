@@ -66,6 +66,26 @@ describe("ESM compatibility", () => {
     }
 
     expect(violations).toEqual([]);
+    // Native V2 resolves both entrypoints from the built directory. Exercise
+    // their current SDK imports under Node, the runtime used by the CLI.
+    const native = Bun.spawnSync(
+      [
+        "node",
+        "--input-type=module",
+        "-e",
+        `import assert from "node:assert/strict";
+for (const [file, id] of [
+  ["./dist/index.js", "opencode-snippets"],
+  ["./dist/tui.js", "opencode-snippets:autocomplete"],
+]) {
+  const { default: plugin } = await import(file);
+  assert.equal(plugin.id, id);
+  assert.equal(typeof plugin.setup, "function");
+}`,
+      ],
+      { cwd: ROOT },
+    );
+    expect(native.exitCode, native.stderr.toString()).toBe(0);
     // This test shells out to a full `bun run build`, which can take well over
     // the 5s default test budget on cold caches / loaded machines. Allow 60s.
   }, 60_000);
