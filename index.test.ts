@@ -59,6 +59,7 @@ describe("OpenCode V2 plugin entry", () => {
         expect.objectContaining({
           id: "snippets",
           path: join(import.meta.dir, "skill", "snippets", "SKILL.md"),
+          location: join(import.meta.dir, "skill", "snippets", "SKILL.md"),
         }),
       );
     } finally {

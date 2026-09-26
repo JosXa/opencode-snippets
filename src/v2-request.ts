@@ -345,6 +345,8 @@ export async function setupV2Snippets(
           name: skill.name as never,
           description: skill.description,
           path: skill.filePath as Skill.Info["path"],
+          // The running V2 host requires location; the installed SDK still requires path.
+          location: skill.filePath,
           content: skill.content,
         };
         draft.add(entry);
