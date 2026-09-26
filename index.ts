@@ -1,5 +1,5 @@
 import { access, rmdir, unlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Plugin } from "@opencode/plugin";
 import type { Plugin as LegacyPlugin } from "@opencode-ai/plugin-v1";
@@ -34,7 +34,8 @@ type OpenCodeConfigWithSkillPaths = {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const PLUGIN_ROOT = join(__dirname, "..");
+// OpenCode can load the source entrypoint, while the published package loads dist/index.js.
+const PLUGIN_ROOT = basename(__dirname) === "dist" ? dirname(__dirname) : __dirname;
 const SKILL_DIR = join(PLUGIN_ROOT, "skill");
 const MARKER_ID_RANDOM_FILL = "0000000000";
 

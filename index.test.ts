@@ -43,6 +43,28 @@ describe("OpenCode V2 plugin entry", () => {
     expect(typeof plugin.setup).toBe("function");
     expect(server).toBe(plugin);
   });
+
+  it("registers its bundled skill when loaded from the source entrypoint", async () => {
+    const registered: unknown[] = [];
+    const fixture = v2Context();
+    fixture.context.skill.transform = async (
+      callback: (draft: { add: (skill: unknown) => void }) => void,
+    ) => {
+      callback({ add: (skill) => registered.push(skill) });
+      return { dispose: async () => undefined };
+    };
+    const cleanup = await plugin.setup({ ...fixture.context, options: {} } as never);
+    try {
+      expect(registered).toContainEqual(
+        expect.objectContaining({
+          id: "snippets",
+          path: join(import.meta.dir, "skill", "snippets", "SKILL.md"),
+        }),
+      );
+    } finally {
+      await cleanup?.();
+    }
+  });
 });
 
 describe("OpenCode V2 final regressions", () => {

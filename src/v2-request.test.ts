@@ -1214,7 +1214,8 @@ describe("V2 request expansion", () => {
       await contextHook?.(request);
 
       expect(source).toMatchObject({
-        location: join(skillDirectory, "SKILL.md"),
+        id: "snippets",
+        path: join(skillDirectory, "SKILL.md"),
         name: "snippets",
       });
       expect(request.messages[0].content[0].text).toBe("use native V2 expansion");

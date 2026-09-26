@@ -340,12 +340,10 @@ export async function setupV2Snippets(
   const registrations = await Promise.all([
     context.skill.transform((draft) => {
       for (const skill of bundledSkills.values()) {
-        // OpenCode 2.0.5 uses path; earlier V2 hosts require location.
         const entry = {
-          id: skill.filePath as never,
+          id: skill.name as Skill.Info["id"],
           name: skill.name as never,
           description: skill.description,
-          location: skill.filePath as never,
           path: skill.filePath as Skill.Info["path"],
           content: skill.content,
         };
