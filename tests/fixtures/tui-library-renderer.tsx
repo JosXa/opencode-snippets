@@ -2,7 +2,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { Renderable, TextareaRenderable } from "@opentui/core";
+import { BoxRenderable, Renderable, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 import { registerManagedTextareaLayer } from "@opentui/keymap/addons/opentui";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { testRender, useRenderer } from "@opentui/solid";
@@ -14,7 +14,13 @@ const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
-async function fixture(width = 120, height = 38) {
+async function fixture(width = 120, height = 38, scroll = { speed: 3, acceleration: false }) {
+  const previous = process.env.OPENCODE_CLI_CONFIG_CONTENT;
+  process.env.OPENCODE_CLI_CONFIG_CONTENT = JSON.stringify({ scroll });
+  cleanups.push(() => {
+    if (previous === undefined) delete process.env.OPENCODE_CLI_CONFIG_CONTENT;
+    if (previous !== undefined) process.env.OPENCODE_CLI_CONFIG_CONTENT = previous;
+  });
   const directory = await mkdtemp("/tmp/opencode/library-render-");
   cleanups.push(() => rm(directory, { recursive: true, force: true }));
   const globalDirectory = join(directory, "global");
@@ -51,7 +57,11 @@ async function fixture(width = 120, height = 38) {
       );
       const palette = {
         border: { base: "#555555" },
-        background: { base: "#101820", action: { primary: { focused: "#775511" } } },
+        background: {
+          base: "#101820",
+          raised: { base: "#182028", high: "#304050" },
+          action: { primary: { focused: "#775511" } },
+        },
         text: {
           base: "#eeeeee",
           muted: "#999999",
@@ -163,16 +173,34 @@ test("matches the split layout; click source includes, search aliases, filter an
   const view = await fixture();
   expect(view.captureCharFrame()).toContain("Review this code carefully:");
   expect(view.captureCharFrame()).toContain("#missing (unresolved)");
+  expect(view.node("library-action-new").y).toBe(view.node("library-search").y);
+  expect(view.captureCharFrame()).toContain("[ Edit source ]");
+  const button = view.node("library-action-edit");
+  if (!(button instanceof BoxRenderable)) throw new Error("Not a button");
+  const background = button.backgroundColor;
+  await view.mockMouse.moveTo(button.x + 1, button.y);
+  await view.settle();
+  expect(button.backgroundColor).not.toEqual(background);
   await view.click("library-action-include:base");
   expect(view.state.selected).toEndWith("base.md");
+  expect(view.captureCharFrame()).not.toContain("INCLUDES");
+  expect(view.captureCharFrame()).not.toContain("Aliases:");
+  expect(view.captureCharFrame()).not.toContain("Fields:");
   await view.click(`library-action-used:${join(view.directory, ".opencode/snippet/review.md")}`);
   expect(view.state.selected).toEndWith("review.md");
   view.mockInput.pressKey("/");
   await view.mockInput.typeText("rev");
   await view.settle();
   expect(view.captureCharFrame()).not.toContain("#global");
+  await view.mockInput.typeText("q");
+  await view.settle();
+  expect(view.captureCharFrame()).toContain("revq");
+  expect(view.closed()).toBe(false);
   await view.click("library-action-global");
   expect(view.captureCharFrame()).toContain("No matching snippets.");
+  view.mockInput.pressKey("q");
+  await view.settle();
+  expect(view.closed()).toBe(true);
 });
 
 test("search Enter selects the result; find, copy and form testing use the unsaved source", async () => {
@@ -223,20 +251,26 @@ test("native editor enters multiline text under host submit bindings, saves, und
   await view.settle();
   expect(await Bun.file(view.path()).text()).toEndWith("\n中😀 New line");
   expect(view.captureCharFrame()).not.toContain("Unsaved");
-  await view.mockInput.typeText("Draft");
+  await view.mockInput.typeText("Draftq");
+  expect(view.closed()).toBe(false);
   await view.settle();
   await view.click("library-file-1");
   await view.click("library-file-2");
-  expect(view.editor().plainText).toEndWith("New lineDraft");
+  expect(view.editor().plainText).toEndWith("New lineDraftq");
   view.answers.push("cancel");
-  view.mockInput.pressEscape();
+  view.mockInput.pressKey("q");
   await view.settle();
+  expect(view.calls).toEqual(["select"]);
   expect(view.closed()).toBe(false);
   view.answers.push("save");
   view.mockInput.pressEscape();
-  await view.settle();
+  // Saving files can continue after the renderer goes idle.
+  for (const _ of Array.from({ length: 100 })) {
+    if (view.closed()) break;
+    await Bun.sleep(10);
+  }
   expect(view.closed()).toBe(true);
-  expect(await Bun.file(view.path()).text()).toEndWith("New lineDraft");
+  expect(await Bun.file(view.path()).text()).toEndWith("New lineDraftq");
 });
 
 test("external changes retain the draft and reload asks before discarding", async () => {
@@ -295,4 +329,42 @@ test("compact terminal keeps footer, editor and save action visible after resizi
   await view.settle();
   expect(view.captureCharFrame()).toContain("Edit source");
   expect(view.captureCharFrame()).toContain("Esc back");
+});
+
+test.each([
+  false,
+  true,
+])("list, source and editor follow CLI scrolling (acceleration=%s)", async (acceleration) => {
+  const speed = acceleration ? 99 : 5;
+  const view = await fixture(120, 38, { speed, acceleration });
+  for (const index of Array.from({ length: 60 }, (_, index) => index)) {
+    await view.library.create(`item-${index}`, "project", "Body");
+  }
+  await Bun.write(
+    view.path(),
+    Array.from({ length: 100 }, (_, index) => `Line ${index}`).join("\n"),
+  );
+  await view.click("library-action-reload");
+  for (const id of ["library-list", "library-preview"]) {
+    const box = view.node(id);
+    if (!(box instanceof ScrollBoxRenderable)) throw new Error("Not a scrollbox");
+    box.scrollTo(0);
+    await view.settle();
+    await view.mockMouse.scroll(box.x + 2, box.y + 2, "down");
+    await view.settle();
+    if (!acceleration) expect(box.scrollTop).toBe(speed);
+    if (acceleration) {
+      expect(box.scrollTop).toBeGreaterThan(0);
+      expect(box.scrollTop).toBeLessThan(speed);
+    }
+  }
+  await view.click("library-action-edit");
+  const editor = view.editor();
+  await view.mockMouse.scroll(editor.x + 2, editor.y + 2, "down");
+  await view.settle();
+  if (!acceleration) expect(editor.scrollY).toBe(speed);
+  if (acceleration) {
+    expect(editor.scrollY).toBeGreaterThan(0);
+    expect(editor.scrollY).toBeLessThan(speed);
+  }
 });

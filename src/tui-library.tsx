@@ -1,7 +1,13 @@
 /** @jsxImportSource @opentui/solid */
 import type { usePlugin } from "@opencode/plugin/tui";
-import type { KeyEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
+import {
+  type KeyEvent,
+  MacOSScrollAccel,
+  type ScrollBoxRenderable,
+  type TextareaRenderable,
+} from "@opentui/core";
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { loadCliScroll } from "./config.js";
 import { getSnippetForm } from "./fields.js";
 import { serializeInvocation } from "./invocation.js";
 import {
@@ -32,6 +38,12 @@ export function SnippetLibrary(props: {
   close(): void;
 }) {
   const library = createLibrary(props.directory, props.globalDirectory);
+  const scroll = loadCliScroll();
+  // Match OpenCode: acceleration takes precedence over a fixed scroll speed.
+  const acceleration = () =>
+    scroll.acceleration ? new MacOSScrollAccel() : { tick: () => scroll.speed, reset() {} };
+  const editorScroll = acceleration();
+  const remainder = { x: 0, y: 0 };
   const [files, setFiles] = createSignal<LibraryFile[]>([]);
   const [registry, setRegistry] = createSignal<SnippetRegistry>(new Map());
   const [selected, setSelected] = createSignal(props.state.selected ?? "");
@@ -435,7 +447,16 @@ export function SnippetLibrary(props: {
       event.stopPropagation();
       return;
     }
-    if (name === "escape") void leave();
+    if (
+      name === "escape" ||
+      (name === "q" &&
+        !event.ctrl &&
+        !event.meta &&
+        !event.shift &&
+        focus() !== "search" &&
+        focus() !== "editor")
+    )
+      void leave();
     else if (event.ctrl && name === "s") void save();
     else if (event.ctrl && name === "n") void create();
     else if (event.ctrl && name === "f") void find();
@@ -471,24 +492,33 @@ export function SnippetLibrary(props: {
   });
   onCleanup(() => props.context.renderer.keyInput.removeListener("keypress", keys));
 
-  const Button = (button: { id: string; label: string }) => (
-    // biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI button, also reachable with Tab and Enter.
-    <box
-      id={`library-action-${button.id}`}
-      flexShrink={0}
-      onMouseUp={() => {
-        if (!busy() && !modal()) {
-          setFocus(button.id);
-          invoke(button.id);
+  const Button = (button: { id: string; label: string }) => {
+    const [hovered, setHovered] = createSignal(false);
+    const active = () => focus() === button.id || scope() === button.id;
+    return (
+      // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithMouseEvents: OpenTUI buttons share their highlight with Tab focus and activate with Enter.
+      <box
+        id={`library-action-${button.id}`}
+        flexShrink={0}
+        marginRight={1}
+        backgroundColor={
+          active() || hovered() ? theme().background.raised.high : theme().background.raised.base
         }
-      }}
-    >
-      <text
-        fg={focus() === button.id ? theme().text.action.primary.focused : theme().text.base}
-        bg={focus() === button.id ? theme().background.action.primary.focused : undefined}
-      >{` ${button.label} `}</text>
-    </box>
-  );
+        onMouseOver={() => setHovered(true)}
+        onMouseOut={() => setHovered(false)}
+        onMouseUp={() => {
+          if (!busy() && !modal()) {
+            setFocus(button.id);
+            invoke(button.id);
+          }
+        }}
+      >
+        <text
+          fg={active() || hovered() ? theme().text.action.primary.base : theme().text.base}
+        >{`[ ${button.label} ]`}</text>
+      </box>
+    );
+  };
   return (
     <box
       width="100%"
@@ -510,7 +540,15 @@ export function SnippetLibrary(props: {
         </text>
         <Button id="back" label="Esc Back" />
       </box>
-      <box flexDirection="row" flexWrap="wrap" gap={1} paddingX={1} paddingY={1} flexShrink={0}>
+      <box
+        flexDirection="row"
+        flexWrap="wrap"
+        alignItems="center"
+        gap={1}
+        paddingX={1}
+        paddingY={1}
+        flexShrink={0}
+      >
         <box
           flexDirection="row"
           width={width() < 90 ? "100%" : "45%"}
@@ -545,9 +583,11 @@ export function SnippetLibrary(props: {
       </box>
       <box flexDirection={width() < 80 ? "column" : "row"} flexGrow={1} minHeight={0}>
         <scrollbox
+          id="library-list"
+          scrollAcceleration={acceleration()}
           ref={list}
           width={width() < 80 ? "100%" : "32%"}
-          height={width() < 80 ? 7 : undefined}
+          height={width() < 80 ? (editing() ? 5 : 7) : undefined}
           flexShrink={0}
           border
           borderColor={focus() === "list" ? theme().text.base : theme().border.base}
@@ -578,19 +618,11 @@ export function SnippetLibrary(props: {
                 }}
               >
                 <text
-                  fg={
-                    selected() === file.filePath
-                      ? theme().text.action.primary.focused
-                      : theme().text.base
-                  }
+                  fg={theme().text.base}
                   wrapMode="none"
                 >{`${selected() === file.filePath ? "›" : " "} #${file.name}${dirty(file.filePath) ? " *" : ""}`}</text>
                 <text
-                  fg={
-                    selected() === file.filePath
-                      ? theme().text.action.primary.focused
-                      : theme().text.muted
-                  }
+                  fg={selected() === file.filePath ? theme().text.base : theme().text.muted}
                   wrapMode="none"
                 >{`${file.source === "project" ? "P" : "G"}${file.active ? "" : " ↓"}`}</text>
               </box>
@@ -625,7 +657,12 @@ export function SnippetLibrary(props: {
             <Show
               when={editing()}
               fallback={
-                <scrollbox flexGrow={1} minHeight={0}>
+                <scrollbox
+                  id="library-preview"
+                  scrollAcceleration={acceleration()}
+                  flexGrow={1}
+                  minHeight={0}
+                >
                   <text fg={theme().text.muted}>SOURCE</text>
                   <For each={(current()?.content ?? "").split("\n")}>
                     {(line) => (
@@ -653,35 +690,38 @@ export function SnippetLibrary(props: {
                       </box>
                     )}
                   </For>
-                  <text marginTop={1} fg={theme().text.muted}>
-                    INCLUDES (static references)
-                  </text>
-                  <For
-                    each={snippetReferences(current()?.content ?? "")}
-                    fallback={<text fg={theme().text.muted}>None</text>}
-                  >
-                    {(name) => (
-                      <Button
-                        id={`include:${name}`}
-                        label={`→ #${name}${registry().has(name.toLowerCase()) ? "" : " (unresolved)"}`}
-                      />
-                    )}
-                  </For>
-                  <text marginTop={1} fg={theme().text.muted}>
-                    USED BY
-                  </text>
-                  <For each={used()} fallback={<text fg={theme().text.muted}>None</text>}>
-                    {(file) => <Button id={`used:${file.filePath}`} label={`← #${file.name}`} />}
-                  </For>
-                  <text
-                    marginTop={1}
-                    fg={theme().text.muted}
-                  >{`Aliases: ${current()?.aliases.join(", ") || "none"}`}</text>
-                  <text fg={theme().text.muted}>{`Fields: ${
-                    details()
+                  <Show when={snippetReferences(current()?.content ?? "").length}>
+                    <text marginTop={1} fg={theme().text.muted}>
+                      INCLUDES (static references)
+                    </text>
+                    <For each={snippetReferences(current()?.content ?? "")}>
+                      {(name) => (
+                        <Button
+                          id={`include:${name}`}
+                          label={`→ #${name}${registry().has(name.toLowerCase()) ? "" : " (unresolved)"}`}
+                        />
+                      )}
+                    </For>
+                  </Show>
+                  <Show when={used().length}>
+                    <text marginTop={1} fg={theme().text.muted}>
+                      USED BY
+                    </text>
+                    <For each={used()}>
+                      {(file) => <Button id={`used:${file.filePath}`} label={`← #${file.name}`} />}
+                    </For>
+                  </Show>
+                  <Show when={current()?.aliases.length}>
+                    <text
+                      marginTop={1}
+                      fg={theme().text.muted}
+                    >{`Aliases: ${current()?.aliases.join(", ")}`}</text>
+                  </Show>
+                  <Show when={details().fields.length}>
+                    <text fg={theme().text.muted}>{`Fields: ${details()
                       .fields.map((field) => `${field.name} (${field.type})`)
-                      .join(", ") || "none"
-                  }`}</text>
+                      .join(", ")}`}</text>
+                  </Show>
                   <Show when={details().error}>
                     <text fg={theme().text.feedback.error.base}>{details().error}</text>
                   </Show>
@@ -703,6 +743,16 @@ export function SnippetLibrary(props: {
                   height="100%"
                   wrapMode="word"
                   onMouseDown={() => setFocus("editor")}
+                  onMouseScroll={(event) => {
+                    if (!event.scroll) return;
+                    const direction = event.scroll.direction;
+                    const axis = direction === "up" || direction === "down" ? "y" : "x";
+                    const sign = direction === "up" || direction === "left" ? -1 : 1;
+                    remainder[axis] += sign * event.scroll.delta * editorScroll.tick();
+                    const delta = Math.trunc(remainder[axis]);
+                    remainder[axis] -= delta;
+                    event.scroll.delta = Math.abs(delta);
+                  }}
                   onContentChange={() => update(editor?.plainText ?? raw())}
                   textColor={theme().text.base}
                   backgroundColor={theme().background.base}
@@ -748,7 +798,9 @@ export function SnippetLibrary(props: {
         flexShrink={0}
       >
         <text fg={theme().text.muted}>
-          ↑↓ browse · Enter edit · / search · Tab focus · Ctrl+S save · Esc back
+          {editing()
+            ? "Ctrl+S save · Ctrl+Z undo · Ctrl+F find · Esc back"
+            : "↑↓ browse · Enter edit · / search · Tab · Esc back · q quit"}
         </text>
         <Button id="help" label="Help" />
       </box>

@@ -1,10 +1,39 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { importCjs } from "./cjs-interop.js";
 import { getProjectPaths, PATHS } from "./constants.js";
 import { logger } from "./logger.js";
 
 const { parse: parseJsonc } = await importCjs<typeof import("jsonc-parser")>("jsonc-parser");
+
+// V2's plugin context does not expose CLI preferences. Read the same file and
+// environment overlay as the host when opening the library.
+export function loadCliScroll(
+  path = join(PATHS.CONFIG_DIR, "cli.json"),
+  content = process.env.OPENCODE_CLI_CONFIG_CONTENT,
+): { speed: number; acceleration: boolean } {
+  const read = (text: string) => {
+    const errors: import("jsonc-parser").ParseError[] = [];
+    const value = parseJsonc(text, errors, { allowTrailingComma: true });
+    if (errors.length || !value || typeof value !== "object") return {};
+    const scroll = value.scroll;
+    if (!scroll || typeof scroll !== "object") return {};
+    return {
+      ...(typeof scroll.speed === "number" && Number.isFinite(scroll.speed) && scroll.speed >= 0.001
+        ? { speed: scroll.speed }
+        : {}),
+      ...(typeof scroll.acceleration === "boolean" ? { acceleration: scroll.acceleration } : {}),
+    };
+  };
+  const file = (() => {
+    try {
+      return read(readFileSync(path, "utf8"));
+    } catch {
+      return {};
+    }
+  })();
+  return { speed: 3, acceleration: false, ...file, ...read(content ?? "{}") };
+}
 
 /**
  * Boolean setting that can be true/false or "enabled"/"disabled" for flexibility

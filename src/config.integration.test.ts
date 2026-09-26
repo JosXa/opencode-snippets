@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadConfig } from "./config.js";
+import { loadCliScroll, loadConfig } from "./config.js";
 import { logger } from "./logger.js";
 
 describe("Config Integration", () => {
@@ -25,6 +25,23 @@ describe("Config Integration", () => {
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
     logger.debugEnabled = false;
+  });
+
+  it("reads CLI scroll preferences and merges the environment overlay per setting", async () => {
+    const path = join(tempDir, "cli.json");
+    expect(loadCliScroll(path, "{}")).toEqual({ speed: 3, acceleration: false });
+    await Bun.write(path, '{ // CLI preferences\n"scroll": {"speed": 5, "acceleration": true,},}');
+    expect(loadCliScroll(path, "{}")).toEqual({ speed: 5, acceleration: true });
+    expect(loadCliScroll(path, '{"scroll":{"acceleration":false}}')).toEqual({
+      speed: 5,
+      acceleration: false,
+    });
+    expect(loadCliScroll(path, '{"scroll":{"speed":0.5}}')).toEqual({
+      speed: 0.5,
+      acceleration: true,
+    });
+    await Bun.write(path, '{"scroll":{"speed":-1,"acceleration":"yes"}}');
+    expect(loadCliScroll(path, "{}")).toEqual({ speed: 3, acceleration: false });
   });
 
   describe("logging.debug config", () => {
