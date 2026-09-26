@@ -93,7 +93,7 @@ export function scoreSkill(skill: SearchableSkill, query: string): number {
   return Number.POSITIVE_INFINITY;
 }
 
-export function filterSnippets(snippets: SnippetInfo[], query: string): SnippetInfo[] {
+export function filterSnippets<T extends SnippetInfo>(snippets: T[], query: string): T[] {
   return [...snippets]
     .map((snippet) => ({
       snippet,

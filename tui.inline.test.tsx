@@ -90,8 +90,9 @@ async function setup(background = RGBA.fromHex("#101820"), files: Record<string,
     theme: theme.dialog,
     keymap: { layer: () => {}, mode: { current: () => hostMode } },
     ui: {
+      router: { register: () => () => {}, current: () => ({ type: "home" }), navigate: () => {} },
       slot: (value: SlotClaim) => {
-        claim = value;
+        if ("append" in value && value.append === "prompt.footer") claim = value;
         return () => {};
       },
       dialog: Object.fromEntries(

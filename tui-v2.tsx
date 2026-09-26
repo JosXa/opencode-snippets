@@ -19,6 +19,7 @@ import {
   formAwareTrigger,
   replaceReferenceRange,
 } from "./src/tui-form-state.js";
+import { type LibraryState, SnippetLibrary } from "./src/tui-library.js";
 import {
   buildTuiCompletionOptions,
   type findHashtagTriggerAtCursor,
@@ -93,6 +94,49 @@ const plugin = Plugin.define({
       await reload();
       if (output) await context.ui.dialog.alert({ title: "Snippets", message: output });
     };
+
+    const library: LibraryState = { drafts: new Map() };
+    let previous: ReturnType<typeof context.ui.router.current> = { type: "home" };
+    const openLibrary = () => {
+      const route = context.ui.router.current();
+      if (route.type === "plugin" && route.name === "snippets-library") return;
+      // router.current() can be a live store; preserve the destination before navigating.
+      previous = { ...route };
+      context.ui.router.navigate({ type: "plugin", name: "snippets-library" });
+    };
+    const route = context.ui.router.register({
+      name: "snippets-library",
+      render: () => (
+        <SnippetLibrary
+          context={context}
+          directory={directory}
+          globalDirectory={globalDirectory}
+          state={library}
+          reload={reload}
+          close={() => context.ui.router.navigate(previous)}
+        />
+      ),
+    });
+    // The app slot keeps the command available on home, sessions and plugin pages.
+    const commands = context.ui.slot({
+      append: "app",
+      render: () => {
+        context.keymap.layer(() => ({
+          mode: "global",
+          commands: [
+            {
+              id: "snippets.library",
+              title: "Open snippet library",
+              description: "Browse and edit snippets inside OpenCode",
+              palette: true,
+              slash: { name: "snippets:library" },
+              run: openLibrary,
+            },
+          ],
+        }));
+        return null;
+      },
+    });
 
     const dispose = context.ui.slot({
       append: "prompt.footer",
@@ -568,7 +612,11 @@ const plugin = Plugin.define({
       },
     });
 
-    return dispose;
+    return () => {
+      dispose();
+      commands();
+      route();
+    };
   },
 });
 

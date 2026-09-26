@@ -80,6 +80,11 @@ describe("V2 TUI plugin", () => {
         },
         keymap: { mode: { current: () => "base" }, layer() {} },
         ui: {
+          router: {
+            register: () => () => {},
+            current: () => ({ type: "home" }),
+            navigate: () => {},
+          },
           toast: { show() {} },
           slot: ({ render }: { render: typeof footer }) => {
             footer = render;
@@ -132,6 +137,7 @@ describe("V2 TUI plugin", () => {
       options: { globalDirectory, homeDirectory: root },
       client: { skill: { list: async () => ({ data: [] }) } },
       ui: {
+        router: { register: () => () => {}, current: () => ({ type: "home" }), navigate: () => {} },
         slot: ({ render }: { render: typeof footer }) => {
           footer = render;
           return () => {};
@@ -241,6 +247,11 @@ describe("V2 TUI plugin", () => {
           },
         },
         ui: {
+          router: {
+            register: () => () => {},
+            current: () => ({ type: "home" }),
+            navigate: () => {},
+          },
           toast: { show: ({ message }: { message: string }) => toasts.push(message) },
           slot: ({ render }: { render: typeof footer }) => {
             footer = render;

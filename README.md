@@ -466,11 +466,43 @@ Demo files live at `.opencode/skill/demo-voice/SKILL.md` and `.opencode/snippet/
 
 ## Commands
 
+- `/snippets:library` opens the V2 snippet library
 - `/snippets add <name> [content]` creates a global snippet
 - `/snippets add --project <name>` creates a project snippet
 - `/snippets list` shows available snippets
 - `/snippets delete <name>` removes a snippet
 - `/snippets:reload` reloads snippet files from disk without restarting OpenCode
+
+### Snippet library (V2)
+
+Open **Open snippet library** from the command palette, or run `/snippets:library`.
+Search names, aliases, and descriptions, filter by scope, and click a row to inspect
+its source. Click a highlighted reference or an **Includes** / **Used by** entry to
+navigate between snippets. The list includes overridden files. `P` means project,
+`G` means global, and `↓` marks an overridden definition.
+
+**Edit source** opens a native multiline editor for the complete Markdown file,
+including YAML aliases, descriptions, and typed fields. Enter inserts a newline;
+Ctrl+Z/Ctrl+Y undo and redo, Ctrl+F finds text, and Ctrl+S saves. Drafts stay intact
+when selecting another snippet. Escape returns to the previous page and asks what
+to do with unsaved changes. An external edit blocks saving until you reload the
+file, keeping the external version and your draft available for comparison.
+
+Use **New**, **Duplicate**, **Rename**, **Move**, and **Delete** to manage files
+without another editor. Copies start with no aliases. Renaming keeps the old name
+as an alias so existing references still work. Move switches between project and
+global scope and refuses to overwrite an existing destination. **Reload** refreshes
+the library and asks before discarding the selected draft.
+
+**Test form** opens the selected draft's fields and copies a filled invocation when
+confirmed. **Copy #** copies its trigger. Clipboard support depends on the terminal.
+Inspection and form testing do not execute shell commands or load skills. Includes
+shows static hashtag references, including unresolved names. It does not predict
+which template branches will run.
+
+Use arrows to browse, Enter to edit, `/` to search, and Tab/Shift+Tab to reach
+actions and dependency links. **Help** explains the list markers. The page uses the
+active theme and stacks the panes in narrow terminals.
 
 ## Example Snippets
 
