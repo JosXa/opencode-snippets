@@ -10,7 +10,8 @@ import type {
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { type FieldValues, getSnippetForm } from "./src/fields.js";
 import { serializeInvocation } from "./src/invocation.js";
-import { createSnippet, listSnippets, loadSnippets } from "./src/loader.js";
+import { listSnippets, loadSnippets } from "./src/loader.js";
+import { ensureSnippetDraft, openExternalEditor, resolveExternalEditor } from "./src/tui-editor.js";
 import { SnippetForm } from "./src/tui-form.js";
 import {
   exactSnippetTrigger,
@@ -65,6 +66,7 @@ const plugin = Plugin.define({
       }));
     let snippets = await loadSnippets(directory, globalDirectory);
     let skills = await loadSkills();
+    const drafts = new Set<string>();
     const forms = new Map<string, boolean>();
     const hasForm = (name: string) => {
       const cached = forms.get(name);
@@ -307,8 +309,20 @@ const plugin = Plugin.define({
           if (!isHostPrompt(focused) || footer.mode !== "normal") return;
           const match = promptTrigger(focused, snippets);
           if (!match) return;
-          const tag = choice.kind === "skill" ? `#skill(${choice.name})` : `#${choice.name}`;
-          if (choice.kind === "snippet" && openForm(focused, choice.name, match, {}, " ")) return;
+          const snippet =
+            choice.kind === "snippet"
+              ? listSnippets(snippets).find((item) => item.name === choice.name)
+              : undefined;
+          // Preserve a fully typed alias. Partial matches use the canonical name
+          // because ASCII compaction could otherwise turn #rev into #中rev.
+          // A broken draft from this session stays addressable; reopen it for correction.
+          if (snippet?.metadataError && drafts.has(snippet.filePath)) {
+            void createUnmatched();
+            return;
+          }
+          const name = snippet?.aliases.find((alias) => alias === match.query) ?? choice.name;
+          const tag = choice.kind === "skill" ? `#skill(${choice.name})` : `#${name}`;
+          if (choice.kind === "snippet" && openForm(focused, name, match, {}, " ")) return;
           // Replacing the whole buffer clears host extmarks and their payload IDs.
           // Only edit the hashtag; native edits relocate unrelated marks for us.
           replaceReferenceRange(focused, match, `${tag} `);
@@ -318,26 +332,71 @@ const plugin = Plugin.define({
         };
 
         const createUnmatched = async () => {
+          if (dialogOpen()) return;
           const focused = activePrompt();
           if (!focused) return;
           const match = promptTrigger(focused, snippets);
           const name = normalizeUnmatchedTrigger(match?.query ?? "");
           if (!name) return;
+          const editor = resolveExternalEditor();
+          if (!editor) {
+            context.ui.toast.show({
+              variant: "warning",
+              message: "Set VISUAL or EDITOR to create snippets from the TUI.",
+            });
+            return;
+          }
+          const text = focused.plainText;
+          const cursor = focused.cursorOffset;
           setDialogOpen(true);
           closeMenu();
           try {
             const confirmed = await context.ui.dialog.confirm({
               title: `Create #${name}?`,
-              message: "No matching snippet or skill exists. Create an empty project snippet?",
+              message: `Create a global snippet draft and open it in $${editor.env} (${editor.command})?`,
               label: { confirm: "Create", cancel: "Cancel" },
             });
             if (!confirmed) return;
-            await createSnippet(name, "", {}, directory);
+            const path = await ensureSnippetDraft(name, globalDirectory, drafts);
+            await openExternalEditor(context.renderer, path, editor);
             await reload();
-            insert({ kind: "snippet", name }, focused);
+            // Reload skips invalid files and project snippets can shadow a name.
+            // Retain draft ownership until this exact file is ready for expansion.
+            if (
+              !listSnippets(snippets).some(
+                (snippet) => snippet.filePath === path && !snippet.metadataError,
+              )
+            ) {
+              throw new Error(
+                `Saved draft ${path} could not be loaded. Accept the hashtag again to reopen and correct the existing draft.`,
+              );
+            }
+            drafts.delete(path);
+            // A dialog/editor handoff must not replace a different prompt that
+            // became active while the external process was running.
+            if (
+              !focused.isDestroyed &&
+              context.renderer.currentFocusedEditor === focused &&
+              context.keymap.mode.current() === "base" &&
+              focused.plainText === text &&
+              focused.cursorOffset === cursor
+            ) {
+              insert({ kind: "snippet", name }, focused);
+            }
+          } catch (error) {
+            context.ui.toast.show({
+              variant: "error",
+              message: `Failed to create snippet: ${error instanceof Error ? error.message : String(error)}`,
+            });
           } finally {
             setDialogOpen(false);
-            if (!focused.isDestroyed) focused.focus();
+            if (
+              !focused.isDestroyed &&
+              context.renderer.currentFocusedEditor === focused &&
+              footer.mode === "normal" &&
+              context.keymap.mode.current() === "base"
+            )
+              focused.focus();
             queueMicrotask(sync);
           }
         };

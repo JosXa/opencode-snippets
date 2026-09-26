@@ -164,6 +164,22 @@ async function setup(background = RGBA.fromHex("#101820"), files: Record<string,
   };
 }
 
+test("an exact alias preselects its snippet and Tab accepts it before substring matches", async () => {
+  const ui = await setup(undefined, {
+    "is-acceptable-answer": "is an acceptable answer",
+    "open-in-browser": "---\naliases: [browse, browser, b]\n---\nopen in my default browser",
+  });
+  await ui.mockInput.typeText("my #b");
+  await ui.settle();
+  const frame = ui.captureCharFrame();
+  expect(frame.indexOf("#open-in-browser")).toBeGreaterThanOrEqual(0);
+  expect(frame.indexOf("#open-in-browser")).toBeLessThan(frame.indexOf("#is-acceptable-answer"));
+  ui.mockInput.pressTab();
+  await ui.settle();
+  expect(ui.prompt.plainText).toBe("my #b ");
+  expect(ui.submissions()).toBe(0);
+});
+
 test("INLINE marks direct and nested forms without marking ordinary snippets", async () => {
   const ui = await setup(undefined, {
     "form-direct": "---\nfields:\n  name: {}\n---\n{{name}}",
@@ -380,8 +396,9 @@ for (const [prefix, tag] of [
     expect(ui.captureCharFrame()).toContain("#review");
     ui.mockInput.pressEnter();
     await ui.settle();
-    expect(ui.prompt.plainText).toBe(`${prefix}#review  tail`);
-    expect(ui.prompt.getTextRange(0, ui.prompt.cursorOffset)).toBe(`${prefix}#review `);
+    const accepted = tag === "#rev" ? "#review" : tag;
+    expect(ui.prompt.plainText).toBe(`${prefix}${accepted}  tail`);
+    expect(ui.prompt.getTextRange(0, ui.prompt.cursorOffset)).toBe(`${prefix}${accepted} `);
     expect(ui.renderer.currentFocusedEditor).toBe(ui.prompt);
     expect(ui.submissions()).toBe(0);
     expect(ui.dialogs).toEqual([]);
