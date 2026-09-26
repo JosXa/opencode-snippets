@@ -1,6 +1,9 @@
 import type { SkillInfo } from "./skill-loader.js";
 import type { SnippetInfo } from "./types.js";
 
+export type SearchableSkill = Pick<SkillInfo, "name" | "description"> &
+  Partial<Pick<SkillInfo, "source">>;
+
 export interface HighlightPart {
   text: string;
   match: boolean;
@@ -67,15 +70,15 @@ export function scoreSnippet(snippet: SnippetInfo, query: string): number {
   return Number.POSITIVE_INFINITY;
 }
 
-function sourceRank(item: { source: "global" | "project" }): number {
+function sourceRank(item: { source?: "global" | "project" }): number {
   return item.source === "project" ? 0 : 1;
 }
 
-function skillTag(skill: Pick<SkillInfo, "name">): string {
+function skillTag(skill: SearchableSkill): string {
   return `skill(${skill.name})`;
 }
 
-export function scoreSkill(skill: Pick<SkillInfo, "name" | "description">, query: string): number {
+export function scoreSkill(skill: SearchableSkill, query: string): number {
   if (!query) return 0;
 
   const description = (skill.description || "").toLowerCase();
@@ -108,7 +111,7 @@ export function filterSnippets(snippets: SnippetInfo[], query: string): SnippetI
     .map((item) => item.snippet);
 }
 
-export function filterSkills(skills: SkillInfo[], query: string): SkillInfo[] {
+export function filterSkills<T extends SearchableSkill>(skills: T[], query: string): T[] {
   return [...skills]
     .map((skill) => ({
       skill,

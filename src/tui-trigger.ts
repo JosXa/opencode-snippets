@@ -1,5 +1,4 @@
-import type { SkillInfo } from "./skill-loader.js";
-import { scoreSkill, scoreSnippet } from "./tui-search.js";
+import { filterSkills, filterSnippets, type SearchableSkill } from "./tui-search.js";
 import type { SnippetInfo } from "./types.js";
 
 export type TuiCompletion = { kind: "snippet" | "skill"; name: string };
@@ -66,37 +65,23 @@ export function replaceHashtagAtCursor(
 
 export function buildTuiCompletionOptions(
   snippets: Iterable<SnippetInfo>,
-  skills: Iterable<Pick<SkillInfo, "name" | "description">>,
+  skills: Iterable<SearchableSkill>,
   query: string,
 ): TuiCompletionOption[] {
   const normalized = query.toLowerCase();
   const skillQuery = normalized.match(/^skill\(([^)]*)$/)?.[1];
-  // Filesystem enumeration order differs across hosts. Keep keyboard selection
-  // stable when the same snippets or skills are loaded on another machine.
-  const snippetOptions = [...snippets]
-    .filter(() => skillQuery === undefined)
-    .map((snippet) => ({ snippet, score: scoreSnippet(snippet, normalized) }))
-    .filter((item) => Number.isFinite(item.score))
-    .sort(
-      (left, right) =>
-        left.score - right.score || left.snippet.name.localeCompare(right.snippet.name),
-    )
-    .map(({ snippet }) => ({
-      title: `#${snippet.name}`,
-      description: snippet.description || snippet.content.replace(/\s+/g, " ").slice(0, 100),
-      value: { kind: "snippet" as const, name: snippet.name },
-    }));
-  const skillOptions = [...skills]
-    .map((skill) => ({ skill, score: scoreSkill(skill, skillQuery ?? normalized) }))
-    .filter((item) => Number.isFinite(item.score))
-    .sort(
-      (left, right) => left.score - right.score || left.skill.name.localeCompare(right.skill.name),
-    )
-    .map(({ skill }) => ({
-      title: `#skill(${skill.name})`,
-      description: skill.description || "Load skill instructions",
-      value: { kind: "skill" as const, name: skill.name },
-    }));
+  const matches = skillQuery === undefined ? [...snippets] : [];
+  // Share the V1 matcher so both hosts rank by score, then project source, then name.
+  const snippetOptions = filterSnippets(matches, normalized).map((snippet) => ({
+    title: `#${snippet.name}`,
+    description: snippet.description || snippet.content.replace(/\s+/g, " ").slice(0, 100),
+    value: { kind: "snippet" as const, name: snippet.name },
+  }));
+  const skillOptions = filterSkills([...skills], skillQuery ?? normalized).map((skill) => ({
+    title: `#skill(${skill.name})`,
+    description: skill.description || "Load skill instructions",
+    value: { kind: "skill" as const, name: skill.name },
+  }));
   return [...snippetOptions, ...skillOptions];
 }
 

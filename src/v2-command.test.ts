@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readlink, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, readlink, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SnippetRegistry } from "./types.js";
@@ -153,5 +153,95 @@ describe("V2 snippet commands", () => {
     expect(
       await executeV2SnippetCommand("explain /snippets", new Map(), undefined, globalDir),
     ).toBeUndefined();
+  });
+
+  test.each([
+    "--alias --project",
+    "--aliases --project",
+    "--desc --project",
+    "--description --project",
+    "--project --alias",
+    "--project --aliases",
+    "--project --desc",
+    "--project --description",
+  ])("ignores missing option values and preserves project routing: %s", async (options) => {
+    home = await mkdtemp(join(tmpdir(), "snippets-v2-command-options-"));
+    const globalDir = join(home, "global", "snippet");
+    const directory = join(home, "project");
+    const registry: SnippetRegistry = new Map();
+    await mkdir(directory);
+
+    expect(
+      await executeV2SnippetCommand(
+        `/snippets add audit "body" ${options}`,
+        registry,
+        directory,
+        globalDir,
+      ),
+    ).toContain("Added project snippet #audit");
+    expect(registry.get("audit")).toMatchObject({
+      aliases: [],
+      description: undefined,
+      source: "project",
+    });
+    expect(await Bun.file(join(directory, ".opencode", "snippet", "audit.md")).text()).toBe("body");
+    expect(await Bun.file(join(globalDir, "audit.md")).exists()).toBe(false);
+  });
+
+  test.each([
+    '--alias --aliases="a, b" --desc --description="final description"',
+    '--aliases --alias "a, b" --description --desc "final description"',
+    '--alias=old --aliases "a, b" --desc=old --description "final description"',
+    '--aliases old --alias="a, b" --description old --desc="final description"',
+    '--alias="a, b" --aliases --desc="final description" --description',
+    '--aliases "a, b" --alias --description "final description" --desc',
+  ])("uses the last valid value with mixed option syntax: %s", async (options) => {
+    home = await mkdtemp(join(tmpdir(), "snippets-v2-command-repeated-"));
+    const globalDir = join(home, "global", "snippet");
+    const directory = join(home, "project");
+    const registry: SnippetRegistry = new Map();
+    await mkdir(directory);
+
+    expect(
+      await executeV2SnippetCommand(
+        `/snippets add audit "body" ${options}`,
+        registry,
+        directory,
+        globalDir,
+      ),
+    ).toContain("Added global snippet #audit");
+    expect(registry.get("audit")).toMatchObject({
+      aliases: ["a", "b"],
+      description: "final description",
+      source: "global",
+      filePath: join(globalDir, "audit.md"),
+    });
+    expect(registry.get("a")).toBe(registry.get("audit"));
+    expect(registry.get("b")).toBe(registry.get("audit"));
+    expect(await Bun.file(join(directory, ".opencode", "snippet", "audit.md")).exists()).toBe(
+      false,
+    );
+  });
+
+  test("preserves valid metadata when routing to the project directory", async () => {
+    home = await mkdtemp(join(tmpdir(), "snippets-v2-command-project-"));
+    const globalDir = join(home, "global", "snippet");
+    const directory = join(home, "project");
+    const registry: SnippetRegistry = new Map();
+    await mkdir(directory);
+
+    await executeV2SnippetCommand(
+      '/snippets add audit "body" --aliases=a,b --description "project description" --project',
+      registry,
+      directory,
+      globalDir,
+    );
+    expect(registry.get("audit")).toMatchObject({
+      aliases: ["a", "b"],
+      description: "project description",
+      source: "project",
+      filePath: join(directory, ".opencode", "snippet", "audit.md"),
+    });
+    expect(await Bun.file(join(globalDir, "audit.md")).exists()).toBe(false);
   });
 });

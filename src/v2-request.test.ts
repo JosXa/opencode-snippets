@@ -1214,6 +1214,7 @@ describe("V2 request expansion", () => {
       await contextHook?.(request);
 
       expect(source).toMatchObject({
+        id: "snippets",
         location: join(skillDirectory, "SKILL.md"),
         name: "snippets",
       });

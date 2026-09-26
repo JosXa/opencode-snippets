@@ -342,7 +342,8 @@ export async function setupV2Snippets(
       for (const skill of bundledSkills.values()) {
         // OpenCode 2.0.5 uses path; earlier V2 hosts require location.
         const entry = {
-          id: skill.filePath as never,
+          // The ID appears in #skill(...) completions and model discovery.
+          id: skill.name as never,
           name: skill.name as never,
           description: skill.description,
           location: skill.filePath as never,

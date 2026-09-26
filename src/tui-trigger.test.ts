@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { filterSkills, filterSnippets } from "./tui-search.js";
 import {
   buildTuiCompletionOptions,
   findHashtagTriggerAtCursor,
@@ -116,6 +117,106 @@ describe("cursor-position hashtag completion", () => {
 });
 
 describe("V2 autocomplete choices", () => {
+  const snippets = [
+    { name: "open-in-browser", aliases: [] },
+    { name: "launch", aliases: [], description: "Open default browser" },
+    { name: "visit", aliases: ["web-browser"] },
+    { name: "unrelated", aliases: [], content: "browser appears only in the body" },
+  ].map((item) => ({
+    content: "instructions",
+    source: "global" as const,
+    filePath: `/tmp/${item.name}.md`,
+    ...item,
+  }));
+
+  test.each([
+    ["openinbrowser", ["open-in-browser"]],
+    ["opbr", ["open-in-browser"]],
+    ["webbrowser", ["visit"]],
+    ["wbbr", ["visit"]],
+    ["browser", ["open-in-browser", "visit", "launch"]],
+    ["OPEN DEFAULT", ["launch"]],
+    ["zzzz", []],
+  ])("preserves V1 snippet search results for %s", (query, names) => {
+    expect(filterSnippets(snippets, query).map((item) => item.name)).toEqual(names);
+    expect(
+      buildTuiCompletionOptions(snippets.values(), [], query).map((option) => option.value.name),
+    ).toEqual(names);
+  });
+
+  const skills = [
+    { name: "testing-helper" },
+    { name: "opencode-testing" },
+    { name: "testing" },
+    { name: "verify", description: "Testing workflows" },
+  ].map((item) => ({
+    content: "instructions",
+    source: "global" as const,
+    filePath: `/tmp/${item.name}/SKILL.md`,
+    ...item,
+  }));
+
+  test.each([
+    ["opencodetesting", ["opencode-testing"]],
+    ["opctst", ["opencode-testing"]],
+    ["testing", ["testing", "testing-helper", "opencode-testing", "verify"]],
+    ["workflows", ["verify"]],
+    ["", ["opencode-testing", "testing", "testing-helper", "verify"]],
+    ["zzzz", []],
+  ])("preserves V1 skill search and ranking for %s", (query, names) => {
+    expect(filterSkills(skills, query).map((item) => item.name)).toEqual(names);
+    // V2 supplies native skill IDs as names, without content or source metadata.
+    const native = skills.map((skill) => ({ name: skill.name, description: skill.description }));
+    for (const prefix of ["", "skill("]) {
+      const options = buildTuiCompletionOptions([], native.values(), `${prefix}${query}`);
+      expect(options.map((option) => option.value)).toEqual(
+        names.map((name) => ({ kind: "skill", name })),
+      );
+      expect(options.map((option) => option.title)).toEqual(names.map((name) => `#skill(${name})`));
+    }
+  });
+
+  test("preserves project precedence and alphabetical ties in completion options", () => {
+    const entries = [
+      { name: "testing-z-global", source: "global" as const },
+      { name: "testing-a-global", source: "global" as const },
+      { name: "testing-project", source: "project" as const },
+    ].map((item) => ({ ...item, aliases: [], content: "", filePath: `/tmp/${item.name}.md` }));
+    const names = ["testing-project", "testing-a-global", "testing-z-global"];
+    const options = buildTuiCompletionOptions(entries, entries, "testing");
+    expect(options.map((option) => option.value)).toEqual([
+      ...names.map((name) => ({ kind: "snippet", name })),
+      ...names.map((name) => ({ kind: "skill", name })),
+    ]);
+  });
+
+  test("keeps snippets out of skill-only searches even when their descriptions match", () => {
+    expect(buildTuiCompletionOptions(snippets, skills, "skill(browser")).toEqual([]);
+  });
+
+  test("ranks an exact browser alias before prefix and substring matches", () => {
+    const snippets = [
+      { name: "is-acceptable-answer", aliases: [] },
+      { name: "beep", aliases: [] },
+      { name: "open-in-browser", aliases: ["browse", "browser", "b"] },
+    ].map((snippet) => ({
+      ...snippet,
+      content: snippet.name,
+      source: "global" as const,
+      filePath: `/tmp/${snippet.name}.md`,
+    }));
+
+    for (const query of ["b", "B", "browser", "open-in-browser"]) {
+      const options = buildTuiCompletionOptions(snippets, [], query);
+      expect(options[0].value).toEqual({ kind: "snippet", name: "open-in-browser" });
+    }
+    expect(buildTuiCompletionOptions(snippets, [], "b").map((option) => option.title)).toEqual([
+      "#open-in-browser",
+      "#beep",
+      "#is-acceptable-answer",
+    ]);
+  });
+
   test("matches showme to the show-me skill in autocomplete", () => {
     const options = buildTuiCompletionOptions(
       [],

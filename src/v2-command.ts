@@ -1,4 +1,5 @@
 import { parseCommandArgs } from "./arg-parser.js";
+import { parseAddOptions } from "./commands.js";
 import type { SnippetOverlay } from "./loader.js";
 import { createSnippet, deleteSnippet, listSnippets, reloadSnippets } from "./loader.js";
 import type { SnippetRegistry } from "./types.js";
@@ -46,17 +47,13 @@ export async function executeV2SnippetCommand(
     if (!name) return HELP;
     let content = "";
     if (args[0] && !/^--[A-Za-z]/.test(args[0])) content = args.shift() ?? "";
-    const project = args.includes("--project");
-    const aliases =
-      option(args, "--alias", "--aliases")
-        ?.split(",")
-        .map((x) => x.trim())
-        .filter(Boolean) ?? [];
-    const description = option(args, "--desc", "--description");
+    // Share V1 option semantics: ignore missing values and keep the last valid occurrence.
+    const options = parseAddOptions(args);
+    const project = options.isProject;
     const path = await createSnippet(
       name,
       content,
-      { aliases, description },
+      { aliases: options.aliases, description: options.description },
       project ? directory : undefined,
       globalDir,
       overlay,
@@ -72,14 +69,4 @@ export async function executeV2SnippetCommand(
     return path ? `Deleted snippet #${name}.\nRemoved: ${path}` : `Snippet not found: #${name}`;
   }
   return HELP;
-}
-
-function option(args: string[], ...names: string[]): string | undefined {
-  for (let index = 0; index < args.length; index++) {
-    const item = args[index];
-    for (const name of names) {
-      if (item === name) return args[index + 1];
-      if (item.startsWith(`${name}=`)) return item.slice(name.length + 1);
-    }
-  }
 }
