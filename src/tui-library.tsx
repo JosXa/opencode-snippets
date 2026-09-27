@@ -1038,7 +1038,12 @@ export function SnippetLibrary(props: {
               >
                 <textarea
                   id="library-editor"
-                  ref={editor}
+                  ref={(value) => {
+                    editor = value;
+                    onCleanup(() => {
+                      if (editor === value) editor = undefined;
+                    });
+                  }}
                   initialValue={raw()}
                   focused={focus() === "editor"}
                   flexGrow={1}
