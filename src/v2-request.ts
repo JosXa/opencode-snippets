@@ -16,7 +16,6 @@ import { loadFromDirectory, type SkillRegistry } from "./skill-loader.js";
 import { expandSkillLoads } from "./skill-loading.js";
 import { expandSkillTags } from "./skill-renderer.js";
 import type { SnippetRegistry } from "./types.js";
-import { executeV2SnippetCommand, isV2SnippetCommand } from "./v2-command.js";
 import { nativeSkillRegistry } from "./v2-skills.js";
 import { type Processed as DurableProcessed, DurableStore, type TextPatch } from "./v2-state.js";
 
@@ -122,7 +121,7 @@ export async function setupV2Snippets(
     const directory = await directoryFor(sessionID);
     const config = loadConfig(directory, globalConfigFile);
     logger.debugEnabled ||= config.logging.debug;
-    // TUI commands and draft edits happen in another process. Read current files
+    // Library edits happen in another process. Read current files
     // for new work; durable results retain the original expansion on replay.
     const snippets = await loadSnippets(directory, options.globalDirectory);
     const skills =
@@ -160,34 +159,10 @@ export async function setupV2Snippets(
     const durableResult = await store.process(sessionID, key, {
       prepare: async () => {
         const { config, snippets, skills } = await runtimeFor(sessionID);
-        const executionSnippets = new Map(snippets);
-        const overlay = new Map<string, string | null>();
         const injections: Processed["injections"] = [];
         const hidden: string[] = [];
-        const parts: Array<{ command: string } | { text: string; literals: LiteralStore }> = [];
+        const parts: Array<{ text: string; literals: LiteralStore }> = [];
         for (const original of originalText) {
-          if (isV2SnippetCommand(original)) {
-            // Use the same command and loader logic over virtual files, so later
-            // parts see creations, aliases and deletion fallbacks before effects.
-            await executeV2SnippetCommand(
-              original,
-              snippets,
-              directory,
-              options.globalDirectory,
-              overlay,
-            );
-            if (
-              !skills.size &&
-              [...snippets.values()].some((snippet) => /\{\{[~#]?\s*skill\b/.test(snippet.content))
-            ) {
-              for (const [name, skill] of nativeSkillRegistry(
-                (await context.skill.list({ location: { directory } })).data,
-              ))
-                skills.set(name, skill);
-            }
-            parts.push({ command: original });
-            continue;
-          }
           const literals = new LiteralStore();
           let text = assembleMessage(
             expandHashtags(
@@ -225,22 +200,12 @@ export async function setupV2Snippets(
           }
           parts.push({ text, literals });
         }
-        return { parts, snippets: executionSnippets, hidden, injections };
+        return { parts, hidden, injections };
       },
-      execute: async ({ parts, snippets, hidden, injections }) => {
+      execute: async ({ parts, hidden, injections }) => {
         const transformedText: string[] = [];
-        // Prepare every text part before commands or shell from any part can run.
+        // Validate every text part before shell substitutions from any part can run.
         for (const part of parts) {
-          if ("command" in part) {
-            const command = await executeV2SnippetCommand(
-              part.command,
-              snippets,
-              directory,
-              options.globalDirectory,
-            );
-            transformedText.push(`[opencode-snippets command completed]\n${command}`);
-            continue;
-          }
           transformedText.push(
             part.literals.restore(await executeShellCommands(part.text, { directory })),
           );

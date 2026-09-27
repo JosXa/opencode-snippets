@@ -99,6 +99,9 @@ export function SnippetForm(props: {
       <text flexShrink={0} fg={palette().text.base}>
         <b>Fields for #{props.name}</b>
       </text>
+      <text flexShrink={0} fg={palette().text.muted}>
+        Enter confirms · Escape cancels · Tab / Shift+Tab move
+      </text>
       <scrollbox
         ref={scroll}
         flexShrink={1}

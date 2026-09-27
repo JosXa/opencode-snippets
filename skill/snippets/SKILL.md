@@ -38,20 +38,19 @@ Content here
 ## Authoring rules
 
 - Read [Creating snippets](./references/creating-snippets.md) before creating or restructuring a snippet.
-- When users ask for inputs, choices, defaults, or conditional wording, read [Fields and forms](./references/fields-and-forms.md). Translate their ordinary language into typed fields; add only requested constraints.
-- Define fields in a YAML frontmatter `fields` mapping; use ordinary Handlebars variables and conditions in the body. Keep familiar names as nested preset snippets when consolidating variants.
+- When users ask for inputs, choices, defaults, or conditional wording, read [Fields and forms](./references/fields-and-forms.md). Translate their ordinary language into typed fields and add only requested constraints.
+- Define fields in a YAML frontmatter `fields` mapping. Use ordinary Handlebars variables and conditions in the body. Keep familiar names as nested preset snippets when consolidating variants.
 - Use `!>` rather than `` !`cmd` `` when the command itself helps the model interpret its output.
 - Use `<inject>` only for context that must persist for the whole turn.
 - Treat `#skill(...)` as hidden context injection, not inline expansion.
 - Interpret `#_name` as an escaped reference to `#name`; do not expand it.
 
-## Commands
+## Library
 
-- `/snippets add <name> [content]`
-- `/snippets add --project <name>`
-- `/snippets list`
-- `/snippets delete <name>`
-- `/snippets:reload`
+`/snippets` opens the library for browsing, creating, editing, deleting, and
+reloading snippets. Edit aliases, descriptions, and fields in the source editor.
+Ctrl+G or **Edit snippet fields** in the command palette edits an invocation under
+the composer cursor. Agents can manage the Markdown files directly.
 
 ## Sharing snippets
 

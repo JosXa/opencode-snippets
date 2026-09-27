@@ -30,6 +30,23 @@ test("editor selection prefers nonempty VISUAL and falls back to EDITOR", () => 
     command: "vi",
   });
   expect(resolveExternalEditor({})).toBeUndefined();
+  expect(
+    resolveExternalEditor({ VISUAL: "split-editor", OPENCODE_SNIPPETS_EDITOR_TMUX: "1" }),
+  ).toEqual({
+    command: "split-editor",
+    env: "VISUAL",
+  });
+  expect(
+    resolveExternalEditor({
+      VISUAL: "split-editor",
+      OPENCODE_SNIPPETS_EDITOR_TMUX: "1",
+      TMUX: "socket",
+    }),
+  ).toEqual({
+    command: "split-editor",
+    env: "VISUAL",
+    detached: true,
+  });
 });
 
 test("draft creation refuses existing files and symlinks without overwriting content", async () => {
@@ -101,33 +118,36 @@ test("the editor accepts POSIX escaped spaces and quotes without interpreting th
   expect(await Bun.file(path).text()).toBe('say "hello"');
 });
 
-for (const failure of [false, true]) {
-  test(`external editor resumes and redraws the renderer after ${failure ? "spawn failure" : "saving a quoted file path"}`, async () => {
-    const directory = await fixture();
-    const path = join(directory, "draft with spaces.md");
-    const script = join(directory, "fake editor.mjs");
-    await Bun.write(script, 'await Bun.write(process.argv[2], "saved");');
-    const events: string[] = [];
-    const renderer = {
-      suspend: () => {
-        events.push("suspend");
-      },
-      resume: () => {
-        events.push("resume");
-      },
-      requestRender: () => {
-        events.push("render");
-      },
-    };
-    const result = openExternalEditor(renderer, path, {
-      command: failure ? join(directory, "absent") : `"${process.execPath}" "${script}"`,
-      env: "EDITOR",
+for (const detached of [false, true]) {
+  for (const failure of [false, true]) {
+    test(`${detached ? "split" : "terminal"} editor restores rendering after ${failure ? "spawn failure" : "saving a quoted file path"}`, async () => {
+      const directory = await fixture();
+      const path = join(directory, "draft with spaces.md");
+      const script = join(directory, "fake editor.mjs");
+      await Bun.write(script, 'await Bun.write(process.argv[2], "saved");');
+      const events: string[] = [];
+      const renderer = {
+        suspend: () => {
+          events.push("suspend");
+        },
+        resume: () => {
+          events.push("resume");
+        },
+        requestRender: () => {
+          events.push("render");
+        },
+      };
+      const result = openExternalEditor(renderer, path, {
+        command: failure ? join(directory, "absent") : `"${process.execPath}" "${script}"`,
+        env: "EDITOR",
+        detached,
+      });
+      if (failure) await expect(result).rejects.toThrow();
+      if (!failure) {
+        await result;
+        expect(await Bun.file(path).text()).toBe("saved");
+      }
+      expect(events).toEqual(detached ? ["render"] : ["suspend", "resume", "render"]);
     });
-    if (failure) await expect(result).rejects.toThrow();
-    if (!failure) {
-      await result;
-      expect(await Bun.file(path).text()).toBe("saved");
-    }
-    expect(events).toEqual(["suspend", "resume", "render"]);
-  });
+  }
 }

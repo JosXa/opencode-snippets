@@ -4,9 +4,10 @@ import {
   type KeyEvent,
   MacOSScrollAccel,
   type ScrollBoxRenderable,
+  TextAttributes,
   type TextareaRenderable,
 } from "@opentui/core";
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { loadCliScroll } from "./config.js";
 import { getSnippetForm } from "./fields.js";
 import { serializeInvocation } from "./invocation.js";
@@ -19,6 +20,8 @@ import {
   snippetReferences,
   validateLibraryFile,
 } from "./library.js";
+import { Action, ActionBar } from "./tui-action.js";
+import { openExternalEditor, resolveExternalEditor } from "./tui-editor.js";
 import { SnippetForm } from "./tui-form.js";
 import { filterSnippets } from "./tui-search.js";
 import type { SnippetRegistry } from "./types.js";
@@ -59,9 +62,19 @@ export function SnippetLibrary(props: {
   const [message, setMessage] = createSignal("");
   const [width, setWidth] = createSignal(props.context.renderer.width);
   const [help, setHelp] = createSignal(false);
+  const [command, setCommand] = createSignal("");
+  const [direction, setDirection] = createSignal(1);
+  const history = { paths: [] as string[], index: -1 };
+  createEffect(() => {
+    focus();
+    setCommand("");
+  });
   let editor: TextareaRenderable | undefined;
   let list: ScrollBoxRenderable | undefined;
-  const theme = () => props.context.theme;
+  let preview: ScrollBoxRenderable | undefined;
+  const theme = () => props.context.theme.surface("dialog");
+  // Like DialogSelect, retain selection with muted colors while an action owns focus.
+  const listFocused = () => focus() === "list" || focus() === "search";
   const filtered = createMemo(() =>
     filterSnippets(
       files().filter((file) => scope() === "all" || file.source === scope()),
@@ -93,7 +106,14 @@ export function SnippetLibrary(props: {
     if (file) props.state.drafts.set(file.filePath, { file, raw: value });
     changed();
   };
-  const select = (file: LibraryFile) => {
+  const select = (file: LibraryFile, jump = false) => {
+    if (jump && selected() && selected() !== file.filePath) {
+      history.paths.splice(history.index + 1);
+      if (history.paths[history.index] !== selected()) history.paths.push(selected());
+      history.paths.push(file.filePath);
+      history.index = history.paths.length - 1;
+    }
+    setCommand("");
     setSelected(file.filePath);
     props.state.selected = file.filePath;
     const value = props.state.drafts.get(file.filePath)?.raw ?? file.raw;
@@ -198,9 +218,42 @@ export function SnippetLibrary(props: {
       setMessage("Library reloaded.");
     });
   const edit = () => {
+    if (!current()) return;
     setEditing(true);
     setFocus("editor");
   };
+  const external = () =>
+    run(async () => {
+      const file = original();
+      if (!file) return;
+      const command = resolveExternalEditor();
+      if (!command) throw new Error("Set VISUAL or EDITOR to open an external editor.");
+      if (dirty()) {
+        const choice = await dialog(() =>
+          props.context.ui.dialog.select({
+            title: "Open in external editor",
+            options: [
+              { title: "Save changes and open", value: "save" },
+              { title: "Discard changes and open", value: "discard" },
+              { title: "Keep editing here", value: "cancel" },
+            ],
+          }),
+        );
+        if (!choice || choice === "cancel") return;
+        if (choice === "save") await saveDraft(file.filePath);
+      }
+      // Open the selected file, and reread it even if the editor saves then exits with an error.
+      try {
+        await openExternalEditor(props.context.renderer, file.filePath, command);
+      } finally {
+        props.state.drafts.delete(file.filePath);
+        changed();
+        await load(file.filePath);
+        await props.reload();
+        if (editing()) setFocus("editor");
+      }
+      setMessage("External editor closed. Snippet reloaded.");
+    });
   const create = (duplicate = false) =>
     run(async () => {
       const file = current();
@@ -360,7 +413,7 @@ export function SnippetLibrary(props: {
     }
     setQuery("");
     setScope("all");
-    select(file);
+    select(file, true);
   };
   const details = createMemo(() => {
     const file = current();
@@ -394,12 +447,7 @@ export function SnippetLibrary(props: {
           "inspect",
           "edit",
           "save",
-          "duplicate",
-          "rename",
-          "move",
-          "delete",
-          "copy",
-          "form",
+          "more",
           ...(!editing()
             ? [
                 ...snippetReferences(current()?.content ?? "").map((name) => `include:${name}`),
@@ -410,16 +458,33 @@ export function SnippetLibrary(props: {
       : []),
     "help",
   ];
+  const back = () => {
+    // Leaving the active editor also activates list navigation in one step.
+    if (focus() === "editor") {
+      setHelp(false);
+      setEditing(false);
+      setFocus("list");
+      return;
+    }
+    if (help()) return setHelp(false);
+    if (focus() !== "list") return setFocus("list");
+    if (editing()) return setEditing(false);
+    if (query()) return setQuery("");
+    void leave();
+  };
   const invoke = (id: string) => {
     if (id.startsWith("include:")) return navigate(id.slice(8));
     if (id.startsWith("used:")) {
       const file = files().find((file) => file.filePath === id.slice(5));
-      if (file) select(file);
+      if (file) select(file, true);
       return;
     }
-    if (id === "back") return void leave();
+    if (id === "back") return back();
     if (["all", "project", "global"].includes(id)) {
       setScope(id);
+      const items = filtered();
+      if (!items.some((file) => file.filePath === selected()) && items[0]) select(items[0]);
+      setFocus(id);
       return;
     }
     if (id === "new") return void create();
@@ -430,7 +495,9 @@ export function SnippetLibrary(props: {
       return;
     }
     if (id === "edit") return edit();
+    if (id === "external") return void external();
     if (id === "save") return void save();
+    if (id === "more") return void more();
     if (id === "duplicate") return void create(true);
     if (id === "rename") return void relocate(false);
     if (id === "move") return void relocate(true);
@@ -438,6 +505,208 @@ export function SnippetLibrary(props: {
     if (id === "copy") return copy(`#${current()?.name}`);
     if (id === "form") return form();
     if (id === "help") setHelp((value) => !value);
+  };
+  const more = async () => {
+    const action = await dialog(() =>
+      props.context.ui.dialog.select({
+        title: current() ? `Actions for #${current()?.name}` : "Library actions",
+        options: [
+          { title: "New snippet", value: "new" },
+          { title: "Reload library", value: "reload" },
+          { title: "Help", value: "help", description: "F1" },
+          ...(current()
+            ? [
+                {
+                  title: "Open in external editor",
+                  value: "external",
+                  description: "VISUAL or EDITOR · Shift+Enter",
+                },
+                {
+                  title: "Duplicate",
+                  value: "duplicate",
+                  description: "Create a copy with fresh aliases",
+                },
+                { title: "Rename", value: "rename", description: "Keep the old name as an alias" },
+                {
+                  title: "Move",
+                  value: "move",
+                  description: `Move to ${current()?.source === "project" ? "global" : "project"}`,
+                },
+                { title: "Delete", value: "delete", description: "Delete this snippet file" },
+                { title: "Copy reference", value: "copy", description: `#${current()?.name}` },
+                {
+                  title: "Test form",
+                  value: "form",
+                  description: "Fill fields and copy an invocation",
+                },
+              ]
+            : []),
+        ],
+      }),
+    );
+    if (action) invoke(action);
+  };
+  // Navigation owns only non-input focus. The source editor has its own keymap.
+  const motion = (event: KeyEvent) => {
+    if (focus() === "editor" || focus() === "search" || event.meta) {
+      setCommand("");
+      return false;
+    }
+    const name = event.name.toLowerCase();
+    const key = event.shift && name.length === 1 ? name.toUpperCase() : name;
+    const pending = command();
+    const count = Number.parseInt(pending, 10) || 1;
+    const prefix = pending.replace(/^\d+/, "");
+    setCommand("");
+    if (name === "escape" && pending) return true;
+    if (!event.ctrl && /^\d$/.test(key) && !prefix && (key !== "0" || pending)) {
+      setCommand(`${pending}${key}`);
+      return true;
+    }
+    const pane = (right: boolean) => {
+      if (!right) return setFocus("list");
+      if (current()) setFocus(editing() ? "editor" : "preview");
+    };
+    if (prefix === "^w") {
+      if (["h", "k", "left", "up"].includes(name)) pane(false);
+      if (["l", "j", "right", "down"].includes(name)) pane(true);
+      if (name === "w") pane(focus() === "list");
+      return true;
+    }
+    if (event.ctrl && name === "w") {
+      setCommand("^w");
+      return true;
+    }
+    if (event.ctrl && ["o", "i"].includes(name)) {
+      const delta = name === "o" ? -1 : 1;
+      for (const _ of Array.from({ length: Math.min(count, history.paths.length) })) {
+        const index = history.index + delta;
+        if (index < 0 || index >= history.paths.length) break;
+        history.index = index;
+        const file = files().find((file) => file.filePath === history.paths[index]);
+        if (!file) continue;
+        setQuery("");
+        setScope("all");
+        select(file);
+      }
+      return true;
+    }
+    if (!event.ctrl && ["h", "left", "l", "right"].includes(key)) {
+      pane(key === "l" || key === "right");
+      return true;
+    }
+    if (!event.ctrl && ["/", "?"].includes(key)) {
+      setDirection(key === "/" ? 1 : -1);
+      setQuery("");
+      setFocus("search");
+      return true;
+    }
+    if (!event.ctrl && key === ":") {
+      void more();
+      return true;
+    }
+    if (key === "f1") {
+      invoke("help");
+      return true;
+    }
+    const items = filtered();
+    const index = items.findIndex((file) => file.filePath === selected());
+    const position = (index: number, jump = false) => {
+      const file = items[Math.max(0, Math.min(items.length - 1, index))];
+      if (file) select(file, jump);
+    };
+    if (!event.ctrl && ["n", "N"].includes(key)) {
+      if (items.length && query()) {
+        const delta = direction() * (key === "N" ? -1 : 1) * count;
+        position((((index + delta) % items.length) + items.length) % items.length, true);
+      }
+      return true;
+    }
+    if (
+      !event.ctrl &&
+      !event.shift &&
+      ["i", "enter", "return"].includes(key) &&
+      focus() === "list"
+    ) {
+      if (index >= 0) edit();
+      return true;
+    }
+    const box = focus() === "preview" ? preview : list;
+    const height = Math.max(1, box?.viewport.height ?? 1);
+    if (!event.ctrl && key === "g" && prefix !== "g") {
+      setCommand(`${pending}g`);
+      return true;
+    }
+    if (
+      !event.ctrl &&
+      (key === "G" || (key === "g" && prefix === "g") || ["home", "end"].includes(key))
+    ) {
+      const last = key === "G" || key === "end";
+      const target = /^\d/.test(pending) ? count - 1 : last ? Number.MAX_SAFE_INTEGER : 0;
+      if (focus() === "preview") box?.scrollTo(target);
+      if (focus() !== "preview") position(target, true);
+      return true;
+    }
+    if (!event.ctrl && ["H", "M", "L"].includes(key)) {
+      if (focus() !== "preview") {
+        const top = list?.scrollTop ?? 0;
+        const bottom = Math.min(items.length - 1, top + height - 1);
+        position(
+          key === "H"
+            ? Math.min(bottom, top + count - 1)
+            : key === "L"
+              ? Math.max(top, bottom - count + 1)
+              : Math.floor((top + bottom) / 2),
+        );
+      }
+      return true;
+    }
+    if (!event.ctrl && key === "z" && !prefix) {
+      setCommand("z");
+      return true;
+    }
+    if (!event.ctrl && prefix === "z" && ["t", "z", "b"].includes(key)) {
+      if (focus() === "list" && index >= 0)
+        list?.scrollTo(
+          index - (key === "t" ? 0 : key === "z" ? Math.floor((height - 1) / 2) : height - 1),
+        );
+      return true;
+    }
+    const step = event.ctrl
+      ? {
+          n: 1,
+          p: -1,
+          d: Math.max(1, Math.floor(height / 2)),
+          u: -Math.max(1, Math.floor(height / 2)),
+          f: height,
+          b: -height,
+          e: 1,
+          y: -1,
+        }[name]
+      : { j: 1, k: -1, down: 1, up: -1, pagedown: height, pageup: -height }[key];
+    if (step !== undefined) {
+      if (focus() === "preview" || (event.ctrl && ["e", "y"].includes(name))) {
+        box?.scrollBy(step * count);
+        // Keep the selected row inside the viewport when scrolling the list.
+        if (focus() !== "preview") {
+          const top = box?.scrollTop ?? 0;
+          position(Math.max(top, Math.min(index, top + height - 1)));
+        }
+      } else if (
+        actions().includes(focus()) &&
+        !event.ctrl &&
+        ["j", "k", "up", "down"].includes(key)
+      ) {
+        const order = actions();
+        const next =
+          order[Math.max(0, Math.min(order.length - 1, order.indexOf(focus()) + step * count))];
+        setFocus(next);
+        queueMicrotask(() => preview?.scrollChildIntoView(`library-action-${next}`));
+      } else position(index < 0 ? (step < 0 ? items.length - 1 : 0) : index + step * count);
+      return true;
+    }
+    // A prefix followed by an unrelated key must not leak into a later motion.
+    return false;
   };
   const keys = (event: KeyEvent) => {
     if (modal() || props.context.keymap.mode.current() !== "base") return;
@@ -447,39 +716,57 @@ export function SnippetLibrary(props: {
       event.stopPropagation();
       return;
     }
-    if (
-      name === "escape" ||
-      (name === "q" &&
-        !event.ctrl &&
-        !event.meta &&
-        !event.shift &&
-        focus() !== "search" &&
-        focus() !== "editor")
+    if (motion(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (name === "escape") back();
+    else if (
+      name === "q" &&
+      !event.ctrl &&
+      !event.meta &&
+      !event.shift &&
+      focus() !== "search" &&
+      focus() !== "editor"
     )
-      void leave();
+      props.close();
     else if (event.ctrl && name === "s") void save();
-    else if (event.ctrl && name === "n") void create();
-    else if (event.ctrl && name === "f") void find();
-    else if (event.ctrl && name === "r") void reload();
+    else if (focus() === "editor" && event.ctrl && name === "n") void create();
+    else if (focus() === "editor" && event.ctrl && name === "f") void find();
+    else if (focus() === "editor" && event.ctrl && name === "r") void reload();
+    else if (focus() === "editor" && event.ctrl && name === "o") void more();
+    else if (event.shift && !event.ctrl && !event.meta && ["return", "enter"].includes(name))
+      void external();
     else if (name === "tab") {
-      const order = ["search", "list", ...(editing() ? ["editor"] : []), ...actions()];
-      setFocus(
-        order[(order.indexOf(focus()) + (event.shift ? -1 : 1) + order.length) % order.length],
-      );
+      const order = [
+        "search",
+        "list",
+        ...(current() ? [editing() ? "editor" : "preview"] : []),
+        ...actions(),
+      ];
+      const next =
+        order[(order.indexOf(focus()) + (event.shift ? -1 : 1) + order.length) % order.length];
+      // Enter must act on a visible result after Tab leaves a filtered search.
+      if (next === "list" && !filtered().some((file) => file.filePath === selected())) {
+        const file = filtered()[0];
+        if (file) select(file);
+      }
+      setFocus(next);
+      if (next.startsWith("include:") || next.startsWith("used:"))
+        queueMicrotask(() => preview?.scrollChildIntoView(`library-action-${next}`));
     } else if (focus() === "search" && ["return", "enter", "down"].includes(name)) {
-      const file = filtered()[0];
-      if (file) select(file);
+      const file = direction() === 1 ? filtered()[0] : filtered().at(-1);
+      if (file) select(file, true);
     } else if (focus() === "editor" && ["return", "enter", "linefeed"].includes(name))
       editor?.newLine();
+    // OpenCode suspends the textarea's native bindings while its keymap owns input.
+    else if (focus() === "editor" && event.ctrl && name === "home")
+      editor?.gotoBufferHome({ select: event.shift });
+    else if (focus() === "editor" && event.ctrl && name === "end")
+      editor?.gotoBufferEnd({ select: event.shift });
     else if (focus() === "editor" && event.ctrl && name === "z") editor?.undo();
     else if (focus() === "editor" && event.ctrl && name === "y") editor?.redo();
-    else if (focus() === "list" && ["up", "down"].includes(name)) {
-      const items = filtered();
-      const index = items.findIndex((file) => file.filePath === selected());
-      const item = items[(index + (name === "up" ? -1 : 1) + items.length) % items.length];
-      if (item) select(item);
-    } else if (focus() === "list" && ["return", "enter"].includes(name)) edit();
-    else if (focus() !== "editor" && focus() !== "search" && name === "/") setFocus("search");
     else if (actions().includes(focus()) && ["return", "enter", "space"].includes(name))
       invoke(focus());
     else return;
@@ -492,33 +779,26 @@ export function SnippetLibrary(props: {
   });
   onCleanup(() => props.context.renderer.keyInput.removeListener("keypress", keys));
 
-  const Button = (button: { id: string; label: string }) => {
-    const [hovered, setHovered] = createSignal(false);
-    const active = () => focus() === button.id || scope() === button.id;
-    return (
-      // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithMouseEvents: OpenTUI buttons share their highlight with Tab focus and activate with Enter.
-      <box
-        id={`library-action-${button.id}`}
-        flexShrink={0}
-        marginRight={1}
-        backgroundColor={
-          active() || hovered() ? theme().background.raised.high : theme().background.raised.base
-        }
-        onMouseOver={() => setHovered(true)}
-        onMouseOut={() => setHovered(false)}
-        onMouseUp={() => {
-          if (!busy() && !modal()) {
-            setFocus(button.id);
-            invoke(button.id);
-          }
-        }}
-      >
-        <text
-          fg={active() || hovered() ? theme().text.action.primary.base : theme().text.base}
-        >{`[ ${button.label} ]`}</text>
-      </box>
-    );
-  };
+  const Button = (button: { id: string; label: string; shortcut?: string }) => (
+    <Action
+      id={`library-action-${button.id}`}
+      theme={theme()}
+      label={button.label}
+      shortcut={button.shortcut}
+      focused={focus() === button.id}
+      selected={
+        scope() === button.id ||
+        (button.id === "inspect" && !editing()) ||
+        (button.id === "edit" && editing())
+      }
+      disabled={busy() || modal()}
+      run={() => {
+        // Back acts on the current focus, just like Escape.
+        if (button.id !== "back") setFocus(button.id);
+        invoke(button.id);
+      }}
+    />
+  );
   return (
     <box
       width="100%"
@@ -529,74 +809,74 @@ export function SnippetLibrary(props: {
       <box
         flexDirection="row"
         justifyContent="space-between"
-        border={["bottom"]}
-        borderColor={theme().border.base}
-        paddingX={1}
+        paddingX={2}
+        paddingTop={1}
         flexShrink={0}
       >
         <text fg={theme().text.base} wrapMode="none">
-          <b>SNIPPETS</b>
-          {`  ${props.context.ui.format.path(props.directory)}`}
+          <b>Snippets</b>
+          <span
+            style={{ fg: theme().text.muted }}
+          >{`  ${props.context.ui.format.path(props.directory)}`}</span>
         </text>
-        <Button id="back" label="Esc Back" />
+        <Button id="back" label="" shortcut="esc" />
       </box>
       <box
         flexDirection="row"
         flexWrap="wrap"
         alignItems="center"
         gap={1}
-        paddingX={1}
+        paddingX={2}
         paddingY={1}
         flexShrink={0}
       >
-        <box
-          flexDirection="row"
-          width={width() < 90 ? "100%" : "45%"}
-          border
-          borderColor={focus() === "search" ? theme().text.base : theme().border.base}
-        >
-          <text fg={theme().text.muted}> / </text>
+        <box flexDirection="row" width={width() < 90 ? "100%" : "45%"}>
           <input
             id="library-search"
             flexGrow={1}
             value={query()}
             focused={focus() === "search"}
             maxLength={Number.POSITIVE_INFINITY}
-            placeholder="Name, alias or description"
+            placeholder="Search names, aliases or descriptions"
+            placeholderColor={theme().text.muted}
             onMouseDown={() => setFocus("search")}
             onInput={setQuery}
             textColor={theme().text.base}
+            focusedTextColor={theme().text.formfield.focused}
+            cursorColor={theme().text.formfield.focused}
             backgroundColor={theme().background.base}
-            focusedBackgroundColor={theme().background.base}
+            focusedBackgroundColor={theme().background.formfield.focused}
           />
         </box>
-        <For each={["all", "project", "global"]}>
-          {(id) => (
-            <Button
-              id={id}
-              label={`${scope() === id ? "● " : ""}${id[0].toUpperCase()}${id.slice(1)}`}
-            />
-          )}
-        </For>
-        <Button id="new" label="+ New" />
-        <Button id="reload" label="Reload" />
+        <ActionBar>
+          <For each={["all", "project", "global"]}>
+            {(id) => <Button id={id} label={`${scope() === id ? "● " : ""}${id}`} />}
+          </For>
+          <Button id="new" label="new" shortcut={focus() === "editor" ? "ctrl+n" : undefined} />
+          <Button
+            id="reload"
+            label="reload"
+            shortcut={focus() === "editor" ? "ctrl+r" : undefined}
+          />
+        </ActionBar>
       </box>
       <box flexDirection={width() < 80 ? "column" : "row"} flexGrow={1} minHeight={0}>
         <scrollbox
           id="library-list"
           scrollAcceleration={acceleration()}
+          scrollbarOptions={{ visible: false }}
           ref={list}
           width={width() < 80 ? "100%" : "32%"}
           height={width() < 80 ? (editing() ? 5 : 7) : undefined}
           flexShrink={0}
-          border
+          border={width() < 80 ? ["bottom"] : ["right"]}
           borderColor={focus() === "list" ? theme().text.base : theme().border.base}
         >
           <For
             each={filtered()}
             fallback={
               <text fg={theme().text.muted}>
-                {files().length ? "No matching snippets." : "No snippets yet. Choose + New."}
+                {files().length ? "No matching snippets." : "No snippets yet. Use new or :."}
               </text>
             }
           >
@@ -610,7 +890,9 @@ export function SnippetLibrary(props: {
                 flexShrink={0}
                 backgroundColor={
                   selected() === file.filePath
-                    ? theme().background.action.primary.focused
+                    ? listFocused()
+                      ? theme().background.action.primary.focused
+                      : theme().background.raised.high
                     : undefined
                 }
                 onMouseUp={() => {
@@ -618,11 +900,24 @@ export function SnippetLibrary(props: {
                 }}
               >
                 <text
-                  fg={theme().text.base}
+                  fg={
+                    selected() === file.filePath
+                      ? listFocused()
+                        ? theme().text.action.primary.focused
+                        : theme().text.muted
+                      : theme().text.base
+                  }
+                  attributes={
+                    selected() === file.filePath && listFocused() ? TextAttributes.BOLD : undefined
+                  }
                   wrapMode="none"
                 >{`${selected() === file.filePath ? "›" : " "} #${file.name}${dirty(file.filePath) ? " *" : ""}`}</text>
                 <text
-                  fg={selected() === file.filePath ? theme().text.base : theme().text.muted}
+                  fg={
+                    selected() === file.filePath && listFocused()
+                      ? theme().text.action.primary.focused
+                      : theme().text.muted
+                  }
                   wrapMode="none"
                 >{`${file.source === "project" ? "P" : "G"}${file.active ? "" : " ↓"}`}</text>
               </box>
@@ -643,27 +938,34 @@ export function SnippetLibrary(props: {
               flexShrink={0}
               wrapMode="none"
             >{`${current()?.source} · ${props.context.ui.format.path(selected())}${original()?.active === false ? " · overridden" : ""}`}</text>
-            <box flexDirection="row" flexWrap="wrap" flexShrink={0} marginY={1}>
-              <Button id="inspect" label="Inspect" />
-              <Button id="edit" label="Edit source" />
-              <Button id="save" label="Save" />
-              <Button id="duplicate" label="Duplicate" />
-              <Button id="rename" label="Rename" />
-              <Button id="move" label="Move" />
-              <Button id="delete" label="Delete" />
-              <Button id="copy" label="Copy #" />
-              <Button id="form" label="Test form" />
+            <box flexShrink={0} marginY={1}>
+              <ActionBar>
+                <Button id="inspect" label="inspect" />
+                <Button
+                  id="edit"
+                  label="edit source"
+                  shortcut={!editing() && focus() === "list" ? "enter" : undefined}
+                />
+                <Button id="save" label="save" shortcut="ctrl+s" />
+                <Button id="more" label="more" shortcut={focus() === "editor" ? "ctrl+o" : ":"} />
+              </ActionBar>
             </box>
             <Show
               when={editing()}
               fallback={
+                // biome-ignore lint/a11y/noStaticElementInteractions: This terminal scrollbox is reachable with Tab and h/l.
                 <scrollbox
                   id="library-preview"
+                  ref={preview}
+                  focused={focus() === "preview"}
+                  onMouseDown={() => setFocus("preview")}
                   scrollAcceleration={acceleration()}
                   flexGrow={1}
                   minHeight={0}
                 >
-                  <text fg={theme().text.muted}>SOURCE</text>
+                  <text fg={theme().text.muted}>
+                    {focus() === "preview" ? "Source · preview focused" : "Source"}
+                  </text>
                   <For each={(current()?.content ?? "").split("\n")}>
                     {(line) => (
                       <box flexDirection="row" flexWrap="wrap" flexShrink={0} minHeight={1}>
@@ -692,7 +994,7 @@ export function SnippetLibrary(props: {
                   </For>
                   <Show when={snippetReferences(current()?.content ?? "").length}>
                     <text marginTop={1} fg={theme().text.muted}>
-                      INCLUDES (static references)
+                      Includes (static references)
                     </text>
                     <For each={snippetReferences(current()?.content ?? "")}>
                       {(name) => (
@@ -705,7 +1007,7 @@ export function SnippetLibrary(props: {
                   </Show>
                   <Show when={used().length}>
                     <text marginTop={1} fg={theme().text.muted}>
-                      USED BY
+                      Used by
                     </text>
                     <For each={used()}>
                       {(file) => <Button id={`used:${file.filePath}`} label={`← #${file.name}`} />}
@@ -754,7 +1056,9 @@ export function SnippetLibrary(props: {
                     event.scroll.delta = Math.abs(delta);
                   }}
                   onContentChange={() => update(editor?.plainText ?? raw())}
-                  textColor={theme().text.base}
+                  textColor={theme().text.formfield.base}
+                  focusedTextColor={theme().text.formfield.base}
+                  cursorColor={theme().text.base}
                   backgroundColor={theme().background.base}
                   focusedBackgroundColor={theme().background.base}
                   keyBindings={[
@@ -785,24 +1089,64 @@ export function SnippetLibrary(props: {
         <text paddingX={1} fg={theme().text.muted} flexShrink={0}>
           P project · G global · ↓ overridden · * unsaved. Edit source includes aliases,
           description, fields and all block syntax. Test form copies a filled reference without
-          executing it. Tab reaches actions; includes accept mouse or focus + Enter.
+          executing it. j/k or ↑↓ move; counts repeat (3j). gg/G first/last; 5G row 5. H/M/L select
+          viewport top/middle/bottom; zt/zz/zb align the selected row. Ctrl+D/U half page; Ctrl+F/B
+          full page; Ctrl+E/Y scroll a line; Ctrl+N/P next/previous. h/l or ←/→ switch list and
+          preview; Ctrl+W h/j/k/l/w switches panes. / searches forward, ? backward; n/N
+          repeat/reverse. Ctrl+O/I jump back/forward. : opens actions; F1 toggles help; i or Enter
+          edits. Tab reaches actions; includes accept mouse or focus + Enter. Ctrl+Home / Ctrl+End
+          move to source boundaries; add Shift to select.
         </text>
       </Show>
       <box
         flexDirection="row"
         flexWrap="wrap"
         justifyContent="space-between"
-        border={["top"]}
-        borderColor={theme().border.base}
-        paddingX={1}
+        paddingX={2}
+        paddingY={1}
         flexShrink={0}
       >
-        <text fg={theme().text.muted}>
-          {editing()
-            ? "Ctrl+S save · Ctrl+Z undo · Ctrl+F find · Esc back"
-            : "↑↓ browse · Enter edit · / search · Tab · Esc back · q quit"}
-        </text>
-        <Button id="help" label="Help" />
+        <ActionBar>
+          <text fg={theme().text.base}>
+            {focus() === "editor" ? "find" : "search"}
+            <span style={{ fg: theme().text.muted }}>
+              {focus() === "editor" ? " ctrl+f" : " / ?"}
+            </span>
+          </text>
+          <text fg={theme().text.base}>
+            external<span style={{ fg: theme().text.muted }}> shift+enter</span>
+          </text>
+          <text fg={theme().text.base}>
+            focus<span style={{ fg: theme().text.muted }}> tab / shift+tab</span>
+          </text>
+          <Show when={focus() === "list" || focus() === "preview"}>
+            <text fg={theme().text.base}>
+              {focus() === "list" ? "select" : "scroll"}
+              <span style={{ fg: theme().text.muted }}> j/k ↑↓</span>
+            </text>
+          </Show>
+          <Show when={focus() === "list" || focus() === "preview"}>
+            <text fg={theme().text.base}>
+              panes<span style={{ fg: theme().text.muted }}> h/l</span>
+            </text>
+          </Show>
+          <text fg={theme().text.base}>
+            back<span style={{ fg: theme().text.muted }}> esc</span>
+          </text>
+          <Show when={focus() !== "search" && focus() !== "editor"}>
+            <text fg={theme().text.base}>
+              quit<span style={{ fg: theme().text.muted }}> q</span>
+            </text>
+          </Show>
+        </ActionBar>
+        <Button
+          id="help"
+          label="help"
+          shortcut={focus() !== "search" && focus() !== "editor" ? "f1" : undefined}
+        />
+        <Show when={command()}>
+          <text fg={theme().text.muted}>{`pending ${command()}`}</text>
+        </Show>
       </box>
     </box>
   );

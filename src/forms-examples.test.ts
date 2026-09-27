@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { resolve } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { assembleMessage, expandHashtags } from "./expander.js";
 import { getSnippetForm, validateFields } from "./fields.js";
 import { serializeInvocation } from "./invocation.js";
@@ -246,13 +248,18 @@ const reference = await Bun.file(
 const bodies = [...reference.matchAll(/```markdown\n([\s\S]*?)\n```/g)].map(
   (match) => match[1] ?? "",
 );
-const directory = resolve(import.meta.dir, "../examples/forms");
 // Load the documentation through the production Markdown/frontmatter parser.
-const examples = await loadSnippets(
-  undefined,
-  directory,
-  new Map(bodies.map((content, index) => [`${directory}/example${index + 1}.md`, content])),
-);
+const directory = await mkdtemp(join(tmpdir(), "opencode-snippet-form-examples-"));
+const examples = await (async () => {
+  try {
+    await Promise.all(
+      bodies.map((content, index) => writeFile(join(directory, `example${index + 1}.md`), content)),
+    );
+    return await loadSnippets(undefined, directory);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+})();
 
 describe("natural-language authoring acceptance examples", () => {
   function form(index: number, values: Record<string, string | number | boolean> = {}) {

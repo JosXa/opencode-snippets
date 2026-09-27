@@ -121,15 +121,16 @@ describe("V2 TUI plugin", () => {
       dispose?.();
     });
   }
-  test("threads the configured global directory through every management command", async () => {
+  test("registers only /snippets, opens the library and retains the field-edit shortcut", async () => {
     root = await mkdtemp(join(tmpdir(), "snippets-v2-tui-"));
     const project = join(root, "project");
     const globalDirectory = join(root, "isolated-global");
-    const alerts: string[] = [];
-    let commands: readonly { id?: string; run: (input?: string) => void | Promise<void> }[] = [];
+    const commands: { id?: string; slash?: { name: string }; bind?: string; run: () => void }[] =
+      [];
+    const destinations: unknown[] = [];
     const screen = await createTestRenderer({ width: 80, height: 24 });
     destroyRenderer = () => screen.renderer.destroy();
-    let footer: (input: { mode: "normal"; showDetails: boolean }) => JSX.Element = () => null;
+    const slots: ((input: { mode: "normal"; showDetails: boolean }) => JSX.Element)[] = [];
 
     const dispose = await plugin.setup({
       location: { directory: project },
@@ -137,9 +138,13 @@ describe("V2 TUI plugin", () => {
       options: { globalDirectory, homeDirectory: root },
       client: { skill: { list: async () => ({ data: [] }) } },
       ui: {
-        router: { register: () => () => {}, current: () => ({ type: "home" }), navigate: () => {} },
-        slot: ({ render }: { render: typeof footer }) => {
-          footer = render;
+        router: {
+          register: () => () => {},
+          current: () => ({ type: "home" }),
+          navigate: (destination: unknown) => destinations.push(destination),
+        },
+        slot: ({ render }: { render: (typeof slots)[number] }) => {
+          slots.push(render);
           return () => {};
         },
         dialog: {
@@ -147,37 +152,30 @@ describe("V2 TUI plugin", () => {
           set: () => undefined,
           clear: () => undefined,
           select: async () => undefined,
-          alert: async ({ message }: { message: string }) => {
-            alerts.push(message);
-          },
         },
       },
       keymap: {
         mode: { current: () => "base" },
         layer: (definition: () => { commands?: typeof commands }) => {
-          commands = definition().commands ?? [];
+          commands.push(...(definition().commands ?? []));
         },
       },
       renderer: screen.renderer,
     } as never);
-    await render(() => footer({ mode: "normal", showDetails: true }), screen.renderer);
-
-    const manage = commands.find((command) => command.id === "snippets.manage");
-    const reload = commands.find((command) => command.id === "snippets.reload");
-    expect(manage).toBeDefined();
-    expect(reload).toBeDefined();
-
-    await manage?.run('add isolated "configured path"');
-    expect(await Bun.file(join(globalDirectory, "isolated.md")).text()).toContain(
-      "configured path",
+    await render(
+      () => slots.map((slot) => slot({ mode: "normal", showDetails: true })),
+      screen.renderer,
     );
-    await manage?.run("list");
-    expect(alerts.at(-1)).toContain("#isolated\nconfigured path");
-    await reload?.run();
-    expect(alerts.at(-1)).toBe("Reloaded 1 snippet.");
-    await manage?.run("delete isolated");
-    expect(alerts.at(-1)).toContain("Deleted snippet #isolated");
-    expect(await Bun.file(join(globalDirectory, "isolated.md")).exists()).toBe(false);
+    expect(commands.flatMap((command) => (command.slash ? [command.slash.name] : []))).toEqual([
+      "snippets",
+    ]);
+    expect(commands.map((command) => command.id)).toEqual([
+      "snippets.library",
+      "snippets.edit-fields",
+    ]);
+    expect(commands.find((command) => command.id === "snippets.edit-fields")?.bind).toBe("ctrl+g");
+    commands.find((command) => command.id === "snippets.library")?.run();
+    expect(destinations).toEqual([{ type: "plugin", name: "snippets-library" }]);
     dispose?.();
   });
 
@@ -215,10 +213,8 @@ describe("V2 TUI plugin", () => {
         delete process.env.VISUAL;
         delete process.env.EDITOR;
       }
-      const alerts: string[] = [];
       const toasts: string[] = [];
       const confirmations: string[] = [];
-      let commands: readonly { id?: string; run: (input?: string) => void | Promise<void> }[] = [];
       const screen = await createTestRenderer({ width: 80, height: 24 });
       destroyRenderer = () => screen.renderer.destroy();
       const editor = new TextareaRenderable(screen.renderer, {
@@ -261,7 +257,6 @@ describe("V2 TUI plugin", () => {
             show: () => undefined,
             set: () => undefined,
             clear: () => undefined,
-            alert: async ({ message }: { message: string }) => alerts.push(message),
             confirm: async ({ message }: { message: string }) => {
               confirmations.push(message);
               if (outcome === "collision")
@@ -272,9 +267,7 @@ describe("V2 TUI plugin", () => {
         },
         keymap: {
           mode: { current: () => "base" },
-          layer: (definition: () => { commands?: typeof commands }) => {
-            commands = definition().commands ?? [];
-          },
+          layer: () => {},
         },
         renderer: screen.renderer,
       } as never);
@@ -333,8 +326,8 @@ describe("V2 TUI plugin", () => {
         end: (before.end ?? 0) + delta,
       });
       if (outcome === "saved") {
-        // Acceptance must see the reloaded registry before a management command
-        // performs its own reload; otherwise this partial tag starts another draft.
+        // Acceptance must see the reloaded registry immediately; otherwise this
+        // partial tag starts another draft.
         editor.setText("#fresh-g");
         editor.gotoLineEnd();
         screen.mockInput.pressTab();
@@ -377,9 +370,11 @@ describe("V2 TUI plugin", () => {
         );
         expect(editor.plainText).toBe("中 #fresh-global  tail");
       }
-      await commands.find((command) => command.id === "snippets.manage")?.run("list");
-      expect(alerts.at(-1)).toContain("#global-only\nCUSTOM_GLOBAL");
-      if (outcome === "saved") expect(alerts.at(-1)).toContain("Written in external editor");
+      editor.setText("#global-on");
+      editor.gotoLineEnd();
+      await Bun.sleep(50);
+      screen.mockInput.pressTab();
+      expect(editor.plainText).toBe("#global-only ");
       editor.setText("#skill(plugin:rem");
       editor.gotoLineEnd();
       await Bun.sleep(50);

@@ -30,7 +30,6 @@ import {
   type TuiCompletionOption,
 } from "./src/tui-trigger.js";
 import type { SnippetRegistry } from "./src/types.js";
-import { executeV2SnippetCommand } from "./src/v2-command.js";
 
 function promptTrigger(editor: EditBufferRenderable, snippets: SnippetRegistry) {
   // Native offsets count display columns, not UTF-16 units. Let OpenTUI decode
@@ -89,12 +88,6 @@ const plugin = Plugin.define({
       skills = await loadSkills();
     };
 
-    const runCommand = async (input: string) => {
-      const output = await executeV2SnippetCommand(input, snippets, directory, globalDirectory);
-      await reload();
-      if (output) await context.ui.dialog.alert({ title: "Snippets", message: output });
-    };
-
     const library: LibraryState = { drafts: new Map() };
     let previous: ReturnType<typeof context.ui.router.current> = { type: "home" };
     const openLibrary = () => {
@@ -129,7 +122,7 @@ const plugin = Plugin.define({
               title: "Open snippet library",
               description: "Browse and edit snippets inside OpenCode",
               palette: true,
-              slash: { name: "snippets:library" },
+              slash: { name: "snippets" },
               run: openLibrary,
             },
           ],
@@ -175,27 +168,11 @@ const plugin = Plugin.define({
               title: "Edit snippet fields",
               description: "Edit the snippet invocation under the composer cursor",
               palette: true,
-              slash: { name: "snippets:edit" },
               bind: "ctrl+g",
               run: (_input, event) => {
                 if (event && !activePrompt()) return false;
                 editFields();
               },
-            },
-            {
-              id: "snippets.manage",
-              title: "Manage snippets",
-              description: "List, add, or delete snippets",
-              palette: true,
-              slash: { name: "snippets", arguments: true },
-              run: (input) => runCommand(`/snippets ${input ?? ""}`),
-            },
-            {
-              id: "snippets.reload",
-              title: "Reload snippets",
-              palette: true,
-              slash: { name: "snippets:reload" },
-              run: () => runCommand("/snippets:reload"),
             },
           ],
         }));

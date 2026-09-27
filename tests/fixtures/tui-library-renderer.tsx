@@ -2,7 +2,13 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { BoxRenderable, Renderable, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
+import {
+  BoxRenderable,
+  Renderable,
+  RGBA,
+  ScrollBoxRenderable,
+  TextareaRenderable,
+} from "@opentui/core";
 import { registerManagedTextareaLayer } from "@opentui/keymap/addons/opentui";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { testRender, useRenderer } from "@opentui/solid";
@@ -60,12 +66,14 @@ async function fixture(width = 120, height = 38, scroll = { speed: 3, accelerati
         background: {
           base: "#101820",
           raised: { base: "#182028", high: "#304050" },
+          formfield: { focused: "#203040" },
           action: { primary: { focused: "#775511" } },
         },
         text: {
           base: "#eeeeee",
           muted: "#999999",
-          action: { primary: { base: "#ffaa33", focused: "#ffffff" } },
+          action: { primary: { base: "#ffaa33", focused: "#101010", disabled: "#666666" } },
+          formfield: { base: "#ddeeff", focused: "#aabbcc" },
           feedback: { error: { base: "#ff5555" } },
         },
       };
@@ -133,7 +141,11 @@ async function fixture(width = 120, height = 38, scroll = { speed: 3, accelerati
     await Bun.sleep(50);
     await view.flush();
   };
-  await settle();
+  for (const _ of Array.from({ length: 40 })) {
+    await settle();
+    if (view.captureCharFrame().includes("Review this code carefully:")) break;
+  }
+  expect(view.captureCharFrame()).toContain("Review this code carefully:");
   const node = (id: string) => {
     const node = view.renderer.root.findDescendantById(id);
     if (!(node instanceof Renderable)) throw new Error(`Missing ${id}`);
@@ -169,12 +181,45 @@ async function fixture(width = 120, height = 38, scroll = { speed: 3, accelerati
   };
 }
 
+test("uses native foreground/background pairs for selection, actions and focused search", async () => {
+  const view = await fixture();
+  const span = (text: string) => {
+    const found = view
+      .captureSpans()
+      .lines.flatMap((line) => line.spans)
+      .find((item) => item.text.includes(text));
+    if (!found) throw new Error(`Missing rendered text: ${text}`);
+    return found;
+  };
+  expect(span("› #review").fg).toEqual(RGBA.fromHex("#101010"));
+  expect(span("› #review").bg).toEqual(RGBA.fromHex("#775511"));
+  const row = view
+    .captureSpans()
+    .lines.find((line) => line.spans.some((item) => item.text.includes("› #review")));
+  expect(row?.spans.find((item) => item.text.includes("P"))?.fg).toEqual(RGBA.fromHex("#101010"));
+  view.mockInput.pressTab();
+  view.mockInput.pressTab();
+  view.mockInput.pressTab();
+  await view.settle();
+  expect(span("› #review").fg).toEqual(RGBA.fromHex("#999999"));
+  expect(span("› #review").bg).toEqual(RGBA.fromHex("#304050"));
+  expect(span("● all").fg).toEqual(RGBA.fromHex("#101010"));
+  expect(span("● all").bg).toEqual(RGBA.fromHex("#775511"));
+  view.mockInput.pressKey("/");
+  await view.mockInput.typeText("review");
+  await view.settle();
+  expect(span("review").fg).toEqual(RGBA.fromHex("#aabbcc"));
+  expect(span("review").bg).toEqual(RGBA.fromHex("#203040"));
+});
+
 test("matches the split layout; click source includes, search aliases, filter and select rows", async () => {
   const view = await fixture();
   expect(view.captureCharFrame()).toContain("Review this code carefully:");
   expect(view.captureCharFrame()).toContain("#missing (unresolved)");
   expect(view.node("library-action-new").y).toBe(view.node("library-search").y);
-  expect(view.captureCharFrame()).toContain("[ Edit source ]");
+  expect(view.captureCharFrame()).toContain("edit source enter");
+  expect(view.captureCharFrame()).toContain("more :");
+  expect(view.captureCharFrame()).not.toContain("[ Edit source ]");
   const button = view.node("library-action-edit");
   if (!(button instanceof BoxRenderable)) throw new Error("Not a button");
   const background = button.backgroundColor;
@@ -183,7 +228,7 @@ test("matches the split layout; click source includes, search aliases, filter an
   expect(button.backgroundColor).not.toEqual(background);
   await view.click("library-action-include:base");
   expect(view.state.selected).toEndWith("base.md");
-  expect(view.captureCharFrame()).not.toContain("INCLUDES");
+  expect(view.captureCharFrame()).not.toContain("Includes");
   expect(view.captureCharFrame()).not.toContain("Aliases:");
   expect(view.captureCharFrame()).not.toContain("Fields:");
   await view.click(`library-action-used:${join(view.directory, ".opencode/snippet/review.md")}`);
@@ -220,9 +265,12 @@ test("search Enter selects the result; find, copy and form testing use the unsav
   view.mockInput.pressKey("f", { ctrl: true });
   await view.settle();
   expect(view.captureCharFrame()).toContain("Found: Review");
-  await view.click("library-action-copy");
+  view.answers.push("copy");
+  await view.click("library-action-more");
   expect(view.clipboard).toEqual(["#base"]);
-  await view.click("library-action-form");
+  view.answers.push("form");
+  view.mockInput.pressKey(":");
+  await view.settle();
   expect(view.captureCharFrame()).toContain("Target");
   view.mockInput.pressEnter();
   await view.settle();
@@ -257,8 +305,12 @@ test("native editor enters multiline text under host submit bindings, saves, und
   await view.click("library-file-1");
   await view.click("library-file-2");
   expect(view.editor().plainText).toEndWith("New lineDraftq");
+  view.mockInput.pressEscape();
+  await view.settle();
+  expect(view.closed()).toBe(false);
+  expect(view.renderer.root.findDescendantById("library-editor")).toBeUndefined();
   view.answers.push("cancel");
-  view.mockInput.pressKey("q");
+  view.mockInput.pressEscape();
   await view.settle();
   expect(view.calls).toEqual(["select"]);
   expect(view.closed()).toBe(false);
@@ -271,6 +323,51 @@ test("native editor enters multiline text under host submit bindings, saves, und
   }
   expect(view.closed()).toBe(true);
   expect(await Bun.file(view.path()).text()).toEndWith("New lineDraftq");
+});
+
+test("Escape leaves the editor in one step, then unwinds help and search before closing", async () => {
+  const view = await fixture();
+  view.mockInput.pressKey("/");
+  await view.mockInput.typeText("rev");
+  view.mockInput.pressEscape();
+  await view.settle();
+  expect(view.node("library-search").focused).toBe(false);
+  expect(view.closed()).toBe(false);
+  view.mockInput.pressEnter();
+  await view.settle();
+  expect(view.editor().focused).toBe(true);
+  view.mockInput.pressEscape();
+  await view.settle();
+  expect(view.renderer.root.findDescendantById("library-editor")).toBeUndefined();
+  expect(view.captureCharFrame()).toContain("select j/k");
+  expect(view.closed()).toBe(false);
+  view.mockInput.pressKey("F1");
+  await view.settle();
+  view.mockInput.pressEscape();
+  await view.settle();
+  expect(view.renderer.root.findDescendantById("library-editor")).toBeUndefined();
+  expect(view.closed()).toBe(false);
+  view.mockInput.pressEscape();
+  await view.settle();
+  expect(view.captureCharFrame()).toContain("#global");
+  expect(view.closed()).toBe(false);
+  view.mockInput.pressEscape();
+  await view.settle();
+  expect(view.closed()).toBe(true);
+});
+
+test("q closes directly from a focused action and keeps unsaved drafts", async () => {
+  const view = await fixture();
+  view.mockInput.pressEnter();
+  await view.settle();
+  view.editor().setText("Retain this draft");
+  await view.click("library-action-help");
+  view.mockInput.pressKey("q");
+  await view.settle();
+  expect(view.closed()).toBe(true);
+  expect(view.calls).toEqual([]);
+  expect(view.state.drafts.get(view.path())?.raw).toBe("Retain this draft");
+  expect(await Bun.file(view.path()).text()).not.toBe("Retain this draft");
 });
 
 test("external changes retain the draft and reload asks before discarding", async () => {
@@ -292,6 +389,89 @@ test("external changes retain the draft and reload asks before discarding", asyn
   expect(view.editor().plainText).toBe("External version");
 });
 
+for (const choice of ["clean", "split", "save", "discard", "cancel", "failure", "unconfigured"]) {
+  test(`Shift+Enter opens the selected file through VISUAL: ${choice}`, async () => {
+    const view = await fixture();
+    const previous = {
+      VISUAL: process.env.VISUAL,
+      EDITOR: process.env.EDITOR,
+      OPENCODE_SNIPPETS_EDITOR_TMUX: process.env.OPENCODE_SNIPPETS_EDITOR_TMUX,
+      TMUX: process.env.TMUX,
+    };
+    cleanups.push(() => {
+      for (const key of ["VISUAL", "EDITOR", "OPENCODE_SNIPPETS_EDITOR_TMUX", "TMUX"] as const) {
+        if (previous[key] === undefined) delete process.env[key];
+        if (previous[key] !== undefined) process.env[key] = previous[key];
+      }
+    });
+    const lifecycle: string[] = [];
+    view.renderer.suspend = () => {
+      lifecycle.push("suspend");
+    };
+    view.renderer.resume = () => {
+      lifecycle.push("resume");
+    };
+    const path = view.path();
+    const before = await Bun.file(path).text();
+    const record = join(view.directory, "opened.json");
+    const script = join(view.directory, "editor with spaces.ts");
+    await Bun.write(
+      script,
+      `
+      const path = Bun.argv[2];
+      const content = await Bun.file(path).text();
+      await Bun.write(${JSON.stringify(record)}, JSON.stringify({ path, content }));
+      await Bun.write(path, content + "\\nEXTERNAL_EDIT");
+      process.exit(${choice === "failure" ? 7 : 0});
+    `,
+    );
+    process.env.VISUAL = `${JSON.stringify(process.execPath)} ${JSON.stringify(script)}`;
+    process.env.EDITOR = "this-editor-must-not-run";
+    delete process.env.OPENCODE_SNIPPETS_EDITOR_TMUX;
+    if (choice === "split") {
+      process.env.OPENCODE_SNIPPETS_EDITOR_TMUX = "1";
+      process.env.TMUX = "test-socket";
+    }
+    if (choice === "unconfigured") {
+      delete process.env.VISUAL;
+      delete process.env.EDITOR;
+    }
+    if (["save", "discard", "cancel"].includes(choice)) {
+      view.mockInput.pressEnter();
+      await view.settle();
+      view.editor().setText("INLINE_DRAFT");
+      await view.settle();
+      view.answers.push(choice);
+    }
+    view.mockInput.pressKey("\x1b[13;2u");
+    for (const _ of Array.from({ length: 100 })) {
+      await view.settle();
+      if (
+        choice === "cancel" ||
+        /External editor closed|exited with|Set VISUAL/.test(view.captureCharFrame())
+      )
+        break;
+    }
+    if (choice === "cancel" || choice === "unconfigured") {
+      expect(await Bun.file(record).exists()).toBe(false);
+      expect(await Bun.file(path).text()).toBe(before);
+      expect(lifecycle).toEqual([]);
+      if (choice === "cancel") expect(view.editor().plainText).toBe("INLINE_DRAFT");
+      if (choice === "unconfigured")
+        expect(view.captureCharFrame()).toContain("Set VISUAL or EDITOR");
+      return;
+    }
+    const content = choice === "save" ? "INLINE_DRAFT" : before;
+    expect(await Bun.file(record).json()).toEqual({ path, content });
+    expect(await Bun.file(path).text()).toBe(`${content}\nEXTERNAL_EDIT`);
+    expect(view.captureCharFrame()).toContain("EXTERNAL_EDIT");
+    expect(view.state.drafts.get(path)?.raw).toBe(view.state.drafts.get(path)?.file.raw);
+    expect(view.captureCharFrame()).not.toContain("Unsaved");
+    expect(lifecycle).toEqual(choice === "split" ? [] : ["suspend", "resume"]);
+    if (choice === "failure") expect(view.captureCharFrame()).toContain("code 7");
+  });
+}
+
 test("create, duplicate, rename, move and delete operate on real files", async () => {
   const view = await fixture();
   view.answers.push("new-snippet", "project");
@@ -301,34 +481,34 @@ test("create, duplicate, rename, move and delete operate on real files", async (
   await view.mockInput.typeText("New body");
   view.mockInput.pressKey("s", { ctrl: true });
   await view.settle();
-  view.answers.push("copy", "global");
-  await view.click("library-action-duplicate");
+  view.answers.push("duplicate", "copy", "global");
+  await view.click("library-action-more");
   expect(view.state.selected).toEndWith("global/copy.md");
-  view.answers.push("renamed", true);
-  await view.click("library-action-rename");
+  view.answers.push("rename", "renamed", true);
+  await view.click("library-action-more");
   expect(view.state.selected).toEndWith("renamed.md");
   expect((await view.library.list()).registry.get("copy")?.name).toBe("renamed");
-  view.answers.push(true);
-  await view.click("library-action-move");
+  view.answers.push("move", true);
+  await view.click("library-action-more");
   expect(view.state.selected).toEndWith(".opencode/snippet/renamed.md");
   const deleted = view.path();
-  view.answers.push(true);
-  await view.click("library-action-delete");
+  view.answers.push("delete", true);
+  await view.click("library-action-more");
   expect(await Bun.file(deleted).exists()).toBe(false);
   expect((await view.library.list()).registry.get("new-snippet")?.content).toBe("New body");
 });
 
 test("compact terminal keeps footer, editor and save action visible after resizing", async () => {
   const view = await fixture(72, 32);
-  expect(view.captureCharFrame()).toContain("Esc back");
+  expect(view.captureCharFrame()).toContain("back esc");
   await view.click("library-action-edit");
   const editor = view.editor();
   expect(editor.height).toBeGreaterThan(2);
   expect(editor.y + editor.height).toBeLessThan(view.renderer.height);
   view.resize(130, 45);
   await view.settle();
-  expect(view.captureCharFrame()).toContain("Edit source");
-  expect(view.captureCharFrame()).toContain("Esc back");
+  expect(view.captureCharFrame()).toContain("edit source");
+  expect(view.captureCharFrame()).toContain("back esc");
 });
 
 test.each([

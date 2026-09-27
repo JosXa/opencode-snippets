@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { createLibrary } from "../src/library";
 import { text, withFixture } from "./v2-runtime.fixture";
 
 // Real host tests are opt-in: they need the installed CLI and a built distribution.
@@ -238,28 +239,35 @@ describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("OpenCode 2 runtime", () =
   );
 
   test(
-    "runs management commands once and expands aliases only when submitted",
+    "uses library changes for new submissions without executing removed management commands",
     () =>
       withFixture(async (host) => {
-        const added = await host.submit(
-          '/snippets add made "#chosen !`printf x >> command-ran.txt`" --project --aliases mk',
+        const library = createLibrary(
+          host.directory,
+          join(host.root, "config", "opencode", "snippet"),
         );
-        expect(added.user.text).toContain("Added project snippet #made");
+        await library.create(
+          "made",
+          "project",
+          "---\naliases: [mk]\n---\n#chosen !`printf x >> command-ran.txt`",
+        );
         expect(await Bun.file(join(host.directory, "command-ran.txt")).exists()).toBe(false);
-        const listed = await host.submit("/snippets list");
-        expect(listed.user.text).toContain("#made (aliases: mk)");
-        expect(listed.user.text).toContain("#chosen !`printf x >> command-ran.txt`");
-        expect(await Bun.file(join(host.directory, "command-ran.txt")).exists()).toBe(false);
-        const reloaded = await host.submit("/snippets:reload");
-        expect(reloaded.user.text).toMatch(/\nReloaded \d+ snippets\.$/);
+        const removed = '/snippets add gone "REMOVED" --project';
+        expect((await host.submit(removed)).user.text).toBe(removed);
+        expect(await Bun.file(join(host.snippets, "gone.md")).exists()).toBe(false);
         const expanded = await host.submit("#mk");
         expect(expanded.user.text).toContain("PROJECT_CHOSEN");
         expect(await Bun.file(join(host.directory, "command-ran.txt")).text()).toBe("x");
-        await host.write("made", "EDITED_AFTER_ADD");
-        await host.submit("continue", { session: added.session });
+        const file = (await library.list()).files.find((file) => file.name === "made");
+        if (!file) throw new Error("Missing created snippet");
+        await library.save(file, "EDITED_AFTER_ADD");
+        await host.submit("continue", { session: expanded.session });
         expect(await Bun.file(join(host.snippets, "made.md")).text()).toBe("EDITED_AFTER_ADD");
         const deleted = await host.submit("/snippets delete made");
-        expect(deleted.user.text).toContain("Deleted snippet #made");
+        expect(deleted.user.text).toBe("/snippets delete made");
+        expect(await Bun.file(join(host.snippets, "made.md")).text()).toBe("EDITED_AFTER_ADD");
+        expect((await host.submit("#made")).user.text).toBe("EDITED_AFTER_ADD");
+        await library.remove({ ...file, raw: "EDITED_AFTER_ADD" });
         expect(await Bun.file(join(host.snippets, "made.md")).exists()).toBe(false);
         expect((await host.submit("#mk")).user.text).toBe("#mk");
       }),

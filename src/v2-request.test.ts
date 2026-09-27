@@ -1,13 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  mkdir,
-  readFile,
-  realpath,
-  rm,
-  symlink,
-  mkdtemp as temporary,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, readFile, realpath, rm, mkdtemp as temporary, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Plugin } from "@opencode/plugin";
@@ -161,184 +153,44 @@ describe("native OC2 submitted messages", () => {
     }
   });
 
-  test.each([
-    false,
-    true,
-  ])("multipart global symlink writes and reverse reads persist with a linked directory=%s", async (linkedDir) => {
-    const host = await submissionFixture();
-    try {
-      const globalDir = join(host.directory, "global");
-      const targetDir = linkedDir ? join(host.directory, "dotfiles", "snippets") : globalDir;
-      await Bun.write(join(targetDir, "bar.md"), "OLD");
-      if (linkedDir) await symlink(targetDir, globalDir);
-      await symlink(linkedDir ? join(targetDir, "bar.md") : "bar.md", join(globalDir, "foo.md"));
-      const texts = [
-        '/snippets add foo "NEW"',
-        "#bar #foo",
-        '/snippets add bar "REVERSE"',
-        "#foo #bar",
-        "/snippets delete foo",
-        "#foo #bar",
-      ];
-      const original = {
-        sessionID: "linked-write",
-        messages: [
-          { id: "multipart", role: "user", content: texts.map((text) => ({ type: "text", text })) },
-        ],
-      };
-      const request = structuredClone(original);
-      await host.invoke("context", request);
-      expect(request.messages[0].content[1].text).toBe("NEW NEW");
-      expect(request.messages[0].content[3].text).toBe("REVERSE REVERSE");
-      expect(request.messages[0].content[5].text).toBe("#foo REVERSE");
-      expect(await Bun.file(join(globalDir, "bar.md")).text()).toBe("REVERSE");
-      await host.restart();
-      const replay = structuredClone(original);
-      await host.invoke("context", replay);
-      expect(replay.messages[0].content).toEqual(request.messages[0].content);
-    } finally {
-      await host.dispose();
-    }
-  });
-  test("a created inline skill template resolves before reservation with legacy flags disabled", async () => {
-    const host = await submissionFixture();
-    try {
-      await Bun.write(join(host.directory, ".opencode", "snippet", "config.jsonc"), "{}");
-      const body = '{{skill "hidden"}}';
-      const request = {
-        sessionID: "planned-skill",
-        messages: [
-          {
-            id: "multipart",
-            role: "user",
-            content: [
-              { type: "text", text: `/snippets add inline ${JSON.stringify(body)} --project` },
-              { type: "text", text: "#inline" },
-            ],
-          },
-        ],
-      };
-      await host.invoke("context", request);
-      expect(request.messages[0].content[1].text).toBe("DURABLE_HIDDEN_SKILL");
-      expect(await Bun.file(join(host.directory, ".opencode", "snippet", "inline.md")).text()).toBe(
-        body,
-      );
-    } finally {
-      await host.dispose();
-    }
-  });
-  test("multipart commands preserve sequential creation, overwrite, aliases and deletion fallbacks", async () => {
-    const host = await submissionFixture();
-    try {
-      const texts = [
-        '/snippets add created "CREATED #chosen" --project --aliases fresh --desc "Created description"',
-        "#created #fresh",
-        '/snippets add created "UPDATED" --project --aliases newest',
-        "#created #fresh #newest",
-        '/snippets add victim "GLOBAL" --aliases lower',
-        '/snippets add victim "!`printf BAD >> deleted-ran`" --project --aliases upper',
-        "/snippets delete victim",
-        "#victim #lower #upper",
-        "/snippets delete victim",
-        "#victim #lower",
-        '/snippets add unexpanded "#chosen !`printf BAD >> body-ran`" --project',
-      ];
-      const original = {
-        sessionID: "command-order",
-        messages: [
-          { id: "multipart", role: "user", content: texts.map((text) => ({ type: "text", text })) },
-        ],
-      };
-      const request = structuredClone(original);
-      await host.invoke("context", request);
-      const output = request.messages[0].content;
-      expect(output[1].text).toBe("CREATED CHOSEN_TEXT CREATED CHOSEN_TEXT");
-      expect(output[3].text).toBe("UPDATED #fresh UPDATED");
-      expect(output[7].text).toBe("GLOBAL GLOBAL #upper");
-      expect(output[9].text).toBe("#victim #lower");
-      expect(await Bun.file(join(host.directory, "deleted-ran")).exists()).toBe(false);
-      expect(await Bun.file(join(host.directory, "body-ran")).exists()).toBe(false);
-      expect(
-        await Bun.file(join(host.directory, ".opencode", "snippet", "unexpanded.md")).text(),
-      ).toBe("#chosen !`printf BAD >> body-ran`");
-      await host.restart();
-      const replay = structuredClone(original);
-      await host.invoke("context", replay);
-      expect(replay.messages[0].content).toEqual(output);
-    } finally {
-      await host.dispose();
-    }
-  });
-
-  test("deletion exposes the plural-directory definition and its aliases without executing the removed body", async () => {
-    const host = await submissionFixture();
-    try {
-      await Bun.write(
-        join(host.directory, ".opencode", "snippets", "layer.md"),
-        "---\naliases: [lower]\n---\nFALLBACK",
-      );
-      await Bun.write(
-        join(host.directory, ".opencode", "snippet", "layer.md"),
-        "---\naliases: [upper]\n---\n!`printf BAD >> removed-body`",
-      );
-      const request = {
-        sessionID: "plural-fallback",
-        messages: [
-          {
-            id: "multipart",
-            role: "user",
-            content: [
-              { type: "text", text: "/snippets delete layer" },
-              { type: "text", text: "#layer #lower #upper" },
-            ],
-          },
-        ],
-      };
-      await host.invoke("context", request);
-      expect(request.messages[0].content[1].text).toBe("FALLBACK FALLBACK #upper");
-      expect(await Bun.file(join(host.directory, "removed-body")).exists()).toBe(false);
-    } finally {
-      await host.dispose();
-    }
-  });
-
-  test("planned definitions validate later parts before creating, overwriting, deleting or running shell", async () => {
+  test("removed management commands cannot mutate snippets through prompt or context hooks", async () => {
     const host = await submissionFixture();
     try {
       const directory = join(host.directory, ".opencode", "snippet");
       await Bun.write(join(directory, "victim.md"), "KEEP");
-      const field = "---\nfields:\n  target:\n    required: true\n---\n{{target}}";
-      const original = {
-        sessionID: "planned-validation",
+      const texts = [
+        '/snippets add created "NEW" --project',
+        '/snippets add chosen "OVERWRITTEN" --project',
+        "/snippets delete victim",
+        "/snippets list",
+        "/snippets:reload",
+      ];
+      for (const [index, text] of texts.entries()) {
+        const submission = { sessionID: "removed", messageID: `prompt-${index}`, prompt: { text } };
+        await host.invoke("prompt", submission);
+        expect(submission.prompt.text).toBe(text);
+      }
+      const request = {
+        sessionID: "removed",
         messages: [
           {
-            id: "same",
+            id: "multipart",
             role: "user",
-            content: [
-              { type: "text", text: '/snippets add chosen "OVERWRITTEN" --project' },
-              { type: "text", text: "/snippets delete victim" },
-              {
-                type: "text",
-                text: `/snippets add required "${field}" --project --aliases need`,
-              },
-              { type: "text", text: "!`printf BAD >> planned-effects`" },
-              { type: "text", text: "#need" },
-            ],
+            content: texts.map((text) => ({ type: "text", text })),
           },
         ],
       };
-      const unchanged = structuredClone(original);
-      await host.invoke("context", unchanged);
-      expect(unchanged.messages[0].content).toEqual(original.messages[0].content);
+      await host.restart();
+      await host.invoke("context", request);
+      expect(request.messages[0].content.map((part) => part.text)).toEqual(texts);
       expect(await Bun.file(join(directory, "chosen.md")).text()).toBe("CHOSEN_TEXT");
       expect(await Bun.file(join(directory, "victim.md")).text()).toBe("KEEP");
-      expect(await Bun.file(join(directory, "required.md")).exists()).toBe(false);
-      expect(await Bun.file(join(host.directory, "planned-effects")).exists()).toBe(false);
+      expect(await Bun.file(join(directory, "created.md")).exists()).toBe(false);
     } finally {
       await host.dispose();
     }
   });
-  test("multipart validation precedes commands and shell, and the exact failed key can retry after correction", async () => {
+  test("multipart validation precedes shell, and the exact failed key can retry after correction", async () => {
     const host = await submissionFixture();
     try {
       const directory = join(host.directory, ".opencode", "snippet");
@@ -350,7 +202,6 @@ describe("native OC2 submitted messages", () => {
             id: "same-message",
             role: "user",
             content: [
-              { type: "text", text: '/snippets add created "CREATED" --project' },
               { type: "text", text: "!`printf x >> retry-effects; printf EFFECT`" },
               { type: "text", text: "#review(reviewers=3)" },
             ],
@@ -360,7 +211,6 @@ describe("native OC2 submitted messages", () => {
       const unknown = structuredClone(original);
       await host.invoke("context", unknown);
       expect(unknown.messages[0].content).toEqual(original.messages[0].content);
-      expect(await Bun.file(join(directory, "created.md")).exists()).toBe(false);
       expect(await Bun.file(join(host.directory, "retry-effects")).exists()).toBe(false);
       await Bun.write(
         join(directory, "review.md"),
@@ -370,14 +220,12 @@ describe("native OC2 submitted messages", () => {
       const missing = structuredClone(original);
       await host.invoke("context", missing);
       expect(missing.messages[0].content).toEqual(original.messages[0].content);
-      expect(await Bun.file(join(directory, "created.md")).exists()).toBe(false);
       expect(await Bun.file(join(host.directory, "retry-effects")).exists()).toBe(false);
       host.skills.push({ ...host.skills[0], id: "missing", name: "missing", content: "RESOLVED" });
       await host.restart();
       const corrected = structuredClone(original);
       await host.invoke("context", corrected);
-      expect(corrected.messages[0].content[2].text).toBe("3 RESOLVED");
-      expect(await Bun.file(join(directory, "created.md")).exists()).toBe(true);
+      expect(corrected.messages[0].content[1].text).toBe("3 RESOLVED");
       expect(await Bun.file(join(host.directory, "retry-effects")).text()).toBe("x");
       await Bun.write(join(directory, "review.md"), "---\nfields: null\n---\nBroken");
       await host.restart();
@@ -553,42 +401,6 @@ describe("native OC2 submitted messages", () => {
       await host.invoke("context", fixed);
       expect(fixed.messages[0].content[1].text).toBe("fixed");
       expect(await Bun.file(join(host.directory, "schema-effect")).text()).toBe("x");
-    } finally {
-      await host.dispose();
-    }
-  });
-
-  test("malformed YAML command metadata preserves input before writes or shell effects", async () => {
-    const host = await submissionFixture();
-    try {
-      for (const yaml of ["fields:\n  x: {}\n  x: {}", "fields: [unclosed"]) {
-        const original = {
-          sessionID: "command-yaml-retry",
-          messages: [
-            {
-              id: "same",
-              role: "user",
-              content: [
-                { type: "text", text: "!`printf x >> command-yaml-effect`" },
-                {
-                  type: "text",
-                  text: `/snippets add broken "---\n${yaml}\n---\nBODY" --project --aliases bad`,
-                },
-              ],
-            },
-          ],
-        };
-        for (let attempt = 0; attempt < 3; attempt++) {
-          const unchanged = structuredClone(original);
-          await host.invoke("context", unchanged);
-          expect(unchanged.messages[0].content).toEqual(original.messages[0].content);
-          expect(await Bun.file(join(host.directory, "command-yaml-effect")).exists()).toBe(false);
-          expect(
-            await Bun.file(join(host.directory, ".opencode", "snippet", "broken.md")).exists(),
-          ).toBe(false);
-          await host.restart();
-        }
-      }
     } finally {
       await host.dispose();
     }
@@ -1227,13 +1039,12 @@ describe("V2 request expansion", () => {
     }
   });
 
-  test("runs shell substitutions and management commands once across request rebuilding", async () => {
+  test("runs shell substitutions once across request rebuilding", async () => {
     const directory = await mkdtemp(join(tmpdir(), "opencode-snippets-v2-once-"));
     const snippetDirectory = join(directory, ".opencode", "snippet");
     const skillDirectory = join(directory, "skill", "snippets");
     await mkdir(snippetDirectory, { recursive: true });
     await mkdir(skillDirectory, { recursive: true });
-    await writeFile(join(snippetDirectory, "delete-me.md"), "temporary");
     await writeFile(join(snippetDirectory, "replay.md"), "EXPANDED");
 
     let contextHook: ((request: Record<string, unknown>) => Promise<void>) | undefined;
@@ -1354,38 +1165,6 @@ describe("V2 request expansion", () => {
         "three EXPANDED",
       ]);
 
-      const buildCommandRequest = () => ({
-        sessionID: "command-session",
-        messages: [
-          {
-            id: "command-message",
-            role: "user",
-            content: [{ type: "text", text: "/snippets delete delete-me" }],
-          },
-        ],
-      });
-      const firstCommand = buildCommandRequest();
-      const rebuiltCommand = buildCommandRequest();
-      await contextHook?.(firstCommand);
-      await contextHook?.(rebuiltCommand);
-      expect(firstCommand.messages[0].content[0].text).toContain("Deleted snippet #delete-me");
-      expect(rebuiltCommand.messages[0].content[0].text).toBe(
-        firstCommand.messages[0].content[0].text,
-      );
-      const globalCommand = {
-        sessionID: "global-command-session",
-        messages: [
-          {
-            id: "global-command-message",
-            role: "user",
-            content: [{ type: "text", text: '/snippets add isolated "GLOBAL_ONLY"' }],
-          },
-        ],
-      };
-      await contextHook?.(globalCommand);
-      expect(await readFile(join(directory, "global-snippets", "isolated.md"), "utf8")).toBe(
-        "GLOBAL_ONLY",
-      );
       await cleanup();
     } finally {
       await rm(directory, { recursive: true, force: true });

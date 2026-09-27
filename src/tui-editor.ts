@@ -7,7 +7,14 @@ import { ensureSnippetsDir, validateSnippetName } from "./loader.js";
 export function resolveExternalEditor(environment: NodeJS.ProcessEnv = process.env) {
   for (const env of ["VISUAL", "EDITOR"] as const) {
     const command = environment[env]?.trim();
-    if (command) return { command, env };
+    if (command)
+      return {
+        command,
+        env,
+        ...(environment.OPENCODE_SNIPPETS_EDITOR_TMUX === "1" && environment.TMUX
+          ? { detached: true }
+          : {}),
+      };
   }
 }
 
@@ -67,23 +74,29 @@ export async function openExternalEditor(
   editor: NonNullable<ReturnType<typeof resolveExternalEditor>>,
 ): Promise<void> {
   const invocation = editorInvocation(editor.command, path);
-  renderer.suspend();
+  // A configured tmux editor owns another pane. Keep this pane visible and responsive to resize.
+  if (!editor.detached) renderer.suspend();
   try {
     await new Promise<void>((resolve, reject) => {
       const child = spawn(invocation.command, invocation.args, {
         ...invocation.options,
-        stdio: "inherit",
+        stdio: editor.detached ? ["ignore", "ignore", "pipe"] : "inherit",
       });
+      const errors: string[] = [];
+      child.stderr?.setEncoding("utf8");
+      child.stderr?.on("data", (text: string) => errors.push(text));
       child.once("error", reject);
       child.once("close", (code, signal) => {
         if (code === 0) return resolve();
         reject(
-          new Error(`External editor exited with ${signal ? `signal ${signal}` : `code ${code}`}.`),
+          new Error(
+            `External editor exited with ${signal ? `signal ${signal}` : `code ${code}`}.${errors.length ? `\n${errors.join("").trim()}` : ""}`,
+          ),
         );
       });
     });
   } finally {
-    renderer.resume();
+    if (!editor.detached) renderer.resume();
     renderer.requestRender();
   }
 }

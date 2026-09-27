@@ -46,6 +46,10 @@ git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z
 
 # Style Guide
 
+For TUI color changes, follow [Native color comparison](docs/tui-colors.md).
+Compare foreground/background pairs and focus states against the host control;
+text-only snapshots do not verify colors.
+
 **AVOID:**
 - `else` statements unless truly necessary
 - `try`/`catch` where possible

@@ -18,10 +18,7 @@ import { CONFIG, getProjectPaths, PATHS } from "./constants.js";
 import { logger } from "./logger.js";
 import type { SnippetFrontmatter, SnippetInfo, SnippetRegistry } from "./types.js";
 
-/** Planned file contents; null represents a deletion. Never writes to disk. */
-export type SnippetOverlay = Map<string, string | null>;
-
-// Planned directories may not exist yet; resolve their nearest existing ancestor.
+// New directories may not exist yet; resolve their nearest existing ancestor.
 async function canonicalDirectory(path: string): Promise<string> {
   try {
     return await realpath(path);
@@ -32,16 +29,15 @@ async function canonicalDirectory(path: string): Promise<string> {
   }
 }
 
-async function overlayKey(path: string): Promise<string> {
+async function canonicalFile(path: string): Promise<string> {
   return join(await canonicalDirectory(dirname(path)), basename(path));
 }
 
-// Writes follow existing links; a planned deletion/replacement stops traversal.
-// Reads use the same target, while unlink continues to address the link itself.
-async function overlayTarget(path: string, overlay: SnippetOverlay): Promise<string> {
-  path = await overlayKey(path);
+// Legacy writes follow existing links; unlink addresses the link itself.
+async function resolveSnippetTarget(path: string): Promise<string> {
+  path = await canonicalFile(path);
   const seen = new Set<string>();
-  while (!overlay.has(path)) {
+  while (true) {
     if (seen.has(path)) throw new Error(`Circular snippet symbolic link: ${path}`);
     seen.add(path);
     const target = await readlink(path).catch((error: NodeJS.ErrnoException) => {
@@ -49,9 +45,8 @@ async function overlayTarget(path: string, overlay: SnippetOverlay): Promise<str
       throw error;
     });
     if (target === undefined) return path;
-    path = await overlayKey(resolve(dirname(path), target));
+    path = await canonicalFile(resolve(dirname(path), target));
   }
-  return path;
 }
 
 function getGlobalSnippetDirs(globalDir?: string): string[] {
@@ -74,11 +69,7 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-async function resolveWritableSnippetDir(
-  projectDir?: string,
-  globalDir?: string,
-  overlay?: SnippetOverlay,
-): Promise<string> {
+async function resolveWritableSnippetDir(projectDir?: string, globalDir?: string): Promise<string> {
   if (!projectDir && globalDir) return globalDir;
   const paths = projectDir
     ? getProjectPaths(projectDir)
@@ -86,12 +77,7 @@ async function resolveWritableSnippetDir(
 
   // Support both snippet/ and snippets/. Reuse an existing directory first, then default to snippet/.
   for (const dir of [paths.SNIPPETS_DIR, paths.SNIPPETS_DIR_ALT]) {
-    const key = overlay ? await canonicalDirectory(dir) : dir;
-    if (
-      (await pathExists(dir)) ||
-      [...(overlay ?? [])].some(([path, value]) => dirname(path) === key && value !== null)
-    )
-      return dir;
+    if (await pathExists(dir)) return dir;
   }
 
   return paths.SNIPPETS_DIR;
@@ -115,17 +101,12 @@ function isContained(parent: string, candidate: string): boolean {
   );
 }
 
-async function assertContainedSnippetPath(
-  dir: string,
-  filePath: string,
-  overlay?: SnippetOverlay,
-): Promise<string> {
+async function assertContainedSnippetPath(dir: string, filePath: string): Promise<void> {
   const resolvedDir = await canonicalDirectory(dir);
-  const resolvedFile = await overlayTarget(filePath, overlay ?? new Map());
+  const resolvedFile = await resolveSnippetTarget(filePath);
   if (!isContained(resolvedDir, resolvedFile)) {
     throw new Error(`Snippet path escapes its configured directory: ${filePath}`);
   }
-  return resolvedFile;
 }
 
 async function assertProjectSnippetDirectory(projectDir: string, dir: string): Promise<boolean> {
@@ -185,25 +166,19 @@ async function assertProjectSnippetCreationTarget(projectDir: string, dir: strin
 export async function loadSnippets(
   projectDir?: string,
   globalDir?: string,
-  overlay?: SnippetOverlay,
 ): Promise<SnippetRegistry> {
   const snippets: SnippetRegistry = new Map();
 
   // Support both snippet/ and snippets/. Load plural first so existing snippet/ files still win.
   for (const dir of getGlobalSnippetDirs(globalDir)) {
-    await loadFromDirectory(dir, snippets, "global", overlay);
+    await loadFromDirectory(dir, snippets, "global");
   }
 
   // Load from project directory if provided (overrides global)
   if (projectDir) {
     for (const dir of getProjectSnippetDirs(projectDir)) {
-      const key = overlay ? await canonicalDirectory(dir) : dir;
-      if (
-        !(await assertProjectSnippetDirectory(projectDir, dir)) &&
-        ![...(overlay?.keys() ?? [])].some((path) => dirname(path) === key)
-      )
-        continue;
-      await loadFromDirectory(dir, snippets, "project", overlay);
+      if (!(await assertProjectSnippetDirectory(projectDir, dir))) continue;
+      await loadFromDirectory(dir, snippets, "project");
     }
   }
 
@@ -221,26 +196,14 @@ async function loadFromDirectory(
   dir: string,
   registry: SnippetRegistry,
   source: "global" | "project",
-  overlay?: SnippetOverlay,
 ): Promise<void> {
   try {
-    const key = overlay ? await canonicalDirectory(dir) : dir;
-    const files = [
-      ...new Set([
-        ...(await readdir(dir).catch((error) => {
-          if (error.code === "ENOENT") return [];
-          throw error;
-        })),
-        ...[...(overlay?.keys() ?? [])]
-          .filter((path) => dirname(path) === key)
-          .map((path) => basename(path)),
-      ]),
-    ].sort();
+    const files = (await readdir(dir)).sort();
 
     for (const file of files) {
       if (!file.endsWith(CONFIG.SNIPPET_EXTENSION)) continue;
 
-      const snippet = await loadSnippetFile(dir, file, source, overlay);
+      const snippet = await loadSnippetFile(dir, file, source);
       if (snippet) {
         registerSnippet(registry, snippet);
       }
@@ -271,18 +234,11 @@ async function loadSnippetFile(
   dir: string,
   filename: string,
   source: "global" | "project",
-  overlay?: SnippetOverlay,
 ): Promise<SnippetInfo | null> {
   try {
     const name = basename(filename, CONFIG.SNIPPET_EXTENSION);
     const filePath = join(dir, filename);
-    const target =
-      overlay && source === "global"
-        ? await overlayTarget(filePath, overlay)
-        : await overlayKey(filePath);
-    const planned = overlay?.get(target);
-    if (planned === null) return null;
-    if (source === "project" && planned === undefined) {
+    if (source === "project") {
       const details = await lstat(filePath);
       if (details.isSymbolicLink()) {
         throw new Error(`Project snippet file must not be a symbolic link: ${filePath}`);
@@ -292,7 +248,7 @@ async function loadSnippetFile(
         throw new Error(`Project snippet file escapes its configured directory: ${filePath}`);
       }
     }
-    const fileContent = planned ?? (await readFile(filePath, "utf8"));
+    const fileContent = await readFile(filePath, "utf8");
     let parsed: ReturnType<typeof matter>;
     try {
       // gray-matter caches before parsing; disable its cache so failed YAML
@@ -417,15 +373,11 @@ export async function createSnippet(
   options: { aliases?: string[]; description?: string } = {},
   projectDir?: string,
   globalDir?: string,
-  overlay?: SnippetOverlay,
 ): Promise<string> {
   validateSnippetName(name);
-  const dir = overlay
-    ? await resolveWritableSnippetDir(projectDir, globalDir, overlay)
-    : await ensureSnippetsDir(projectDir, globalDir);
-  if (overlay && projectDir) await assertProjectSnippetCreationTarget(projectDir, dir);
+  const dir = await ensureSnippetsDir(projectDir, globalDir);
   const filePath = join(dir, `${name}${CONFIG.SNIPPET_EXTENSION}`);
-  const target = await assertContainedSnippetPath(dir, filePath, overlay);
+  await assertContainedSnippetPath(dir, filePath);
 
   // Build frontmatter if we have metadata
   const frontmatter: SnippetFrontmatter = {};
@@ -444,9 +396,7 @@ export async function createSnippet(
     fileContent = content;
   }
 
-  if (overlay) {
-    overlay.set(target, fileContent);
-  } else await writeFile(filePath, fileContent, "utf8");
+  await writeFile(filePath, fileContent, "utf8");
   logger.info("Created snippet", { name, path: filePath });
 
   return filePath;
@@ -463,7 +413,6 @@ export async function deleteSnippet(
   name: string,
   projectDir?: string,
   globalDir?: string,
-  overlay?: SnippetOverlay,
 ): Promise<string | null> {
   validateSnippetName(name);
   // Try project directory first if provided
@@ -472,18 +421,9 @@ export async function deleteSnippet(
     for (const dir of [paths.SNIPPETS_DIR, paths.SNIPPETS_DIR_ALT]) {
       const filePath = join(dir, `${name}${CONFIG.SNIPPET_EXTENSION}`);
       try {
-        const key = await overlayKey(filePath);
-        if (overlay?.has(key)) {
-          if (overlay.get(key) === null) continue;
-          overlay.set(key, null);
-          return filePath;
-        }
         if (!(await assertProjectSnippetDirectory(projectDir, dir))) continue;
-        await assertContainedSnippetPath(dir, filePath, overlay);
-        if (overlay) {
-          await lstat(filePath);
-          overlay.set(key, null);
-        } else await unlink(filePath);
+        await assertContainedSnippetPath(dir, filePath);
+        await unlink(filePath);
         logger.info("Deleted project snippet", { name, path: filePath });
         return filePath;
       } catch (error) {
@@ -496,17 +436,8 @@ export async function deleteSnippet(
   for (const dir of globalDir ? [globalDir] : [PATHS.SNIPPETS_DIR, PATHS.SNIPPETS_DIR_ALT]) {
     const filePath = join(dir, `${name}${CONFIG.SNIPPET_EXTENSION}`);
     try {
-      const key = await overlayKey(filePath);
-      if (overlay?.has(key)) {
-        if (overlay.get(key) === null) continue;
-        overlay.set(key, null);
-        return filePath;
-      }
-      await assertContainedSnippetPath(dir, filePath, overlay);
-      if (overlay) {
-        await lstat(filePath);
-        overlay.set(key, null);
-      } else await unlink(filePath);
+      await assertContainedSnippetPath(dir, filePath);
+      await unlink(filePath);
       logger.info("Deleted global snippet", { name, path: filePath });
       return filePath;
     } catch (error) {
@@ -525,10 +456,9 @@ export async function reloadSnippets(
   registry: SnippetRegistry,
   projectDir?: string,
   globalDir?: string,
-  overlay?: SnippetOverlay,
 ): Promise<void> {
   registry.clear();
-  const fresh = await loadSnippets(projectDir, globalDir, overlay);
+  const fresh = await loadSnippets(projectDir, globalDir);
   for (const [key, value] of fresh) {
     registry.set(key, value);
   }

@@ -30,6 +30,9 @@ jobs:
       - name: Run typecheck
         run: bun run typecheck
 
+      - name: Typecheck Cucumber steps and TUI driver
+        run: bun run typecheck:bdd
+
   build:
     name: Build
     runs-on: ubuntu-24.04
@@ -62,7 +65,20 @@ jobs:
         run: bun install
 
       - name: Run tests
+        # Includes tests/library-bdd.test.ts, which runs the native TUI journeys
+        # in a fresh process with Solid's reactive browser condition.
         run: bun test
+        env:
+          SNIPPETS_BDD_ARTIFACTS: .tmp/bdd
+
+      - name: Upload Cucumber reports and TUI failure traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snippets-library-bdd
+          path: .tmp/bdd
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   runtime-v1:
     name: OpenCode 1 runtime
