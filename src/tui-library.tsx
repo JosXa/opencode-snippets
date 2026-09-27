@@ -860,16 +860,17 @@ export function SnippetLibrary(props: {
           />
         </ActionBar>
       </box>
-      <box flexDirection={width() < 80 ? "column" : "row"} flexGrow={1} minHeight={0}>
+      {/* Keep the list beside the preview at full available height, even in narrow terminals. */}
+      <box flexDirection="row" flexGrow={1} minHeight={0}>
         <scrollbox
           id="library-list"
           scrollAcceleration={acceleration()}
           scrollbarOptions={{ visible: false }}
           ref={list}
-          width={width() < 80 ? "100%" : "32%"}
-          height={width() < 80 ? (editing() ? 5 : 7) : undefined}
+          width="32%"
+          height="100%"
           flexShrink={0}
-          border={width() < 80 ? ["bottom"] : ["right"]}
+          border={["right"]}
           borderColor={focus() === "list" ? theme().text.base : theme().border.base}
         >
           <For

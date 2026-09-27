@@ -498,17 +498,32 @@ test("create, duplicate, rename, move and delete operate on real files", async (
   expect((await view.library.list()).registry.get("new-snippet")?.content).toBe("New body");
 });
 
-test("compact terminal keeps footer, editor and save action visible after resizing", async () => {
+test("list fills the available height in inspect and edit modes across terminal resizes", async () => {
   const view = await fixture(72, 32);
-  expect(view.captureCharFrame()).toContain("back esc");
-  await view.click("library-action-edit");
-  const editor = view.editor();
-  expect(editor.height).toBeGreaterThan(2);
-  expect(editor.y + editor.height).toBeLessThan(view.renderer.height);
-  view.resize(130, 45);
-  await view.settle();
-  expect(view.captureCharFrame()).toContain("edit source");
-  expect(view.captureCharFrame()).toContain("back esc");
+  for (const [width, height] of [
+    [72, 32],
+    [130, 45],
+    [60, 28],
+    [120, 38],
+  ]) {
+    view.resize(width, height);
+    await view.settle();
+    for (const mode of ["inspect", "edit"]) {
+      await view.click(`library-action-${mode}`);
+      const list = view.node("library-list");
+      const footer = view.node("library-action-help").parent;
+      if (!footer) throw new Error("Missing footer");
+      expect(list.height).toBe(footer.y - list.y);
+      expect(list.height).toBeGreaterThan(7);
+      expect(view.captureCharFrame()).toContain("back esc");
+      if (mode === "edit") {
+        const editor = view.editor();
+        expect(editor.x).toBeGreaterThan(list.x);
+        expect(editor.height).toBeGreaterThan(2);
+        expect(editor.y + editor.height).toBeLessThan(view.renderer.height);
+      }
+    }
+  }
 });
 
 test.each([
