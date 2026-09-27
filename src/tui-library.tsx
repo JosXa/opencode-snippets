@@ -963,35 +963,6 @@ export function SnippetLibrary(props: {
                   flexGrow={1}
                   minHeight={0}
                 >
-                  <text fg={theme().text.muted}>
-                    {focus() === "preview" ? "Source · preview focused" : "Source"}
-                  </text>
-                  <For each={(current()?.content ?? "").split("\n")}>
-                    {(line) => (
-                      <box flexDirection="row" flexWrap="wrap" flexShrink={0} minHeight={1}>
-                        <For each={line.split(/(#[a-z0-9][a-z0-9_-]*)/gi)}>
-                          {(part) => {
-                            const reference =
-                              /^#[a-z0-9]/i.test(part) &&
-                              registry().has(part.slice(1).toLowerCase());
-                            return (
-                              // biome-ignore lint/a11y/noStaticElementInteractions: Includes below supply the same navigation with keyboard-focusable controls.
-                              <text
-                                fg={
-                                  reference ? theme().text.action.primary.base : theme().text.base
-                                }
-                                onMouseUp={() => {
-                                  if (reference) navigate(part.slice(1));
-                                }}
-                              >
-                                {part}
-                              </text>
-                            );
-                          }}
-                        </For>
-                      </box>
-                    )}
-                  </For>
                   <Show when={snippetReferences(current()?.content ?? "").length}>
                     <text marginTop={1} fg={theme().text.muted}>
                       Includes (static references)
@@ -1027,6 +998,35 @@ export function SnippetLibrary(props: {
                   <Show when={details().error}>
                     <text fg={theme().text.feedback.error.base}>{details().error}</text>
                   </Show>
+                  <text marginTop={1} fg={theme().text.muted}>
+                    {focus() === "preview" ? "Source · preview focused" : "Source"}
+                  </text>
+                  <For each={(current()?.content ?? "").split("\n")}>
+                    {(line) => (
+                      <box flexDirection="row" flexWrap="wrap" flexShrink={0} minHeight={1}>
+                        <For each={line.split(/(#[a-z0-9][a-z0-9_-]*)/gi)}>
+                          {(part) => {
+                            const reference =
+                              /^#[a-z0-9]/i.test(part) &&
+                              registry().has(part.slice(1).toLowerCase());
+                            return (
+                              // biome-ignore lint/a11y/noStaticElementInteractions: Includes above supply the same navigation with keyboard-focusable controls.
+                              <text
+                                fg={
+                                  reference ? theme().text.action.primary.base : theme().text.base
+                                }
+                                onMouseUp={() => {
+                                  if (reference) navigate(part.slice(1));
+                                }}
+                              >
+                                {part}
+                              </text>
+                            );
+                          }}
+                        </For>
+                      </box>
+                    )}
+                  </For>
                 </scrollbox>
               }
             >

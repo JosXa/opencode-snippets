@@ -143,9 +143,9 @@ async function fixture(width = 120, height = 38, scroll = { speed: 3, accelerati
   };
   for (const _ of Array.from({ length: 40 })) {
     await settle();
-    if (view.captureCharFrame().includes("Review this code carefully:")) break;
+    if (view.captureCharFrame().includes("Includes (static references)")) break;
   }
-  expect(view.captureCharFrame()).toContain("Review this code carefully:");
+  expect(view.captureCharFrame()).toContain("Includes (static references)");
   const node = (id: string) => {
     const node = view.renderer.root.findDescendantById(id);
     if (!(node instanceof Renderable)) throw new Error(`Missing ${id}`);
