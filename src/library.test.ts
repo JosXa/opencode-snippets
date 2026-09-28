@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   copyLibrarySource,
@@ -14,7 +15,7 @@ afterEach(async () => {
   for (const path of roots.splice(0)) await rm(path, { recursive: true, force: true });
 });
 async function fixture() {
-  const root = await mkdtemp("/tmp/opencode/snippets-library-");
+  const root = await mkdtemp(join(tmpdir(), "snippets-library-"));
   roots.push(root);
   const global = join(root, "global");
   await mkdir(global);

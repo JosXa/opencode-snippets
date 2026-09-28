@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   BoxRenderable,
@@ -27,7 +28,7 @@ async function fixture(width = 120, height = 38, scroll = { speed: 3, accelerati
     if (previous === undefined) delete process.env.OPENCODE_CLI_CONFIG_CONTENT;
     if (previous !== undefined) process.env.OPENCODE_CLI_CONFIG_CONTENT = previous;
   });
-  const directory = await mkdtemp("/tmp/opencode/library-render-");
+  const directory = await mkdtemp(join(tmpdir(), "library-render-"));
   cleanups.push(() => rm(directory, { recursive: true, force: true }));
   const globalDirectory = join(directory, "global");
   const library = createLibrary(directory, globalDirectory);
