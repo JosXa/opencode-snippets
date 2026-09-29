@@ -519,7 +519,7 @@ A default config file is created automatically on first run.
 
 ```jsonc
 {
-  "$schema": "https://raw.githubusercontent.com/JosXa/opencode-snippets/v3.3.0/schema/config.schema.json",
+  "$schema": "https://raw.githubusercontent.com/JosXa/opencode-snippets/v3.3.1/schema/config.schema.json",
   "logging": {
     "debug": false // Enable debug logging (logs: $XDG_DATA_HOME/opencode/log/snippets/daily/)
   },
