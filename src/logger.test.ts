@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
-import { tmpdir } from "os";
+import { homedir, tmpdir } from "os";
 import { join } from "path";
 import { Logger } from "./logger.js";
 
@@ -137,5 +137,42 @@ describe("Logger", () => {
       expect(content).toContain("first message");
       expect(content).toContain("second message");
     });
+  });
+});
+
+describe("default log directory", () => {
+  it("writes to the XDG data directory even when OpenCode's config directory is set", () => {
+    const home = mkdtempSync(join(tmpdir(), "snippets-data-test-"));
+    const oldDataHome = process.env.XDG_DATA_HOME;
+    const oldConfigDir = process.env.OPENCODE_CONFIG_DIR;
+    try {
+      process.env.XDG_DATA_HOME = join(home, "data");
+      process.env.OPENCODE_CONFIG_DIR = join(home, "config");
+      new Logger().info("data directory test");
+
+      const today = new Date().toISOString().split("T")[0];
+      const logFile = join(home, "data", "opencode", "log", "snippets", "daily", `${today}.log`);
+      expect(readFileSync(logFile, "utf-8")).toContain("data directory test");
+      expect(existsSync(join(home, "config", "logs", "snippets"))).toBe(false);
+    } finally {
+      if (oldDataHome === undefined) delete process.env.XDG_DATA_HOME;
+      else process.env.XDG_DATA_HOME = oldDataHome;
+      if (oldConfigDir === undefined) delete process.env.OPENCODE_CONFIG_DIR;
+      else process.env.OPENCODE_CONFIG_DIR = oldConfigDir;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the user's data directory when XDG_DATA_HOME is unset", () => {
+    const oldDataHome = process.env.XDG_DATA_HOME;
+    try {
+      delete process.env.XDG_DATA_HOME;
+      expect(new Logger()).toHaveProperty(
+        "logDir",
+        join(homedir(), ".local", "share", "opencode", "log", "snippets"),
+      );
+    } finally {
+      if (oldDataHome !== undefined) process.env.XDG_DATA_HOME = oldDataHome;
+    }
   });
 });

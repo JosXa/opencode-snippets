@@ -1,6 +1,6 @@
+import { homedir } from "node:os";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { PATHS } from "./constants.js";
 
 export class Logger {
   private logDir: string;
@@ -8,13 +8,22 @@ export class Logger {
   /**
    * When true, every log call is a no-op. Used by the exported singleton under
    * test to avoid synchronous disk I/O (which is slow and flaky under load) and
-   * to keep the test suite from polluting the real ~/.config/opencode log dir.
+   * to keep the test suite from polluting the real OpenCode data log directory.
    * Explicitly-constructed Logger instances (e.g. in logger.test.ts) stay active.
    */
   private silent: boolean;
 
   constructor(logDirOverride?: string, debugEnabled = false, silent = false) {
-    this.logDir = logDirOverride ?? join(PATHS.CONFIG_DIR, "logs", "snippets");
+    // OpenCode watches its config tree. Appending logs there reloads config and
+    // rebuilds skill watchers for every loaded location on each log write.
+    this.logDir =
+      logDirOverride ??
+      join(
+        process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"),
+        "opencode",
+        "log",
+        "snippets",
+      );
     this.debugEnabled = debugEnabled;
     this.silent = silent;
   }

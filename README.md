@@ -521,7 +521,7 @@ A default config file is created automatically on first run.
 {
   "$schema": "https://raw.githubusercontent.com/JosXa/opencode-snippets/v3.3.0/schema/config.schema.json",
   "logging": {
-    "debug": false // Enable debug logging (logs: ~/.config/opencode/logs/snippets/daily/)
+    "debug": false // Enable debug logging (logs: $XDG_DATA_HOME/opencode/log/snippets/daily/)
   },
   "experimental": {
     "injectBlocks": false, // Enable <inject>...</inject> blocks for persistent context
@@ -536,7 +536,11 @@ All boolean settings accept: `true`, `false`, `"enabled"`, `"disabled"`
 
 ### Debug Logging
 
-Logs are written to `~/.config/opencode/logs/snippets/daily/` when enabled.
+Logs are written to `$XDG_DATA_HOME/opencode/log/snippets/daily/` (or
+`~/.local/share/opencode/log/snippets/daily/` when `XDG_DATA_HOME` is unset).
+Info, warning, and error messages are always written; `logging.debug` also
+enables debug messages. Keeping logs outside the OpenCode configuration
+directory prevents each append from reloading config and rebuilding skill watches.
 
 ## Behavior Notes
 

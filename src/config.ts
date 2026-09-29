@@ -114,7 +114,7 @@ const DEFAULT_CONFIG_CONTENT = `{
   // Logging settings
   "logging": {
     // Enable debug logging to file
-    // Logs are written to ~/.config/opencode/logs/snippets/daily/
+    // Logs are written to $XDG_DATA_HOME/opencode/log/snippets/daily/
     // Values: true, false, "enabled", "disabled"
     // Default: false
     "debug": false
