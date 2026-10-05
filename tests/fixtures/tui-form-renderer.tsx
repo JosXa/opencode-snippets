@@ -156,6 +156,55 @@ test("small forms retain their natural compact height", async () => {
   }
 });
 
+test("multiselect shows all nine choices when they fit and adapts its viewport on resize", async () => {
+  const options = Array.from({ length: 9 }, (_, index) => `Check ${index + 1}`);
+  const view = await testRender(
+    () => {
+      const plugin = context(useRenderer());
+      return (
+        <box position="absolute" top={3} width="100%">
+          <SnippetForm
+            context={plugin}
+            name="audit-tests"
+            fields={[
+              { name: "checks", label: "Checks", type: "multiselect", required: false, options },
+            ]}
+            values={{ checks: options }}
+            save={() => {}}
+            cancel={() => {}}
+          />
+        </box>
+      );
+    },
+    { width: 90, height: 30 },
+  );
+  try {
+    await view.flush();
+    const select = view.renderer.root.findDescendantById("snippet-select-0");
+    const action = view.renderer.root.findDescendantById("snippet-field-1");
+    if (!(select instanceof SelectRenderable) || !(action instanceof Renderable))
+      throw new Error("Missing form controls");
+    expect(select.height).toBe(9);
+    expect(view.captureCharFrame()).toContain("[x] Check 9");
+    expect(view.captureCharFrame()).toContain("OK");
+    for (let index = 0; index < options.length - 1; index++) view.mockInput.pressArrow("down");
+    view.resize(38, 16);
+    await view.flush();
+    expect(select.height).toBeLessThan(9);
+    expect(select.height).toBeGreaterThan(0);
+    expect(view.captureCharFrame()).toContain("[x] Check 9");
+    expect(view.captureCharFrame()).toContain("OK");
+    expect(action.y + action.height).toBeLessThanOrEqual(view.renderer.height);
+    view.resize(90, 30);
+    await view.flush();
+    expect(select.height).toBe(9);
+    expect(view.captureCharFrame()).toContain("[x] Check 1");
+    expect(view.captureCharFrame()).toContain("[x] Check 9");
+  } finally {
+    view.renderer.destroy();
+  }
+});
+
 test("multiselect toggles with Space and mouse, scrolls to later choices, and saves an array", async () => {
   const options = [
     "assertions",
@@ -213,7 +262,7 @@ test("multiselect toggles with Space and mouse, scrolls to later choices, and sa
     for (let index = 0; index < options.length - 1; index++) view.mockInput.pressArrow("down");
     await view.flush();
     expect(view.captureCharFrame()).toContain("[x] project code");
-    view.resize(38, 20);
+    view.resize(38, 16);
     await view.flush();
     expect(view.captureCharFrame()).toContain("[x] project code");
     // Click the first visible row after scrolling; it is snapshots, not assertions.

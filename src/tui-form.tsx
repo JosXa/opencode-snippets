@@ -106,6 +106,20 @@ export function SnippetForm(props: {
         // form at that actual position; Yoga accounts for wrapped hints and padding.
         const available = Math.max(0, props.context.renderer.height - this.y);
         if (this.maxHeight !== available) this.maxHeight = available;
+        if (!scroll) return;
+        const header = this.height - scroll.height;
+        for (const [index, select] of selects) {
+          const field = props.fields[index];
+          if (field.type !== "multiselect") continue;
+          // Fill the available rows, leaving room for this field's label and
+          // hint, plus the action row and its gap. Measure wrapped text as laid out.
+          const extra = (select.parent?.height ?? select.height) - select.height;
+          const height = Math.min(
+            field.options?.length ?? 0,
+            Math.max(1, available - header - extra - 2),
+          );
+          if (select.height !== height) select.height = height;
+        }
       }}
     >
       <text flexShrink={0} fg={palette().text.base}>
@@ -159,10 +173,11 @@ export function SnippetForm(props: {
                         {...colors()}
                         id={`snippet-select-${index()}`}
                         focused={focus() === index()}
-                        height={Math.min(
-                          field.type === "multiselect" ? 6 : 4,
-                          (field.options?.length ?? 0) + (field.type === "select" ? 1 : 0),
-                        )}
+                        height={
+                          field.type === "multiselect"
+                            ? (field.options?.length ?? 0)
+                            : Math.min(4, (field.options?.length ?? 0) + 1)
+                        }
                         ref={(select) => selects.set(index(), select)}
                         itemSpacing={0}
                         options={[
