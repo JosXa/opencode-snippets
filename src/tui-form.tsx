@@ -37,10 +37,19 @@ export function SnippetForm(props: {
     setFocus(index);
     scroll?.scrollChildIntoView(`snippet-field-${index}`);
   };
-  const update = (name: string, value: string | boolean) => {
+  const update = (name: string, value: string | boolean | string[]) => {
     const next = { ...draft(), [name]: value };
     setDraft(next);
     if (attempted()) setErrors(validateFormDraft(props.fields, next).errors);
+  };
+  const toggle = (field: FieldDefinition, value: string) => {
+    const selected = draft()[field.name];
+    if (!Array.isArray(selected)) return;
+    // Keep selections in authored order regardless of the order of toggles.
+    update(
+      field.name,
+      (field.options ?? []).filter((option) => selected.includes(option) !== (option === value)),
+    );
   };
   const toggleHelp = () => {
     setHelp((value) => !value);
@@ -70,7 +79,10 @@ export function SnippetForm(props: {
       else save();
     } else if (name === "space" && field?.type === "checkbox")
       update(field.name, !draft()[field.name]);
-    else if (name === "space" && !field) {
+    else if (name === "space" && field?.type === "multiselect") {
+      const option = selects.get(focus())?.getSelectedOption();
+      if (typeof option?.value === "string") toggle(field, option.value);
+    } else if (name === "space" && !field) {
       if (focus() === props.fields.length) save();
       else if (focus() === props.fields.length + 2) toggleHelp();
       else props.cancel();
@@ -139,26 +151,47 @@ export function SnippetForm(props: {
                         }
                       />
                     </Match>
-                    <Match when={field.type === "select"}>
+                    <Match when={field.type === "select" || field.type === "multiselect"}>
+                      <Show when={field.type === "multiselect"}>
+                        <text fg={palette().text.muted}>↑ / ↓ choose · Space toggles</text>
+                      </Show>
                       <select
                         {...colors()}
+                        id={`snippet-select-${index()}`}
                         focused={focus() === index()}
-                        height={Math.min(4, (field.options?.length ?? 0) + 1)}
+                        height={Math.min(
+                          field.type === "multiselect" ? 6 : 4,
+                          (field.options?.length ?? 0) + (field.type === "select" ? 1 : 0),
+                        )}
                         ref={(select) => selects.set(index(), select)}
                         itemSpacing={0}
                         options={[
-                          {
-                            name: field.required ? "(choose)" : "(none)",
-                            description: "",
-                            value: "",
-                          },
-                          ...(field.options ?? []).map((value) => ({
-                            name: value,
-                            description: "",
-                            value,
-                          })),
+                          ...(field.type === "select"
+                            ? [
+                                {
+                                  name: field.required ? "(choose)" : "(none)",
+                                  description: "",
+                                  value: "",
+                                },
+                              ]
+                            : []),
+                          ...(field.options ?? []).map((value) => {
+                            const selected = draft()[field.name];
+                            return {
+                              name:
+                                field.type === "multiselect"
+                                  ? `[${Array.isArray(selected) && selected.includes(value) ? "x" : " "}] ${value}`
+                                  : value,
+                              description: "",
+                              value,
+                            };
+                          }),
                         ]}
-                        selectedIndex={(field.options ?? []).indexOf(initial) + 1}
+                        selectedIndex={
+                          field.type === "multiselect"
+                            ? 0
+                            : (field.options ?? []).indexOf(initial) + 1
+                        }
                         selectedBackgroundColor={palette().background.action.primary.focused}
                         selectedTextColor={palette().text.action.primary.focused}
                         showDescription={false}
@@ -172,14 +205,21 @@ export function SnippetForm(props: {
                             0,
                             Math.min(
                               select.getSelectedIndex() - Math.floor(select.height / 2),
-                              (field.options?.length ?? 0) + 1 - select.height,
+                              (field.options?.length ?? 0) +
+                                (field.type === "select" ? 1 : 0) -
+                                select.height,
                             ),
                           );
                           select.setSelectedIndex(offset + event.y - select.y);
+                          if (field.type === "multiselect") {
+                            const option = select.getSelectedOption();
+                            if (typeof option?.value === "string") toggle(field, option.value);
+                          }
                           event.preventDefault();
                         }}
                         onChange={(_index, option) => {
-                          if (typeof option?.value === "string") update(field.name, option.value);
+                          if (field.type === "select" && typeof option?.value === "string")
+                            update(field.name, option.value);
                         }}
                       />
                     </Match>

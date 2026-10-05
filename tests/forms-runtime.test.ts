@@ -3,6 +3,81 @@ import { join } from "node:path";
 import { text, withFixture } from "./v2-runtime.fixture";
 
 describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("snippet forms in OpenCode V2", () => {
+  test("multiselect defaults, subsets, empty answers, and literal items reach the model", async () => {
+    await withFixture(async (host) => {
+      await host.write(
+        "audit-tests",
+        await Bun.file(new URL("../examples/forms/audit-tests.md", import.meta.url)).text(),
+      );
+      await host.verify();
+      const cases = [
+        { prompt: "#audit-tests", count: 9, included: "- No meaningful assertions" },
+        {
+          prompt: '#audit-tests(checks=["Mocks that bypass the behavior under test"])',
+          count: 1,
+          included: "- Mocks that bypass the behavior under test",
+        },
+        {
+          prompt: "#audit-tests(checks=[])",
+          count: 0,
+          included: "Keep small tests that check real behavior.",
+        },
+      ];
+      for (const { prompt, count, included } of cases) {
+        const result = await host.submit(prompt);
+        expect(result.user.text).toStartWith("Find and delete or improve tests in the project");
+        expect(result.user.text).toContain(included);
+        expect(result.user.text.match(/^- /gm) ?? []).toHaveLength(count);
+        expect(result.user.text.includes("Look out for:")).toBe(count > 0);
+        expect(
+          result.calls.at(-1)?.messages.some((message) => text(message) === result.user.text),
+        ).toBe(true);
+      }
+      const answer =
+        '#chosen #skill(local) <inject>BAD</inject> {{this}} !`printf BAD >> array-ran.txt` 🙂\n"quotes", [brackets]';
+      await host.write(
+        "multi",
+        `---\nfields:\n  checks:\n    type: multiselect\n    options: ${JSON.stringify([answer, "plain"])}\n---\n{{#each checks}}[{{this}}]{{/each}}`,
+      );
+      const prompt = `#multi(checks=${JSON.stringify([answer])})`;
+      const first = await host.submit(prompt);
+      expect(first.user.text).toBe(`[${answer}]`);
+      expect(
+        first.calls.at(-1)?.messages.some((message) => text(message) === first.user.text),
+      ).toBe(true);
+      expect(first.user.metadata?.["opencode-snippets:submitted"].injections).toEqual([]);
+      expect(first.user.metadata?.["opencode-snippets:submitted"].hidden).toEqual([]);
+      await host.write("multi", "CHANGED_ARRAY_DEFINITION");
+      const resumed = await host.submit("continue", { session: first.session });
+      expect(
+        resumed.calls.at(-1)?.messages.some((message) => text(message) === `[${answer}]`),
+      ).toBe(true);
+      expect(await Bun.file(join(host.directory, "array-ran.txt")).exists()).toBe(false);
+    });
+  }, 120_000);
+
+  test("invalid multiselect answers preserve the prompt and prevent shell effects", async () => {
+    await withFixture(async (host) => {
+      await host.write(
+        "multi",
+        "---\nfields:\n  checks: {type: multiselect, options: [assertions, mocks], required: true}\n---\n{{checks}} !`printf BAD >> invalid-array-ran.txt`",
+      );
+      for (const prompt of [
+        "#multi(checks=[])",
+        '#multi(checks="mocks")',
+        '#multi(checks=["unknown"])',
+        '#multi(checks=["mocks", "mocks"])',
+        "#multi(checks=[true])",
+      ]) {
+        const result = await host.submit(prompt);
+        expect(result.user.text).toBe(prompt);
+        expect(result.calls.at(-1)?.messages.some((message) => text(message) === prompt)).toBe(
+          true,
+        );
+        expect(await Bun.file(join(host.directory, "invalid-array-ran.txt")).exists()).toBe(false);
+      }
+    });
+  }, 120_000);
   test("malformed historical JSON cannot block a new prompt after restart", async () => {
     await withFixture(async (host) => {
       // Seed a pre-plugin message with no submitted metadata, as in migrated history.

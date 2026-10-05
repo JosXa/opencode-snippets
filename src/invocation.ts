@@ -28,6 +28,19 @@ export function parseInvocation(text: string, start: number): Invocation | undef
   const space = () => {
     while (/\s/.test(text[end] ?? "") && end < text.length) end++;
   };
+  const quoted = (field: string): string => {
+    const begin = end++;
+    while (end < text.length && text[end] !== '"') {
+      if (text[end] === "\\") end++;
+      end++;
+    }
+    if (text[end] !== '"') fail(`unterminated string for '${field}'`);
+    try {
+      return JSON.parse(text.slice(begin, ++end));
+    } catch {
+      return fail(`invalid JSON string for '${field}'`);
+    }
+  };
   space();
   if (text[end] === ")") return { name, start, end: end + 1, values, parameterized: true };
   while (end < text.length) {
@@ -40,17 +53,22 @@ export function parseInvocation(text: string, start: number): Invocation | undef
     if (text[end++] !== "=") fail(`expected '=' after '${field}'`);
     space();
     if (text[end] === '"') {
-      const begin = end++;
-      while (end < text.length && text[end] !== '"') {
-        if (text[end] === "\\") end++;
-        end++;
+      values[field] = quoted(field);
+    } else if (text[end] === "[") {
+      const items: string[] = [];
+      end++;
+      space();
+      while (text[end] !== "]") {
+        if (text[end] !== '"') fail(`'${field}' needs an array of quoted strings`);
+        items.push(quoted(field));
+        space();
+        if (text[end] === "]") break;
+        if (text[end++] !== ",") fail("expected ',' or ']' after choice");
+        space();
+        if (text[end] === "]") fail("expected a quoted string after ','");
       }
-      if (text[end] !== '"') fail(`unterminated string for '${field}'`);
-      try {
-        values[field] = JSON.parse(text.slice(begin, ++end));
-      } catch {
-        fail(`invalid JSON string for '${field}'`);
-      }
+      end++;
+      values[field] = items;
     } else {
       const literal = /^[^\s,)]+/.exec(text.slice(end))?.[0] ?? "";
       end += literal.length;
@@ -61,7 +79,7 @@ export function parseInvocation(text: string, start: number): Invocation | undef
         Number.isFinite(Number(literal))
       )
         values[field] = Number(literal);
-      else fail(`'${field}' needs a quoted string, finite number, or yes/no`);
+      else fail(`'${field}' needs a quoted string, finite number, yes/no, or array of strings`);
     }
     space();
     if (text[end] === ")") return { name, start, end: end + 1, values, parameterized: true };

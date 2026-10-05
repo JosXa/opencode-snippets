@@ -5,12 +5,12 @@ import type { SnippetInfo, SnippetRegistry } from "./types.js";
 
 const Handlebars = await importCjs<typeof import("handlebars")>("handlebars");
 
-export type FieldValue = string | number | boolean;
+export type FieldValue = string | number | boolean | string[];
 export type FieldValues = Record<string, FieldValue>;
 export interface FieldDefinition {
   name: string;
   label: string;
-  type: "text" | "textarea" | "number" | "checkbox" | "select";
+  type: "text" | "textarea" | "number" | "checkbox" | "select" | "multiselect";
   required: boolean;
   default?: FieldValue;
   min?: number;
@@ -138,8 +138,12 @@ function declaration(name: string, metadata: unknown): Partial<FieldDefinition> 
       ].includes(key)
     )
       throw new Error(`${name}: unknown metadata '${key}'`);
-    if (key === "default" && !["string", "number", "boolean"].includes(typeof value))
-      throw new Error(`${name}: default must be text, a number, or a boolean`);
+    if (
+      key === "default" &&
+      !["string", "number", "boolean"].includes(typeof value) &&
+      !(Array.isArray(value) && value.every((item) => typeof item === "string"))
+    )
+      throw new Error(`${name}: default must be text, a number, a boolean, or an array of strings`);
     if (["required", "integer"].includes(key) && typeof value !== "boolean")
       throw new Error(`${name}: ${key} must be boolean`);
     if (["label", "type", "pattern"].includes(key) && typeof value !== "string")
@@ -180,6 +184,17 @@ export function validateFields(
     }
     if (field.type === "checkbox") {
       if (typeof value !== "boolean") error("must be yes or no");
+      continue;
+    }
+    if (field.type === "multiselect") {
+      if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+        error("must be an array of choices");
+        continue;
+      }
+      if (field.required && !value.length) error("choose at least one option");
+      if (new Set(value).size !== value.length) error("choices must not repeat");
+      if (value.some((item) => !field.options?.includes(item)))
+        error(`choose from ${field.options?.join(", ")}`);
       continue;
     }
     if (typeof value !== "string") {
@@ -275,7 +290,7 @@ export function getSnippetForm(
     ...item,
   }));
   for (const field of fields) {
-    if (!["text", "textarea", "number", "checkbox", "select"].includes(field.type))
+    if (!["text", "textarea", "number", "checkbox", "select", "multiselect"].includes(field.type))
       throw new Error(`${field.name}: unknown field type`);
     if (field.pattern) {
       try {
@@ -296,8 +311,10 @@ export function getSnippetForm(
         field.minLength > field.maxLength)
     )
       throw new Error(`${field.label}: minimum exceeds maximum`);
-    if (field.type === "select" && !field.options?.length)
-      throw new Error(`${field.label}: select needs options`);
+    if (["select", "multiselect"].includes(field.type) && !field.options?.length)
+      throw new Error(`${field.label}: ${field.type} needs options`);
+    if (field.type === "multiselect" && new Set(field.options).size !== field.options?.length)
+      throw new Error(`${field.label}: options must not repeat`);
     if (
       field.type !== "number" &&
       [field.min, field.max, field.integer].some((value) => value !== undefined)
@@ -308,8 +325,8 @@ export function getSnippetForm(
       [field.minLength, field.maxLength, field.pattern].some((value) => value !== undefined)
     )
       throw new Error(`${field.label}: string constraints require text`);
-    if (field.options && field.type !== "select")
-      throw new Error(`${field.label}: options require type=select`);
+    if (field.options && !["select", "multiselect"].includes(field.type))
+      throw new Error(`${field.label}: options require type=select or type=multiselect`);
     if (field.default !== undefined) {
       const errors = validateFields([field], { [field.name]: field.default });
       if (Object.keys(errors).length)
@@ -322,7 +339,13 @@ export function getSnippetForm(
       supplied[field.name] ??
       presets[field.name] ??
       field.default ??
-      (field.type === "checkbox" ? false : field.type === "number" ? undefined : "");
+      (field.type === "multiselect"
+        ? []
+        : field.type === "checkbox"
+          ? false
+          : field.type === "number"
+            ? undefined
+            : "");
     if (value !== undefined) values[field.name] = value;
   }
   for (const key of [...Object.keys(presets), ...Object.keys(supplied)])
@@ -354,7 +377,15 @@ export function renderSnippet(
     return skill(name);
   });
   engine.registerHelper("__literal", (value: unknown) =>
-    literals.protect(typeof value === "boolean" ? (value ? "yes" : "no") : String(value ?? "")),
+    literals.protect(
+      Array.isArray(value)
+        ? value.join(", ")
+        : typeof value === "boolean"
+          ? value
+            ? "yes"
+            : "no"
+          : String(value ?? ""),
+    ),
   );
   // Wrap output expressions, never condition operands: 0/false retain native truthiness.
   const rewrite = (node: Node) => {

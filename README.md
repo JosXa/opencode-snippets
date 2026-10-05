@@ -197,7 +197,7 @@ MyApps (search for {{app}})
 
 Accept a completion or type a space after an exact snippet name to fill its form. Confirming writes a readable reference such as `#myapps(app="Payroll")` into the composer; sending the message expands it. Cancel preserves the original reference. Use **Edit snippet fields** for the invocation under the cursor to change answers.
 
-Autocomplete marks snippets that open forms with `☷` after their name. Forms support text, multiline text, numbers, checkboxes, and selection lists, with defaults and validation. The action row is **OK · Cancel · Help**. A short keyboard hint is always visible; Help reveals the full key list. Tab/Shift+Tab move between fields and buttons, arrows select, Space toggles a checkbox, Ctrl+J inserts a newline, Enter confirms, and Escape cancels.
+Autocomplete marks snippets that open forms with `☷` after their name. Forms support text, multiline text, numbers, checkboxes, and single or multiple selection lists, with defaults and validation. The action row contains **OK**, **Cancel**, and **Help**. A short keyboard hint is always visible; Help reveals the full key list. Tab/Shift+Tab move between fields and buttons, arrows select, Space toggles a checkbox or multiselect choice, Ctrl+J inserts a newline, Enter confirms, and Escape cancels. Clicking a multiselect choice toggles it.
 
 ```markdown
 ---
@@ -216,7 +216,9 @@ Metadata does not print answers; body variables and conditions control the outpu
 
 The `fields` mapping determines input order and opts the body into Handlebars. Use `fields: {}` to render a body with no inputs of its own. Body references do not declare fields, and legacy snippets without their own mapping or an inline skill helper retain literal placeholders. Select options use YAML arrays, such as `options: [quick, normal, thorough]`.
 
-Arguments use named keys, JSON-quoted text, finite numbers, and `yes`/`no` booleans. Answers stay literal even when they contain hashtags, shell commands, or template syntax. Headless invocations use defaults and reject missing required answers before effects run.
+Use `type: multiselect` to select several options. Its `default` is an array of selected strings. List every option there to start with all choices selected. Without a default, nothing is selected. `required: true` requires at least one choice. `{{checks}}` prints the selections separated by commas. Use `{{#each checks}}- {{this}}{{/each}}` to render them individually. The [audit-tests example](examples/forms/audit-tests.md) starts with all checks selected.
+
+Arguments use named keys, JSON-quoted text, finite numbers, `yes`/`no` booleans, and arrays of JSON-quoted strings, such as `#audit-tests(checks=["No meaningful assertions", "Assertions that cannot fail"])`. An explicit `checks=[]` clears all selections. Answers stay literal even when they contain hashtags, shell commands, or template syntax. Headless invocations use defaults and reject missing required answers before effects run.
 
 See [field authoring and natural-language examples](skill/snippets/references/fields-and-forms.md) for all field types, constraints, escaping, repeated values, and conditional prose. The [example templates](examples/forms/) include review, reword, and options presets. Review emits no directive for zero reviewers or zero cycles; one reviewer omits parallelism and one cycle omits repetition. Reword and options also omit their requests for zero.
 

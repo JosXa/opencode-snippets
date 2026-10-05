@@ -172,13 +172,15 @@ Use a goal: {{goal}}
 
 ## Field contract
 
-- Types: `text` (default), `textarea`, `number`, `checkbox`, `select`.
+- Types: `text` (default), `textarea`, `number`, `checkbox`, `select`, `multiselect`.
 - Keys start with an ASCII letter and continue with letters, digits, or underscores. Prototype-related reserved keys are rejected.
 - `label` defaults to a readable key. `default` must match the field type.
 - `required: true` rejects blank or whitespace-only strings. A required checkbox permits `false`: it requires a choice, not consent.
 - Number constraints are `min`, `max`, and `integer`. Values must be finite.
 - Text constraints are `minLength`, `maxLength` (Unicode code points), and `pattern` (regular-expression source). Invalid patterns are definition errors.
-- `options: [first, second]` supplies literal string choices for a select.
+- `options: [first, second]` supplies literal string choices for a select or multiselect. Multiselect options must be unique.
+- A multiselect answer is an array of selected strings. Its default is `[]`; use an array containing every option to start with all choices selected. `required: true` requires at least one selection. Unknown or repeated choices are errors.
+- `{{checks}}` prints multiselect answers separated by commas. `{{#each checks}}{{this}}{{/each}}` renders individual answers, and `{{#if checks}}` omits a clause when nothing is selected. Arrow keys move between choices; Space or a click toggles the current choice. Enter confirms the form.
 - Fields appear in mapping order, followed by nested references in body order. A body reference does not declare an input. Every declared field appears in the form, even when its output is inside a conditional branch.
 - Unknown metadata and invalid schemas are errors. There is no inline declaration helper or `render` option.
 - An explicit `fields` mapping opts the body into Handlebars, including `fields: {}` when only inherited values or helpers are needed. Nested fields do not activate Handlebars in a legacy parent body.
@@ -239,7 +241,7 @@ The [form examples](../../../examples/forms/) preserve the review presets: base 
 #remindme(text="Check the draft\nThen ask \"ready?\"")
 ```
 
-Arguments are named and comma-separated. Text uses JSON double-quoted escaping; numbers are finite; booleans serialize as `yes`/`no` and also accept `true`/`false`. No positional arguments, expressions, duplicate keys, or unknown keys. Serialized fields follow discovery order. Missing required answers fail before effects run; headless use can provide a filled invocation directly.
+Arguments are named and comma-separated. Text uses JSON double-quoted escaping, numbers must be finite, and booleans serialize as `yes`/`no` and also accept `true`/`false`. Multiselect answers use arrays of JSON-quoted strings, such as `#audit-tests(checks=["No meaningful assertions", "Assertions that cannot fail"])`. An explicit `checks=[]` clears defaults. No positional arguments, expressions, duplicate keys, or unknown keys. Serialized fields follow discovery order. Missing required answers fail before effects run. Headless use can provide a filled invocation directly.
 
 Answers remain literal, including newlines, HTML, hashtags, shell syntax, XML blocks, and Handlebars. They are not a way to generate executable snippet syntax. Use standard Handlebars escaping for literal expressions in a field-bearing body:
 
@@ -255,3 +257,21 @@ Literal example: \{{example}}
 `#_name` escapes a snippet reference. Ordinary user prose is not globally processed as Handlebars, and existing bodies without their own `fields` mapping or inline-skill helpers stay literal, including placeholders such as `{{session_id}}`.
 
 Use `{{skill "review"}}` inside a snippet for an inline skill body. Existing XML skill rendering remains supported; prefer the helper in new templates. `#skill(review)` retains its separate syntax and shows a loaded marker with hidden skill context. Forms discover fields without running shell commands or loading skill bodies. Existing `!`/`!>` backtick shell substitution still runs after expansion.
+
+## Multiple choices selected by default
+
+Use a multiselect with an array default. Optional empty selections omit the list.
+
+```markdown
+---
+fields:
+  checks:
+    label: What to look out for
+    type: multiselect
+    options: [assertions, mocks, snapshots]
+    default: [assertions, mocks, snapshots]
+---
+{{#if checks}}Look out for:
+{{#each checks}}- {{this}}
+{{/each}}{{/if}}
+```

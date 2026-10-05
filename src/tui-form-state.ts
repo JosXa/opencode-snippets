@@ -8,14 +8,23 @@ import { parseInvocation } from "./invocation.js";
 import { findHashtagTriggerAtCursor } from "./tui-trigger.js";
 import type { SnippetRegistry } from "./types.js";
 
-export type FormDraft = Record<string, string | boolean>;
+export type FormDraft = Record<string, string | boolean | string[]>;
 
 export function createFormDraft(fields: FieldDefinition[], values: FieldValues): FormDraft {
   return Object.fromEntries(
-    fields.map((field) => [
-      field.name,
-      field.type === "checkbox" ? values[field.name] === true : String(values[field.name] ?? ""),
-    ]),
+    fields.map((field) => {
+      const value = values[field.name];
+      return [
+        field.name,
+        field.type === "multiselect"
+          ? Array.isArray(value)
+            ? [...value]
+            : []
+          : field.type === "checkbox"
+            ? value === true
+            : String(value ?? ""),
+      ];
+    }),
   );
 }
 
@@ -26,7 +35,8 @@ export function validateFormDraft(fields: FieldDefinition[], draft: FormDraft) {
   for (const field of fields) {
     const value = draft[field.name];
     if (field.type !== "number") {
-      values[field.name] = value ?? (field.type === "checkbox" ? false : "");
+      values[field.name] =
+        value ?? (field.type === "multiselect" ? [] : field.type === "checkbox" ? false : "");
       continue;
     }
     const text = String(value ?? "").trim();

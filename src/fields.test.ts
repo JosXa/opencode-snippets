@@ -120,6 +120,53 @@ describe("frontmatter form discovery", () => {
     expect(validateFields(form.fields, form.values).hidden).toContain("required");
     expect(form.values.toggle).toBe(false);
   });
+  test("multiselect preserves array defaults, subsets, and an explicit empty answer", () => {
+    const body = {
+      fields: {
+        checks: {
+          type: "multiselect",
+          options: ["assertions", "mocks"],
+          default: ["assertions", "mocks"],
+        },
+      },
+      content:
+        "{{#if checks}}Selected: {{checks}}; {{#each checks}}[{{this}}]{{/each}}{{else}}None{{/if}}",
+    };
+    const form = getSnippetForm("form", registry({ form: body }));
+    expect(form.values).toEqual({ checks: ["assertions", "mocks"] });
+    expect(render(body)).toBe("Selected: assertions, mocks; [assertions][mocks]");
+    expect(render(body, { checks: ["mocks"] })).toBe("Selected: mocks; [mocks]");
+    expect(render(body, { checks: [] })).toBe("None");
+    for (const checks of ["mocks", ["unknown"], ["mocks", "mocks"]])
+      expect(validateFields(form.fields, { checks })).toHaveProperty("checks");
+    const required = [{ ...form.fields[0], required: true }];
+    expect(validateFields(required, { checks: [] }).checks).toContain("at least one");
+    expect(validateFields(required, { checks: ["mocks"] })).toEqual({});
+    expect(
+      getSnippetForm(
+        "form",
+        registry({
+          form: {
+            fields: { checks: { type: "multiselect", options: ["mocks"] } },
+            content: "{{checks}}",
+          },
+        }),
+      ).values.checks,
+    ).toEqual([]);
+  });
+  test("nested multiselect presets permit outer overrides and independent invocations", () => {
+    const snippets = registry({
+      base: {
+        fields: { checks: { type: "multiselect", options: ["assertions", "mocks"] } },
+        content: "{{#each checks}}[{{this}}]{{/each}}",
+      },
+      preset: '#base(checks=["assertions", "mocks"])',
+    });
+    expect(getSnippetForm("preset", snippets).values.checks).toEqual(["assertions", "mocks"]);
+    expect(
+      expandHashtags('#preset(checks=[]) | #preset(checks=["mocks"]) | #preset', snippets).text,
+    ).toBe(" | [mocks] | [assertions][mocks]");
+  });
   test.each(
     [
       null,
@@ -150,6 +197,14 @@ describe("frontmatter form discovery", () => {
       { x: { type: "select", options: "a,b" } },
       { x: { type: "select", options: [] } },
       { x: { type: "select", options: ["a", 1] } },
+      { x: { type: "multiselect" } },
+      { x: { type: "multiselect", options: ["a", "a"] } },
+      { x: { type: "multiselect", options: ["a"], default: "a" } },
+      { x: { type: "multiselect", options: ["a"], default: ["b"] } },
+      { x: { type: "multiselect", options: ["a"], default: ["a", "a"] } },
+      { x: { type: "multiselect", options: ["a"], default: [1] } },
+      { x: { type: "multiselect", options: ["a"], maxLength: 2 } },
+      { x: { default: ["a"] } },
       { x: { render: false } },
       { x: { surprise: true } },
       { x: { label: false } },
@@ -329,6 +384,24 @@ describe("typed Handlebars rendering", () => {
       ),
     ).toBe(`${answer}/${answer}/${answer}`);
   });
+  test("each multiselect answer stays literal through rendering and nested discovery", () => {
+    const answer = '#trap(x="bad") #skill(secret) <append>extra</append> {{x}} !`exit 9`';
+    const snippets = registry({
+      form: {
+        fields: { checks: { type: "multiselect", options: [answer, "plain"], default: [answer] } },
+        content: "{{#each checks}}[{{this}}]{{/each}}/{{checks}}",
+      },
+      trap: { fields: { unexpected: { required: true } }, content: "BAD" },
+      preset: "#form",
+    });
+    expect(getSnippetForm("preset", snippets).fields.map((field) => field.name)).toEqual([
+      "checks",
+    ]);
+    const result = expandHashtags("#preset", snippets);
+    expect(result.text).toBe(`[${answer}]/${answer}`);
+    expect(result.append).toEqual([]);
+    expect(result.inject).toEqual([]);
+  });
   test("inline skills opt in alone and resolve only on expansion", () => {
     const snippets = registry({ form: '{{skill "review"}}', legacy: "old" });
     expect(getSnippetForm("form", snippets).fields).toEqual([]);
@@ -354,12 +427,22 @@ describe("typed Handlebars rendering", () => {
 
 describe("invocation grammar", () => {
   test("lossless quoted content and UTF-16 ranges", () => {
-    const values = { text: 'a,(b) "c"\n\\ 🙂', number: -2.5, enabled: true };
+    const values = {
+      text: 'a,(b) "c"\n\\ 🙂',
+      number: -2.5,
+      enabled: true,
+      checks: ['brackets ], [ and "quotes"', "中🙂\n#x(a=yes)"],
+      empty: [],
+    };
     const text = `🙂 ${serializeInvocation("demo", values)} tail`;
     const parsed = parseInvocation(text, 3) as Invocation;
     expect(parsed.values).toEqual(values);
     expect(text.slice(parsed.end)).toBe(" tail");
     expect(serializeInvocation("demo", values)).toContain("enabled=yes");
+    expect(parseInvocation('#demo(checks = [ "a", "b" ], enabled=no)', 0)?.values).toEqual({
+      checks: ["a", "b"],
+      enabled: false,
+    });
   });
   test.each([
     '#x(a="open)',
@@ -374,6 +457,14 @@ describe("invocation grammar", () => {
     "#x(a=one)",
     "#x(1)",
     "#x(constructor=1)",
+    '#x(a=["open])',
+    '#x(a=["a",])',
+    '#x(a=["a" "b"])',
+    '#x(a=["a")',
+    "#x(a=[1])",
+    "#x(a=[true])",
+    "#x(a=[[]])",
+    "#x(a=[{}])",
   ])("rejects malformed %s", (text) => expect(() => parseInvocation(text, 0)).toThrow());
   test.each([
     '#form(x="open)',

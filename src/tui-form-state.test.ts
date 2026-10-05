@@ -38,6 +38,45 @@ const registry: SnippetRegistry = new Map([
 registry.set("rev", snippet("review", "{{count}}", { count: { type: "number", default: 1 } }));
 
 describe("form transitions", () => {
+  test("reopens multiselect arrays without changing defaults and preserves empty selections", () => {
+    const fields: FieldDefinition[] = [
+      {
+        name: "checks",
+        label: "Checks",
+        type: "multiselect",
+        required: false,
+        options: ["assertions", "mocks"],
+      },
+    ];
+    const values = { checks: ["assertions", "mocks"] };
+    const draft = createFormDraft(fields, values);
+    expect(draft).toEqual(values);
+    expect(draft.checks).not.toBe(values.checks);
+    expect(validateFormDraft(fields, { checks: ["mocks"] })).toEqual({
+      values: { checks: ["mocks"] },
+      errors: {},
+    });
+    expect(validateFormDraft(fields, { checks: [] })).toEqual({
+      values: { checks: [] },
+      errors: {},
+    });
+    expect(
+      validateFormDraft([{ ...fields[0], required: true }], { checks: [] }).errors.checks,
+    ).toContain("at least one");
+    const snippets = new Map([
+      [
+        "audit",
+        snippet("audit", "{{checks}}", {
+          checks: { type: "multiselect", options: fields[0].options, default: values.checks },
+        }),
+      ],
+    ]);
+    const invocation = serializeInvocation("audit", { checks: [] });
+    const found = findEditableInvocation(invocation, invocation.indexOf("[]") + 1, snippets);
+    if (!found) throw new Error("Invocation not found");
+    const restored = getSnippetForm(found.name, snippets, found.values);
+    expect(createFormDraft(restored.fields, restored.values)).toEqual({ checks: [] });
+  });
   test("preserves typed zero, false, multiline Unicode, and preset defaults on reopen", () => {
     const { fields, values } = getSnippetForm("review-three", registry);
     expect(createFormDraft(fields, values)).toEqual({ count: "3", focus: "", fix: true });

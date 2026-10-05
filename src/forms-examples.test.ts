@@ -3,17 +3,36 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assembleMessage, expandHashtags } from "./expander.js";
-import { getSnippetForm, validateFields } from "./fields.js";
+import { type FieldValues, getSnippetForm, validateFields } from "./fields.js";
 import { serializeInvocation } from "./invocation.js";
 import { loadSnippets } from "./loader.js";
 
 const registry = await loadSnippets(undefined, `${import.meta.dir}/../examples/forms`);
 
-function render(name: string, values: Record<string, string | number | boolean> = {}) {
+function render(name: string, values: FieldValues = {}) {
   return assembleMessage(expandHashtags(serializeInvocation(name, values), registry)).trim();
 }
 
 describe("approved form migrations", () => {
+  it("audit-tests starts with every check selected and prints only the selected checks", () => {
+    const form = getSnippetForm("audit-tests", registry);
+    const checks = form.fields[0].options ?? [];
+    expect(form.fields[0].type).toBe("multiselect");
+    expect(checks).toHaveLength(9);
+    expect(form.values.checks).toEqual(checks);
+    const directive =
+      "Find and delete or improve tests in the project that test nothing or provide no confidence. If the test provides no real value, delete it. If it just doesn't test what it says it should, improve it.";
+    expect(render("audit-tests")).toStartWith(directive);
+    for (const check of checks) expect(render("audit-tests")).toContain(`- ${check}\n`);
+    const subset = render("audit-tests", { checks: [checks[2]] });
+    expect(subset).toStartWith(directive);
+    expect(subset).toContain(`- ${checks[2]}\n`);
+    expect(subset).not.toContain(`- ${checks[0]}`);
+    const empty = render("audit-tests", { checks: [] });
+    expect(empty).toStartWith(directive);
+    expect(empty).not.toContain("Look out for:");
+    expect(empty).toContain("Keep small tests that check real behavior.");
+  });
   it("retains review preset defaults and permits explicit outer overrides", () => {
     const presets = [
       ["review", 1, false, 1],
@@ -262,11 +281,11 @@ const examples = await (async () => {
 })();
 
 describe("natural-language authoring acceptance examples", () => {
-  function form(index: number, values: Record<string, string | number | boolean> = {}) {
+  function form(index: number, values: FieldValues = {}) {
     return getSnippetForm(`example${index}`, examples, values);
   }
 
-  function output(index: number, values: Record<string, string | number | boolean>) {
+  function output(index: number, values: FieldValues) {
     return assembleMessage(
       expandHashtags(serializeInvocation(`example${index}`, values), examples),
     ).trim();
@@ -350,5 +369,11 @@ describe("natural-language authoring acceptance examples", () => {
   it("preserves the documented escaped literal Handlebars expression", () => {
     expect(output(13, { name: "Ada" })).toBe("Name: Ada\nLiteral example: {{example}}");
     expect(form(13).fields.map((field) => field.name)).toEqual(["name"]);
+  });
+  it("14: defaults every multiselect choice on and omits cleared choices", () => {
+    expect(form(14).values.checks).toEqual(["assertions", "mocks", "snapshots"]);
+    expect(output(14, {})).toBe("Look out for:\n- assertions\n- mocks\n- snapshots");
+    expect(output(14, { checks: ["mocks"] })).toBe("Look out for:\n- mocks");
+    expect(output(14, { checks: [] })).toBe("");
   });
 });
