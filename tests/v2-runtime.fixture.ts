@@ -32,8 +32,8 @@ export async function fixture() {
   const directory = join(root, "project");
   const config = join(root, "config", "opencode");
   const snippets = join(directory, ".opencode", "snippet");
-  const plugin = pathToFileURL(resolve(import.meta.dir, "..")).href;
-  assert.ok(await Bun.file(new URL(`${plugin}/dist/index.js`)).exists(), "Run bun run build first");
+  const plugin = pathToFileURL(resolve(import.meta.dir, "..", "dist")).href;
+  assert.ok(await Bun.file(new URL(`${plugin}/index.js`)).exists(), "Run bun run build first");
   await Promise.all([
     mkdir(snippets, { recursive: true }),
     mkdir(config, { recursive: true }),

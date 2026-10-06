@@ -360,19 +360,14 @@ Line 3`,
       expect(snippets.has("not-a-snippet")).toBe(false);
     });
 
-    it("should handle invalid frontmatter", async () => {
-      await writeFile(
-        join(globalSnippetDir, "bad-frontmatter.md"),
-        `---
-invalid yaml
----
-Content`,
-      );
-
-      await writeFile(join(globalSnippetDir, "special-chars.md"), "Special content");
+    it("keeps malformed frontmatter addressable without blocking valid snippets", async () => {
+      const content = "---\naliases: [unclosed\n---\nContent";
+      await Bun.write(join(globalSnippetDir, "bad-frontmatter.md"), content);
+      await Bun.write(join(globalSnippetDir, "special-chars.md"), "Special content");
 
       const snippets = await loadSnippets(undefined, globalSnippetDir);
-      // Should load valid snippet, skip invalid one
+      expect(snippets.get("bad-frontmatter")?.content).toBe(content);
+      expect(() => getSnippetForm("bad-frontmatter", snippets)).toThrow("invalid frontmatter");
       expect(snippets.get("special-chars")?.content).toBe("Special content");
     });
 
@@ -405,18 +400,6 @@ Content`,
 
       expect(snippets.get("careful")?.content).toBe("Global singular careful");
       expect(snippets.get("review")?.content).toBe("Project singular review");
-    });
-  });
-
-  describe("Smoke test - real global snippets", () => {
-    it("should load real global snippets without crashing", async () => {
-      // This is a smoke test - just verify it doesn't crash
-      const snippets = await loadSnippets();
-
-      // We don't assert specific content since we don't control user's global snippets
-      // Just verify it returns a Map
-      expect(snippets).toBeInstanceOf(Map);
-      expect(Array.isArray(Array.from(snippets.keys()))).toBe(true);
     });
   });
 

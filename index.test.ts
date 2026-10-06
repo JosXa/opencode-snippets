@@ -1523,9 +1523,11 @@ describe("SnippetsPlugin - Hook Integration", () => {
       expect(output.output).toBe("");
     });
 
-    it("should handle non-string skill output", async () => {
+    it("preserves non-string skill output and tool metadata", async () => {
       const ctx = createMockContextWithSnippets();
       const hooks = await SnippetsPlugin(ctx);
+      const hook = hooks["tool.execute.after"];
+      if (!hook) throw new Error("Missing skill output hook");
 
       const input: ToolExecuteInput = {
         tool: "skill",
@@ -1534,16 +1536,19 @@ describe("SnippetsPlugin - Hook Integration", () => {
         args: {},
       };
 
+      const value = { data: "object output" };
       const output: ToolExecuteOutput = {
         title: "Skill Loaded",
-        output: { data: "object output" } as unknown as string,
-        metadata: {},
+        output: value as unknown as string,
+        metadata: { source: "native tool" },
       };
 
-      await hooks["tool.execute.after"]?.(input, output);
-
-      // Should not crash on non-string output
-      expect(hooks["tool.execute.after"]).toBeDefined();
+      await hook(input, output);
+      expect(output).toEqual({
+        title: "Skill Loaded",
+        output: value,
+        metadata: { source: "native tool" },
+      });
     });
   });
 

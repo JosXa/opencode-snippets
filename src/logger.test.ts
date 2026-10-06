@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
-import { homedir, tmpdir } from "os";
+import { tmpdir } from "os";
 import { join } from "path";
 import { Logger } from "./logger.js";
 
@@ -13,28 +13,23 @@ describe("Logger", () => {
 
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
-  });
-
-  describe("debugEnabled", () => {
-    it("should default to false", () => {
-      const logger = new Logger(join(tempDir, "logs"));
-      expect(logger.debugEnabled).toBe(false);
-    });
-
-    it("should be settable via constructor", () => {
-      const logger = new Logger(join(tempDir, "logs"), true);
-      expect(logger.debugEnabled).toBe(true);
-    });
-
-    it("should be settable via property", () => {
-      const logger = new Logger(join(tempDir, "logs"));
-      logger.debugEnabled = true;
-      expect(logger.debugEnabled).toBe(true);
-    });
   });
 
   describe("log writing", () => {
+    it("applies debug setting changes to subsequent log writes", async () => {
+      const logger = new Logger(join(tempDir, "logs"));
+      logger.debug("before enabling");
+      logger.debugEnabled = true;
+      logger.debug("while enabled");
+      logger.debugEnabled = false;
+      logger.debug("after disabling");
+
+      const today = new Date().toISOString().split("T")[0];
+      const content = await Bun.file(join(tempDir, "logs", "daily", `${today}.log`)).text();
+      expect(content.trimEnd().split("\n")).toEqual([
+        expect.stringMatching(/ DEBUG .*: while enabled$/),
+      ]);
+    });
     it("should not write debug logs when debugEnabled is false", () => {
       const logger = new Logger(join(tempDir, "logs"));
       logger.debug("test message", { key: "value" });
@@ -69,7 +64,7 @@ describe("Logger", () => {
       expect(content).toContain("error message");
     });
 
-    it("should format data correctly", () => {
+    it("formats scalar data and omits null and undefined entries", () => {
       const logger = new Logger(join(tempDir, "logs"), true);
       logger.debug("with data", {
         string: "hello",
@@ -85,17 +80,24 @@ describe("Logger", () => {
       expect(content).toContain("string=hello");
       expect(content).toContain("number=42");
       expect(content).toContain("bool=true");
+      expect(content).not.toContain("nullVal");
+      expect(content).not.toContain("undefinedVal");
     });
 
-    it("should handle empty data", () => {
+    it("writes every message with empty data without adding a data suffix", async () => {
       const logger = new Logger(join(tempDir, "logs"), true);
       logger.debug("no data");
       logger.debug("empty object", {});
-      logger.debug("empty array", { items: [] as unknown[] });
+      logger.debug("empty array", { items: [] });
 
       const today = new Date().toISOString().split("T")[0];
       const logFile = join(tempDir, "logs", "daily", `${today}.log`);
-      expect(existsSync(logFile)).toBe(true);
+      const content = await Bun.file(logFile).text();
+      expect(content.trimEnd().split("\n")).toEqual([
+        expect.stringMatching(/ DEBUG .*: no data$/),
+        expect.stringMatching(/ DEBUG .*: empty object$/),
+        expect.stringMatching(/ DEBUG .*: empty array$/),
+      ]);
     });
 
     it("should format arrays compactly", () => {
@@ -163,16 +165,36 @@ describe("default log directory", () => {
     }
   });
 
-  it("uses the user's data directory when XDG_DATA_HOME is unset", () => {
-    const oldDataHome = process.env.XDG_DATA_HOME;
+  it("writes to the user's data directory when XDG_DATA_HOME is unset", async () => {
+    const home = mkdtempSync(join(tmpdir(), "snippets-home-test-"));
+    const env = { ...process.env, HOME: home, USERPROFILE: home };
+    delete env.XDG_DATA_HOME;
     try {
-      delete process.env.XDG_DATA_HOME;
-      expect(new Logger()).toHaveProperty(
-        "logDir",
-        join(homedir(), ".local", "share", "opencode", "log", "snippets"),
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "--eval",
+          `import { Logger } from ${JSON.stringify(join(import.meta.dir, "logger.ts"))}; new Logger().info("fallback directory test");`,
+        ],
+        { env, stdout: "ignore", stderr: "pipe" },
       );
+      const stderr = new Response(child.stderr).text();
+      expect(await child.exited, await stderr).toBe(0);
+
+      const today = new Date().toISOString().split("T")[0];
+      const file = join(
+        home,
+        ".local",
+        "share",
+        "opencode",
+        "log",
+        "snippets",
+        "daily",
+        `${today}.log`,
+      );
+      expect(await Bun.file(file).text()).toContain("fallback directory test");
     } finally {
-      if (oldDataHome !== undefined) process.env.XDG_DATA_HOME = oldDataHome;
+      rmSync(home, { recursive: true, force: true });
     }
   });
 });
