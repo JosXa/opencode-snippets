@@ -177,7 +177,19 @@ const plugin = Plugin.define({
           ],
         }));
 
+        const release = () => {
+          if (
+            !prompt ||
+            prompt.isDestroyed ||
+            !("completer" in prompt.traits) ||
+            prompt.traits.completer !== "snippets"
+          )
+            return;
+          Reflect.deleteProperty(prompt.traits, "completer");
+        };
+
         const sync = () => {
+          release();
           if (dialogOpen()) {
             setTrigger(undefined);
             return;
@@ -210,6 +222,9 @@ const plugin = Plugin.define({
             if (dismissed() && dismissed() !== match.token) setDismissed(undefined);
           }
           setTrigger(match);
+          // Other prompt completers must yield while this menu owns the cursor.
+          // OpenTUI's setter compares built-in fields only; extend the live map.
+          Object.assign(focused.traits, { completer: "snippets" });
           if (anchor) {
             // Main overlays the entire Prompt wrapper, not its padded textarea.
             // OC2's footer and editor share that wrapper; use their common ancestor
@@ -229,6 +244,7 @@ const plugin = Plugin.define({
         };
 
         const closeMenu = () => {
+          release();
           setTrigger(undefined);
         };
 

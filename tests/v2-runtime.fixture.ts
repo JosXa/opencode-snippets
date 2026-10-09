@@ -279,6 +279,10 @@ export async function fixture() {
     ),
     Bun.write(join(root, "native", "SKILL.md"), "DISK_BODY_MUST_NOT_LOAD"),
     Bun.write(
+      join(root, "native", "package.json"),
+      JSON.stringify({ type: "module", main: "./index.js" }),
+    ),
+    Bun.write(
       join(root, "native", "index.js"),
       `import { Plugin } from ${JSON.stringify(import.meta.resolve("@opencode/plugin"))};
 export default Plugin.define({id:"runtime-fixture",async setup(ctx){
