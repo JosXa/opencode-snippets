@@ -93,12 +93,14 @@ export function buildTuiCompletionOptions(
   // Share the V1 matcher so both hosts rank by score, then project source, then name.
   const snippetOptions = filterSnippets(matches, normalized).map((snippet) => ({
     title: `#${snippet.name}`,
-    description: snippet.description || snippet.content.replace(/\s+/g, " ").slice(0, 100),
+    description: (snippet.description || snippet.content.replace(/\s+/g, " ").slice(0, 100))
+      .replace(/\s+/g, " ")
+      .trim(),
     value: { kind: "snippet" as const, name: snippet.name },
   }));
   const skillOptions = filterSkills([...skills], skillQuery ?? normalized).map((skill) => ({
     title: formatSkillLoad(skill.name),
-    description: skill.description || "Load skill instructions",
+    description: (skill.description || "Load skill instructions").replace(/\s+/g, " ").trim(),
     value: { kind: "skill" as const, name: skill.name },
   }));
   return [...snippetOptions, ...skillOptions];

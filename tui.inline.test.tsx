@@ -253,6 +253,42 @@ test("Escape dismisses dollar completion without changing text or loading a skil
   expect(ui.submissions()).toBe(0);
 });
 
+test("autocomplete rows stay single-line with multiline descriptions and narrow widths", async () => {
+  const ui = await setup(undefined, {}, [
+    { id: "ask-matt", name: "Ask Matt", description: "First entry" },
+    {
+      id: "caveman",
+      name: "Caveman",
+      description: "Ultra-compressed communication mode.\nUse grug.\n",
+    },
+    { id: "codebase-design", name: "Codebase Design", description: "Following entry" },
+    { id: "long".repeat(30), name: "Long", description: "Very long description ".repeat(30) },
+  ]);
+  await ui.mockInput.typeText("$");
+  await ui.settle();
+  const assertRows = () => {
+    const lines = ui.captureCharFrame().split("\n");
+    const first = lines.findIndex((line) => line.includes("$ask-matt"));
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(lines[first + 1]).toContain("$caveman");
+    expect(lines[first + 2]).toContain("$codebase-design");
+    expect(lines[first + 3]).toContain("$longlong");
+    for (const line of lines.slice(first, first + 4)) {
+      expect(line.lastIndexOf("┃")).toBe(ui.frame.x + ui.frame.width - 1);
+      expect(line.slice(ui.frame.x + ui.frame.width).trim()).toBe("");
+    }
+  };
+  assertRows();
+  ui.frame.width = 30;
+  await ui.settle();
+  assertRows();
+  ui.mockInput.pressArrow("down");
+  ui.mockInput.pressTab();
+  await ui.settle();
+  expect(ui.prompt.plainText).toBe("$caveman ");
+  expect(ui.submissions()).toBe(0);
+});
+
 test("an exact alias preselects its snippet and Tab accepts it before substring matches", async () => {
   const ui = await setup(undefined, {
     "is-acceptable-answer": "is an acceptable answer",

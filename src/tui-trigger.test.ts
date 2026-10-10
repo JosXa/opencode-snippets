@@ -361,6 +361,27 @@ describe("V2 autocomplete choices", () => {
   });
 });
 
+test("completion descriptions flatten YAML newlines and whitespace into one line", () => {
+  const options = buildTuiCompletionOptions(
+    [
+      {
+        name: "review",
+        description: "  Review\r\n  changes\tcarefully.\n",
+        content: "Body",
+        aliases: [],
+        source: "global",
+        filePath: "/tmp/review.md",
+      },
+    ],
+    [{ name: "caveman", description: 'Ultra-compressed communication mode.\nUse "grug".\n' }],
+    "",
+  );
+  expect(options.map((option) => option.description)).toEqual([
+    "Review changes carefully.",
+    'Ultra-compressed communication mode. Use "grug".',
+  ]);
+});
+
 describe("replaceTrailingHashtag", () => {
   test("replaces the active trailing hashtag and adds a space", () => {
     expect(replaceTrailingHashtag("please #rev", "review")).toBe("please #review ");

@@ -503,6 +503,7 @@ const plugin = Plugin.define({
           closeMenu();
         });
 
+        // Autocomplete entries always occupy one terminal row.
         const height = () => Math.min(10, Math.max(1, options().length));
         // Match native autocomplete's raised background and
         // focused action foreground. Neither agent colors nor custom contrast
@@ -551,6 +552,9 @@ const plugin = Plugin.define({
                     fallback={
                       // biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI rows handle mouse selection; the prompt owns keyboard input.
                       <box
+                        height={1}
+                        flexShrink={0}
+                        overflow="hidden"
                         paddingLeft={1}
                         backgroundColor={
                           normalizeUnmatchedTrigger(trigger()?.query ?? "")
@@ -563,6 +567,8 @@ const plugin = Plugin.define({
                         }}
                       >
                         <text
+                          height={1}
+                          wrapMode="none"
                           fg={
                             normalizeUnmatchedTrigger(trigger()?.query ?? "")
                               ? selectedText()
@@ -580,6 +586,9 @@ const plugin = Plugin.define({
                       // biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI rows handle mouse selection; the prompt owns keyboard input.
                       <box
                         id={`snippet-option-${index()}`}
+                        height={1}
+                        flexShrink={0}
+                        overflow="hidden"
                         paddingLeft={1}
                         paddingRight={1}
                         flexDirection="row"
@@ -594,6 +603,7 @@ const plugin = Plugin.define({
                       >
                         <text
                           fg={selected() === index() ? selectedText() : text()}
+                          height={1}
                           flexShrink={0}
                           wrapMode="none"
                         >
@@ -602,6 +612,8 @@ const plugin = Plugin.define({
                         </text>
                         <text
                           fg={selected() === index() ? selectedText() : muted()}
+                          height={1}
+                          minWidth={0}
                           wrapMode="none"
                         >{`  ${item.description}`}</text>
                       </box>
