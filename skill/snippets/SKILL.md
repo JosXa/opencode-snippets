@@ -42,7 +42,7 @@ Content here
 - Define fields in a YAML frontmatter `fields` mapping. Use ordinary Handlebars variables and conditions in the body. Keep familiar names as nested preset snippets when consolidating variants.
 - Use `!>` rather than `` !`cmd` `` when the command itself helps the model interpret its output.
 - Use `<inject>` only for context that must persist for the whole turn.
-- Treat `#skill(...)` as hidden context injection, not inline expansion.
+- Prefer `$skill-id` for automatic hidden skill loading. Keep `#skill(...)` for quoted names or compatibility. Use `{{skill "name"}}` for inline expansion.
 - Interpret `#_name` as an escaped reference to `#name`; do not expand it.
 
 ## Library

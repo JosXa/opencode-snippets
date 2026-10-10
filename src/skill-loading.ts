@@ -5,6 +5,7 @@ import { PATTERNS } from "./constants.js";
 import { assembleMessage, expandHashtags } from "./expander.js";
 import { logger } from "./logger.js";
 import { executeShellCommands } from "./shell.js";
+import { findDollarSkillLoads } from "./skill-invocation.js";
 import { getSkill, type SkillInfo, type SkillRegistry } from "./skill-loader.js";
 import { expandSkillTags } from "./skill-renderer.js";
 import type { SnippetRegistry } from "./types.js";
@@ -35,7 +36,13 @@ export async function expandSkillLoads(
   },
 ): Promise<SkillLoadResult> {
   PATTERNS.SKILL_LOAD.lastIndex = 0;
-  const matches = [...text.matchAll(PATTERNS.SKILL_LOAD)];
+  const matches = [...text.matchAll(PATTERNS.SKILL_LOAD)].map((match) => ({
+    start: match.index,
+    end: match.index + match[0].length,
+    name: parseSkillName(match[1]),
+  }));
+  matches.push(...findDollarSkillLoads(text));
+  matches.sort((left, right) => left.start - right.start);
   if (matches.length === 0) {
     return { text, payloads: [] };
   }
@@ -45,9 +52,10 @@ export async function expandSkillLoads(
   const payloads: string[] = [];
 
   for (const match of matches) {
-    const index = match.index ?? 0;
-    const token = match[0];
-    const parsed = parseSkillName(match[1]);
+    const index = match.start;
+    if (index < lastIndex) continue;
+    const token = text.slice(index, match.end);
+    const parsed = match.name;
 
     result += text.slice(lastIndex, index);
     lastIndex = index + token.length;
@@ -59,7 +67,8 @@ export async function expandSkillLoads(
 
     const skill = getSkill(registry, parsed);
     if (!skill) {
-      logger.warn(`Skill not found: '${parsed}', leaving syntax unchanged`);
+      if (token.startsWith("#"))
+        logger.warn(`Skill not found: '${parsed}', leaving syntax unchanged`);
       result += token;
       continue;
     }

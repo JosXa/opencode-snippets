@@ -1,3 +1,4 @@
+import { findDollarSkillLoads, formatSkillLoad } from "./skill-invocation.js";
 import { filterSkills, filterSnippets, type SearchableSkill } from "./tui-search.js";
 import type { SnippetInfo } from "./types.js";
 
@@ -9,7 +10,7 @@ export interface TuiCompletionOption {
   value: TuiCompletion;
 }
 
-export interface HashtagTriggerMatch {
+export interface CompletionTrigger {
   start: number;
   end: number;
   query: string;
@@ -27,7 +28,7 @@ function compactTagText(input: string): string {
   return input.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-export function findTrailingHashtagTrigger(input: string): HashtagTriggerMatch | undefined {
+export function findTrailingHashtagTrigger(input: string): CompletionTrigger | undefined {
   const hit = input.match(HASHTAG_TRIGGER);
   if (!hit) return;
 
@@ -45,8 +46,25 @@ export function findTrailingHashtagTrigger(input: string): HashtagTriggerMatch |
 export function findHashtagTriggerAtCursor(
   input: string,
   cursor: number,
-): HashtagTriggerMatch | undefined {
+): CompletionTrigger | undefined {
   return findTrailingHashtagTrigger(input.slice(0, Math.max(0, Math.min(cursor, input.length))));
+}
+
+export function findSkillTriggerAtCursor(
+  input: string,
+  cursor: number,
+): CompletionTrigger | undefined {
+  const end = resolveCompletionCursor(input, cursor);
+  const match = findDollarSkillLoads(input, true).find(
+    (match) => end > match.start && end <= match.end,
+  );
+  if (!match) return;
+  return {
+    start: match.start,
+    end,
+    query: input.slice(match.start + 1, end),
+    token: input.slice(match.start, end),
+  };
 }
 
 export function replaceHashtagAtCursor(
@@ -67,10 +85,11 @@ export function buildTuiCompletionOptions(
   snippets: Iterable<SnippetInfo>,
   skills: Iterable<SearchableSkill>,
   query: string,
+  kind: "mixed" | "skill" = "mixed",
 ): TuiCompletionOption[] {
   const normalized = query.toLowerCase();
   const skillQuery = normalized.match(/^skill\(([^)]*)$/)?.[1];
-  const matches = skillQuery === undefined ? [...snippets] : [];
+  const matches = skillQuery === undefined && kind === "mixed" ? [...snippets] : [];
   // Share the V1 matcher so both hosts rank by score, then project source, then name.
   const snippetOptions = filterSnippets(matches, normalized).map((snippet) => ({
     title: `#${snippet.name}`,
@@ -78,7 +97,7 @@ export function buildTuiCompletionOptions(
     value: { kind: "snippet" as const, name: snippet.name },
   }));
   const skillOptions = filterSkills([...skills], skillQuery ?? normalized).map((skill) => ({
-    title: `#skill(${skill.name})`,
+    title: formatSkillLoad(skill.name),
     description: skill.description || "Load skill instructions",
     value: { kind: "skill" as const, name: skill.name },
   }));
@@ -112,8 +131,8 @@ export function insertSnippetTag(input: string, name: string): string {
 }
 
 export function insertSkillLoad(input: string, name: string): string {
-  const match = findTrailingHashtagTrigger(input);
-  const load = `#skill(${name}) `;
+  const match = findSkillTriggerAtCursor(input, input.length) ?? findTrailingHashtagTrigger(input);
+  const load = `${formatSkillLoad(name)} `;
   if (match) {
     return `${input.slice(0, match.start)}${load}`;
   }

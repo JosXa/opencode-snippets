@@ -23,7 +23,11 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-async function setup(background = RGBA.fromHex("#101820"), files: Record<string, string> = {}) {
+async function setup(
+  background = RGBA.fromHex("#101820"),
+  files: Record<string, string> = {},
+  skills: { id: string; name: string; description?: string }[] = [],
+) {
   const directory = await mkdtemp(join(import.meta.dir, ".test-inline-"));
   cleanups.push(() => rm(directory, { recursive: true, force: true }));
   const globalDirectory = join(directory, "global");
@@ -85,7 +89,7 @@ async function setup(background = RGBA.fromHex("#101820"), files: Record<string,
   const dispose = await plugin.setup({
     location: { directory },
     options: { globalDirectory, homeDirectory: directory },
-    client: { skill: { list: async () => ({ data: [] }) } },
+    client: { skill: { list: async () => ({ data: skills }) } },
     renderer: screen.renderer,
     theme: theme.dialog,
     keymap: { layer: () => {}, mode: { current: () => hostMode } },
@@ -164,6 +168,90 @@ async function setup(background = RGBA.fromHex("#101820"), files: Record<string,
     setTheme,
   };
 }
+
+test("dollar completion filters native skills, navigates and accepts without submitting", async () => {
+  const ui = await setup(undefined, {}, [
+    { id: "review", name: "Review" },
+    { id: "release", name: "Release" },
+    { id: "host:proof", name: "Proof" },
+  ]);
+  await ui.mockInput.typeText("$");
+  await ui.settle();
+  expect(ui.captureCharFrame()).toContain("$host:proof");
+  expect(ui.captureCharFrame()).not.toContain("#review");
+  await ui.mockInput.typeText("re");
+  await ui.settle();
+  expect(ui.captureCharFrame()).toContain("$release");
+  expect(ui.captureCharFrame()).toContain("$review");
+  expect(ui.captureCharFrame()).not.toContain("$host:proof");
+  ui.mockInput.pressArrow("down");
+  ui.mockInput.pressEnter();
+  await ui.settle();
+  expect(ui.prompt.plainText).toBe("$review ");
+  expect(ui.submissions()).toBe(0);
+  ui.prompt.setText("$host:");
+  ui.prompt.gotoLineEnd();
+  await ui.settle();
+  ui.mockInput.pressTab();
+  await ui.settle();
+  expect(ui.prompt.plainText).toBe("$host:proof ");
+  expect(ui.dialogs).toEqual([]);
+});
+
+test("dollar completion replaces only the reference around Unicode and native marks", async () => {
+  const ui = await setup(undefined, {}, [{ id: "host:proof", name: "Proof" }]);
+  ui.prompt.insertText("中🙂\n$host:pr");
+  const cursor = ui.prompt.cursorOffset;
+  ui.prompt.insertText(" tail");
+  ui.prompt.cursorOffset = cursor;
+  const marks = ui.prompt.editorView.extmarks;
+  const mark = marks.create({
+    start: cursor + 1,
+    end: cursor + 5,
+    virtual: true,
+    data: { payload: "native attachment" },
+  });
+  const before = { ...marks.get(mark) };
+  await ui.settle();
+  ui.mockInput.pressTab();
+  await ui.settle();
+  expect(ui.prompt.plainText).toBe("中🙂\n$host:proof  tail");
+  expect(marks.get(mark)).toEqual({
+    ...before,
+    start: (before.start ?? 0) + 4,
+    end: (before.end ?? 0) + 4,
+  });
+  expect(ui.submissions()).toBe(0);
+});
+
+test("escaped, code, field and unknown dollars do not claim Enter or create snippets", async () => {
+  const ui = await setup(undefined, { review: "---\nfields:\n  focus: {}\n---\n{{focus}}" }, [
+    { id: "review", name: "Review" },
+  ]);
+  for (const text of ["$unknown", "\\$rev", "`$rev`", "$rev$", '#review(focus="$rev")']) {
+    ui.prompt.setText(text);
+    ui.prompt.cursorOffset = text.includes("$rev") ? text.indexOf("$rev") + 4 : text.length;
+    await ui.settle();
+    expect(ui.captureCharFrame()).not.toContain("$review");
+    expect(ui.captureCharFrame()).not.toContain("Add new Snippet");
+    expect(ui.prompt.traits.completer).toBeUndefined();
+    ui.mockInput.pressEnter();
+  }
+  expect(ui.submissions()).toBe(5);
+  expect(ui.dialogs).toEqual([]);
+});
+
+test("Escape dismisses dollar completion without changing text or loading a skill", async () => {
+  const ui = await setup(undefined, {}, [{ id: "review", name: "Review" }]);
+  await ui.mockInput.typeText("$rev");
+  await ui.settle();
+  expect(ui.captureCharFrame()).toContain("$review");
+  ui.mockInput.pressEscape();
+  await ui.settle();
+  expect(ui.captureCharFrame()).not.toContain("$review");
+  expect(ui.prompt.plainText).toBe("$rev");
+  expect(ui.submissions()).toBe(0);
+});
 
 test("an exact alias preselects its snippet and Tab accepts it before substring matches", async () => {
   const ui = await setup(undefined, {

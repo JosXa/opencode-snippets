@@ -48,7 +48,7 @@ describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("OpenCode 2 runtime", () =
       withFixture(async (host) => {
         const first = await host.run("#nested");
         expect(first.user.text).toBe("PROJECT_CHOSEN");
-        const second = await host.run("#skill(local)", { session: first.session });
+        const second = await host.run("$local", { session: first.session });
         expect(second.user.text).toBe("↳ Loaded local");
         expect(second.session).toBe(first.session);
         expect(
@@ -110,7 +110,7 @@ describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("OpenCode 2 runtime", () =
           const queued = await native.request<{ data: { id: string } }>(
             `/api/session/${session}/prompt`,
             {
-              text: "#persist #skill(local)",
+              text: "#persist $local",
               delivery: "queue",
               resume: false,
             },
@@ -146,7 +146,7 @@ describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("OpenCode 2 runtime", () =
     () =>
       withFixture(async (host) => {
         await host.verify();
-        const result = await host.submit('👩‍💻 #nested #_chosen #unknown #skill("host:proof")');
+        const result = await host.submit("👩‍💻 #nested #_chosen #unknown $host:proof");
         expect(result.user.text).toBe("👩‍💻 PROJECT_CHOSEN #_chosen #unknown ↳ Loaded Host proof");
         expect(result.user.text).not.toContain("HOST_BODY");
         const messages = result.calls.at(-1)?.messages ?? [];
@@ -167,7 +167,8 @@ describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("OpenCode 2 runtime", () =
     () =>
       withFixture(async (host) => {
         const file = join(host.directory, "notes.txt");
-        const attachment = "ATTACHED #chosen #skill(local) !`printf x >> attachment-ran.txt`";
+        const attachment =
+          "ATTACHED #chosen $local #skill(local) !`printf x >> attachment-ran.txt`";
         await Bun.write(file, attachment);
         const result = await host.submit("#chosen #skill(local)", { file, skills: ["host:proof"] });
         expect(result.user.text).toBe("PROJECT_CHOSEN ↳ Loaded local");
@@ -206,7 +207,7 @@ describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("OpenCode 2 runtime", () =
     "restores context across process restart and fork without replaying shell commands",
     () =>
       withFixture(async (host) => {
-        const first = await host.submit("#once #skill(local) #persist");
+        const first = await host.submit("#once $local #persist");
         expect(first.user.text).toBe("SHELL_PROOF ↳ Loaded local VISIBLE_PERSIST");
         await host.write("once", "CHANGED_SHELL_SNIPPET");
         await Bun.write(
@@ -302,14 +303,39 @@ describe.skipIf(process.env.SNIPPETS_TEST_V2 !== "1")("OpenCode 2 runtime", () =
     () =>
       withFixture(async (host) => {
         await host.configure(false);
-        await host.write("load", "#skill(local)");
+        await host.write("load", "$local #skill(local)");
         const result = await host.submit('#nested #load <skill name="local" /> #persist #once');
         expect(result.user.text).toBe(
-          'PROJECT_CHOSEN #skill(local) <skill name="local" /> VISIBLE_PERSIST<inject>PERSISTENT_CONTEXT</inject> SHELL_PROOF',
+          'PROJECT_CHOSEN $local #skill(local) <skill name="local" /> VISIBLE_PERSIST<inject>PERSISTENT_CONTEXT</inject> SHELL_PROOF',
         );
         const messages = result.calls.at(-1)?.messages ?? [];
         expect(messages.filter((message) => message.role === "user")).toHaveLength(1);
         expect(JSON.stringify(messages)).not.toContain("LOCAL_BODY");
+      }),
+    120_000,
+  );
+
+  test(
+    "loads nested dollar IDs without changing literal regions or shell variables",
+    () =>
+      withFixture(async (host) => {
+        await host.write("load", "$host:proof");
+        await host.write("answer", "---\nfields:\n  text: {type: textarea}\n---\n{{text}}");
+        const literal =
+          "`$host:proof`\n```sh\n$host:proof\n```\n\\$host:proof $host:proof$ $HOME /\\$host:proof\\b/";
+        const result = await host.submit(
+          `${literal}\n#answer(text="$host:proof") !\`host=VARIABLE; printf '%s' "$host"\` #load #skill(local)`,
+        );
+        expect(result.user.text).toBe(
+          `${literal}\n$host:proof VARIABLE ↳ Loaded Host proof ↳ Loaded local`,
+        );
+        const messages = result.calls.at(-1)?.messages ?? [];
+        const hidden = messages.filter((message) =>
+          text(message).includes('<skill_content name="Host proof">'),
+        );
+        expect(hidden).toHaveLength(1);
+        expect(text(hidden[0])).toContain("HOST_BODY PROJECT_CHOSEN");
+        expect(text(hidden[0]).match(/<skill_content /g)).toHaveLength(2);
       }),
     120_000,
   );

@@ -5,7 +5,7 @@ import {
   validateFields,
 } from "./fields.js";
 import { parseInvocation } from "./invocation.js";
-import { findHashtagTriggerAtCursor } from "./tui-trigger.js";
+import { findHashtagTriggerAtCursor, findSkillTriggerAtCursor } from "./tui-trigger.js";
 import type { SnippetRegistry } from "./types.js";
 
 export type FormDraft = Record<string, string | boolean | string[]>;
@@ -56,7 +56,7 @@ export function moveFormFocus(current: number, count: number, backwards: boolean
 }
 
 export function formAwareTrigger(text: string, cursor: number, registry: SnippetRegistry) {
-  const match = findHashtagTriggerAtCursor(text, cursor);
+  const match = findSkillTriggerAtCursor(text, cursor) ?? findHashtagTriggerAtCursor(text, cursor);
   if (!match) return;
   if (match.query.includes("(") && !/^skill\([^)]*$/.test(match.query)) return;
   // Existing invocations are edited through Ctrl+G, including their name and
@@ -79,7 +79,7 @@ export function formAwareTrigger(text: string, cursor: number, registry: Snippet
 
 export function exactSnippetTrigger(text: string, cursor: number, registry: SnippetRegistry) {
   const match = formAwareTrigger(text, cursor, registry);
-  if (!match || !registry.has(match.query.toLowerCase())) return;
+  if (!match || match.token.startsWith("$") || !registry.has(match.query.toLowerCase())) return;
   if (/[\w(-]/.test(text[match.end] ?? "")) return;
   return match;
 }

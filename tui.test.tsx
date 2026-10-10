@@ -379,7 +379,7 @@ describe("V2 TUI plugin", () => {
       editor.gotoLineEnd();
       await Bun.sleep(50);
       screen.mockInput.pressTab();
-      expect(editor.plainText).toBe("#skill(plugin:remote) ");
+      expect(editor.plainText).toBe("$plugin:remote ");
       dispose?.();
     });
   }

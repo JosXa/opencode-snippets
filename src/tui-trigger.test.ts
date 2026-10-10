@@ -3,6 +3,7 @@ import { filterSkills, filterSnippets } from "./tui-search.js";
 import {
   buildTuiCompletionOptions,
   findHashtagTriggerAtCursor,
+  findSkillTriggerAtCursor,
   findTrailingHashtagTrigger,
   insertSkillLoad,
   insertSnippetTag,
@@ -116,6 +117,52 @@ describe("cursor-position hashtag completion", () => {
   });
 });
 
+describe("dollar skill completion", () => {
+  test("matches bare and qualified queries at the cursor", () => {
+    expect(findSkillTriggerAtCursor("$", 1)).toEqual({ start: 0, end: 1, query: "", token: "$" });
+    const text = "中🙂 $host:pro tail";
+    expect(findSkillTriggerAtCursor(text, text.indexOf(" tail"))).toEqual({
+      start: 4,
+      end: 13,
+      query: "host:pro",
+      token: "$host:pro",
+    });
+    expect(findSkillTriggerAtCursor("$review", 3)?.query).toBe("re");
+    expect(findSkillTriggerAtCursor("$host:", 6)?.query).toBe("host:");
+  });
+
+  test.each([
+    "\\$rev",
+    "foo$rev",
+    "`$rev`",
+    "!`echo $rev`",
+    "$rev$",
+    "$$rev",
+    "$HOME",
+    `\${rev}`,
+  ])("does not offer skill completion in %s", (text) =>
+    expect(findSkillTriggerAtCursor(text, text.indexOf("rev") + 3)).toBeUndefined());
+
+  test("dollar completion excludes snippets while hashtag discovery stays mixed", () => {
+    const snippets = [
+      {
+        name: "review",
+        content: "REVIEW",
+        aliases: [],
+        source: "global" as const,
+        filePath: "/tmp/review.md",
+      },
+    ];
+    const skills = [{ name: "review", description: "Review skill" }];
+    expect(
+      buildTuiCompletionOptions(snippets, skills, "rev", "skill").map((option) => option.title),
+    ).toEqual(["$review"]);
+    expect(
+      buildTuiCompletionOptions(snippets, skills, "rev").map((option) => option.title),
+    ).toEqual(["#review", "$review"]);
+  });
+});
+
 describe("V2 autocomplete choices", () => {
   const snippets = [
     { name: "open-in-browser", aliases: [] },
@@ -172,7 +219,7 @@ describe("V2 autocomplete choices", () => {
       expect(options.map((option) => option.value)).toEqual(
         names.map((name) => ({ kind: "skill", name })),
       );
-      expect(options.map((option) => option.title)).toEqual(names.map((name) => `#skill(${name})`));
+      expect(options.map((option) => option.title)).toEqual(names.map((name) => `$${name}`));
     }
   });
 
@@ -225,7 +272,7 @@ describe("V2 autocomplete choices", () => {
     );
 
     // Typing the skill name without its dash must still show the insertable skill tag.
-    expect(options.map((option) => option.title)).toContain("#skill(show-me)");
+    expect(options.map((option) => option.title)).toContain("$show-me");
   });
 
   test("ranks the closer fuzzy match first in autocomplete", () => {
@@ -340,11 +387,16 @@ describe("insertSnippetTag", () => {
 
 describe("insertSkillLoad", () => {
   test("replaces the active trailing hashtag with a skill load", () => {
-    expect(insertSkillLoad("please #sn", "caveman")).toBe("please #skill(caveman) ");
+    expect(insertSkillLoad("please #sn", "caveman")).toBe("please $caveman ");
   });
 
   test("appends a skill load with spacing when needed", () => {
-    expect(insertSkillLoad("please review", "caveman")).toBe("please review #skill(caveman) ");
+    expect(insertSkillLoad("please review", "caveman")).toBe("please review $caveman ");
+  });
+
+  test("replaces a dollar query and retains display names through the legacy form", () => {
+    expect(insertSkillLoad("$host:pr", "host:proof")).toBe("$host:proof ");
+    expect(insertSkillLoad("", "Release Notes")).toBe('#skill("Release Notes") ');
   });
 });
 

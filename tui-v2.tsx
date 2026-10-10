@@ -11,6 +11,7 @@ import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { type FieldValues, getSnippetForm } from "./src/fields.js";
 import { serializeInvocation } from "./src/invocation.js";
 import { listSnippets, loadSnippets } from "./src/loader.js";
+import { formatSkillLoad } from "./src/skill-invocation.js";
 import { ensureSnippetDraft, openExternalEditor, resolveExternalEditor } from "./src/tui-editor.js";
 import { SnippetForm } from "./src/tui-form.js";
 import {
@@ -22,7 +23,7 @@ import {
 import { type LibraryState, SnippetLibrary } from "./src/tui-library.js";
 import {
   buildTuiCompletionOptions,
-  type findHashtagTriggerAtCursor,
+  type CompletionTrigger,
   isAutocompleteNavDownKey,
   isAutocompleteNavUpKey,
   normalizeUnmatchedTrigger,
@@ -137,7 +138,7 @@ const plugin = Plugin.define({
         const [dismissed, setDismissed] = createSignal<string>();
         const [dialogOpen, setDialogOpen] = createSignal(false);
         const [options, setOptions] = createSignal<TuiCompletionOption[]>([]);
-        const [trigger, setTrigger] = createSignal<ReturnType<typeof findHashtagTriggerAtCursor>>();
+        const [trigger, setTrigger] = createSignal<CompletionTrigger>();
         const [selected, setSelected] = createSignal(0);
         const [position, setPosition] = createSignal({ top: 0, left: 0, width: 1 });
         let anchor: BoxRenderable | undefined;
@@ -211,7 +212,15 @@ const plugin = Plugin.define({
             listSnippets(snippets),
             skills.values(),
             match.query,
+            match.token.startsWith("$") ? "skill" : "mixed",
           );
+          // Unknown dollars are ordinary text and must not offer snippet creation
+          // or claim the host's Enter key when no skill can be completed.
+          if (match.token.startsWith("$") && next.length === 0) {
+            setTrigger(undefined);
+            lastKey = "";
+            return;
+          }
           const key = `${focused.plainText}\n${cursor}\n${next.map((item) => item.title).join("\n")}`;
           if (key !== lastKey) {
             lastKey = key;
@@ -358,10 +367,10 @@ const plugin = Plugin.define({
             return;
           }
           const name = snippet?.aliases.find((alias) => alias === match.query) ?? choice.name;
-          const tag = choice.kind === "skill" ? `#skill(${choice.name})` : `#${name}`;
+          const tag = choice.kind === "skill" ? formatSkillLoad(choice.name) : `#${name}`;
           if (choice.kind === "snippet" && openForm(focused, name, match, {}, " ")) return;
           // Replacing the whole buffer clears host extmarks and their payload IDs.
-          // Only edit the hashtag; native edits relocate unrelated marks for us.
+          // Only edit the reference; native edits relocate unrelated marks for us.
           replaceReferenceRange(focused, match, `${tag} `);
           focused.focus();
           setDismissed(undefined);
@@ -373,6 +382,7 @@ const plugin = Plugin.define({
           const focused = activePrompt();
           if (!focused) return;
           const match = promptTrigger(focused, snippets);
+          if (!match || match.token.startsWith("$")) return;
           const name = normalizeUnmatchedTrigger(match?.query ?? "");
           if (!name) return;
           const editor = resolveExternalEditor();

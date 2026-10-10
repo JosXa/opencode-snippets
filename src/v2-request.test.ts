@@ -277,10 +277,10 @@ describe("native OC2 submitted messages", () => {
       );
       await Bun.write(
         join(directory, "form.md"),
-        '---\nfields:\n  text:\n    type: textarea\n    required: true\n---\n{{text}}/{{text}}<append>{{text}}</append><inject>{{text}}</inject> !`printf x >> effects; printf EFFECT` {{skill "hidden"}} #skill(hidden)',
+        '---\nfields:\n  text:\n    type: textarea\n    required: true\n---\n{{text}}/{{text}}<append>{{text}}</append><inject>{{text}}</inject> !`printf x >> effects; printf EFFECT` {{skill "hidden"}} $hidden',
       );
       const answer =
-        '#chosen #skill(hidden) <skill name="hidden" /> <append>INJECTED</append> <inject>INJECTED</inject> {{field "oops"}} !`printf BAD >> hostile`\n"🙂"';
+        '#chosen $hidden #skill(hidden) <skill name="hidden" /> <append>INJECTED</append> <inject>INJECTED</inject> {{field "oops"}} !`printf BAD >> hostile`\n"🙂"';
       const raw = serializeInvocation("form", { text: answer });
       const submission = { sessionID: "literal", messageID: "first", prompt: { text: raw } };
       await host.invoke("prompt", submission);
@@ -425,10 +425,10 @@ describe("native OC2 submitted messages", () => {
     try {
       host.skills.push({ ...host.skills[0], id: "other-id", name: "Other", content: "OTHER_BODY" });
       const directory = join(host.directory, ".opencode", "snippet");
-      await Bun.write(join(directory, "leaf.md"), "#skill(hidden)");
+      await Bun.write(join(directory, "leaf.md"), "$hidden");
       await Bun.write(
         join(directory, "outer.md"),
-        '<prepend>#leaf</prepend>BODY<append>#skill("other-id")</append>',
+        "<prepend>#leaf</prepend>BODY<append>$other-id</append>",
       );
       await Bun.write(join(directory, "skill.md"), "WRONG_SNIPPET");
       const submission = {
@@ -490,7 +490,7 @@ describe("native OC2 submitted messages", () => {
     const host = await submissionFixture();
     try {
       const directory = join(host.directory, ".opencode", "snippet");
-      await Bun.write(join(directory, "native.md"), '#skill("plugin:remote")');
+      await Bun.write(join(directory, "native.md"), "$plugin:remote");
       host.skills.push({
         ...host.skills[0],
         id: "plugin:remote",

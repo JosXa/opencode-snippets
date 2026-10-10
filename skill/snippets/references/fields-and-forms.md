@@ -256,7 +256,7 @@ Literal example: \{{example}}
 
 `#_name` escapes a snippet reference. Ordinary user prose is not globally processed as Handlebars, and existing bodies without their own `fields` mapping or inline-skill helpers stay literal, including placeholders such as `{{session_id}}`.
 
-Use `{{skill "review"}}` inside a snippet for an inline skill body. Existing XML skill rendering remains supported; prefer the helper in new templates. `#skill(review)` retains its separate syntax and shows a loaded marker with hidden skill context. Forms discover fields without running shell commands or loading skill bodies. Existing `!`/`!>` backtick shell substitution still runs after expansion.
+Use `{{skill "review"}}` inside a snippet for an inline skill body. Existing skill tags in XML remain supported. Prefer the helper in new templates. `$review` automatically shows a loaded marker with hidden skill context, and `#skill(review)` remains supported. Dollar references in field answers stay literal. Forms discover fields without running shell commands or loading skill bodies. Existing `!`/`!>` backtick shell substitution still runs after expansion.
 
 ## Multiple choices selected by default
 

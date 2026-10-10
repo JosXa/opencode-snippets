@@ -142,6 +142,17 @@ describe("form transitions", () => {
 });
 
 describe("form invocation targeting", () => {
+  test("keeps dollar references in field answers literal without opening snippet forms", () => {
+    for (const text of ['#review(focus="look $review")', '#review(focus="look $review']) {
+      const cursor = text.lastIndexOf("$review") + 7;
+      expect(formAwareTrigger(text, cursor, registry)).toBeUndefined();
+      expect(exactSnippetTrigger(text, cursor, registry)).toBeUndefined();
+    }
+    expect(formAwareTrigger("$review", 7, registry)?.query).toBe("review");
+    expect(exactSnippetTrigger("$review", 7, registry)).toBeUndefined();
+    const text = '#review(focus="$review") $review';
+    expect(formAwareTrigger(text, text.length, registry)?.token).toBe("$review");
+  });
   test("suppresses completion throughout an existing invocation name and retains Ctrl+G editing", () => {
     for (const suffix of ['(focus="Payroll #review")', "()", '(focus="unfinished']) {
       const prefix = "🙂 ";

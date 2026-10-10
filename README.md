@@ -222,7 +222,7 @@ Arguments use named keys, JSON-quoted text, finite numbers, `yes`/`no` booleans,
 
 See [field authoring and natural-language examples](skill/snippets/references/fields-and-forms.md) for all field types, constraints, escaping, repeated values, and conditional prose. The [example templates](examples/forms/) include review, reword, and options presets. Review emits no directive for zero reviewers or zero cycles; one reviewer omits parallelism and one cycle omits repetition. Reword and options also omit their requests for zero.
 
-For inline skill content in a snippet, use `{{skill "review"}}`. Existing XML skill tags remain supported; `#skill(review)` continues to load hidden context with a visible marker.
+For inline skill content in a snippet, use `{{skill "review"}}`. Existing XML skill tags remain supported. `$review` loads hidden context with a visible marker, and `#skill(review)` remains supported.
 
 ### Shell Command Substitution
 
@@ -384,13 +384,19 @@ When a skill tag is found, it's replaced with the skill's content body (frontmat
 Load a skill with OpenCode-style wrapper content without showing the full skill body inline:
 
 ```markdown
-Write this in caveman mode. #skill(caveman)
+$caveman
 ```
 
-Quoted names are also supported:
+The bare reference loads the skill automatically. `$` completion lists skills, while `#` completion lists snippets and skills. Autocomplete inserts the native skill ID, including qualified IDs such as `$host:proof`.
+
+Dollar IDs use lowercase letters, digits, hyphens and underscores, with optional colon-separated namespaces. They must contain a letter. `$HOME`, prices, embedded variables such as `foo$review`, and partial IDs such as `$review.path` stay literal. A period or colon followed by whitespace or the end of the message is punctuation.
+
+Dollar references inside backtick code spans, fenced or indented code, shell substitutions, slash-delimited regex literals, and paired `$...$` or `$$...$$` math stay literal. Unclosed code spans and fences protect the remaining text. Write `\$review` to keep a reference literal, including its backslash. Field answers and native attachments also stay literal.
+
+The legacy form remains supported, including quoted display names and IDs outside the dollar grammar:
 
 ```markdown
-#skill("opencode-config")
+#skill("Release Notes")
 ```
 
 **Enable in config:**
@@ -403,17 +409,19 @@ Quoted names are also supported:
 }
 ```
 
-When enabled, the user-visible message shows `↳ Loaded name`, while the model receives an injected OpenCode-style `<skill_content>` payload immediately after that message. Multiple `#skill(...)` calls in one message are injected in their final visible order, including loads introduced by recursive snippets and prepend/append blocks.
+When enabled, the user-visible message shows `↳ Loaded name`, while the model receives an injected OpenCode-style `<skill_content>` payload immediately after that message. Dollar and legacy references in one message are injected in their final visible order, including loads introduced by recursive snippets and prepend/append blocks. Each occurrence loads a payload. References inside a loaded skill body do not recursively load more skills.
 
-XML skill tags render before hashtag expansion; `#skill(...)` loads resolve after recursive hashtag expansion; shell substitutions run last. Loaded skill bodies also expand snippet hashtags and shell substitutions. Within `<inject>` blocks, only hashtag references expand. Skill-tool results expand XML tags and recursive hashtags using the configured injection flag.
+Skill tags in XML render before hashtag expansion. Skill loads resolve after recursive hashtag expansion, and shell substitutions run last. Loaded skill bodies also expand snippet hashtags and shell substitutions. Within `<inject>` blocks, only hashtag references expand. Skill-tool results expand XML tags and recursive hashtags using the configured injection flag.
+
+When passing dollar references through a shell, use literal quoting so the shell does not expand them, for example `opencode2 run '$review'` in Bash.
 
 Quick project-local demo in this repo:
 
 ```markdown
-Explain closures in two lines. #skill(demo-voice)
+Explain closures in two lines. $demo-voice
 ```
 
-Or use the included snippet that expands into `#skill(...)`:
+Or use the included snippet that expands into `$demo-voice`:
 
 ```markdown
 #demo-skill Explain closures in two lines.
@@ -528,7 +536,7 @@ A default config file is created automatically on first run.
   "experimental": {
     "injectBlocks": false, // Enable <inject>...</inject> blocks for persistent context
     "skillRendering": false, // Enable <skill>name</skill> tag expansion
-    "skillLoading": false // Enable #skill(name) OpenCode-style loading
+    "skillLoading": false // Enable $id and #skill(name) OpenCode-style loading
   },
   "injectRecencyMessages": 5 // How many messages from the bottom to place injected context
 }
@@ -548,7 +556,7 @@ directory prevents each append from reloading config and rebuilding skill watche
 
 - Snippets expand everywhere: regular chat, question responses, skills, and slash commands
 - Injected snippet context is placed N messages from the bottom (configured by `injectRecencyMessages`) and shows a `↳ Injected #name` indicator when first registered
-- `#skill(name)` inserts OpenCode-style skill payload text above the visible user message while keeping the transcript inline placeholder compact
+- `$id` and `#skill(name)` load skill context immediately after the visible user message and show a compact marker in the transcript
 - Snippets are loaded once at plugin startup
 - Hashtag matching is **case-insensitive** (`#Hello` = `#hello`)
 - Unknown hashtags are left unchanged
