@@ -52,6 +52,7 @@ export function watchSnippets(
       }
       add(directory);
       add(dirname(directory), basename(directory));
+      add(dirname(dirname(directory)), basename(dirname(directory)));
     }
     for (const [path, target] of plan) {
       try {

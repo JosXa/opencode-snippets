@@ -372,7 +372,7 @@ const plugin = Plugin.define({
           // Preserve a fully typed alias. Partial matches use the canonical name
           // because ASCII compaction could otherwise turn #rev into #中rev.
           // A broken draft from this session stays addressable; reopen it for correction.
-          if (snippet?.metadataError && drafts.has(snippet.filePath)) {
+          if (snippet && drafts.has(snippet.filePath)) {
             void createUnmatched();
             return;
           }
