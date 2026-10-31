@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -41,6 +41,11 @@ export async function fixture() {
     mkdir(join(directory, ".opencode", "skills", "local"), { recursive: true }),
     mkdir(join(root, "native"), { recursive: true }),
   ]);
+  await symlink(
+    resolve(import.meta.dir, "..", "node_modules"),
+    join(root, "native", "node_modules"),
+    "dir",
+  );
   const requests: Request[] = [];
   const server = Bun.serve({
     port: 0,
