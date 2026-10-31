@@ -47,8 +47,11 @@ async function fixture(width = 120, height = 38, scroll = { speed: 3, accelerati
     drafts: new Map(),
   };
   let closed = false;
+  let refresh = () => {};
   const view = await testRender(
     () => {
+      const [revision, setRevision] = createSignal(0);
+      refresh = () => setRevision((value) => value + 1);
       const renderer = useRenderer();
       renderer.copyToClipboardOSC52 = (text) => {
         clipboard.push(text);
@@ -113,6 +116,7 @@ async function fixture(width = 120, height = 38, scroll = { speed: 3, accelerati
             directory={directory}
             globalDirectory={globalDirectory}
             state={state}
+            revision={revision()}
             reload={async () => {}}
             close={() => {
               closed = true;
@@ -179,8 +183,41 @@ async function fixture(width = 120, height = 38, scroll = { speed: 3, accelerati
       return state.selected;
     },
     closed: () => closed,
+    refresh,
   };
 }
+
+test("live refresh updates clean previews and the list while retaining editor focus and unsaved drafts", async () => {
+  const view = await fixture();
+  const base = (await view.library.list()).files.find((file) => file.name === "base");
+  if (!base) throw new Error("Missing base snippet");
+  view.state.drafts.set(base.filePath, { file: base, raw: base.raw });
+  await Bun.write(base.filePath, "Updated unselected file");
+  await Bun.write(view.path(), "External preview");
+  await view.library.create("new", "global", "New file");
+  view.refresh();
+  await view.settle();
+  expect(view.state.drafts.has(base.filePath)).toBe(false);
+  expect(view.captureCharFrame()).toContain("External preview");
+  expect(view.captureCharFrame()).toContain("#new");
+  view.mockInput.pressEnter();
+  await view.settle();
+  await Bun.write(view.path(), "Clean editor update");
+  view.refresh();
+  await view.settle();
+  expect(view.editor().plainText).toBe("Clean editor update");
+  expect(view.editor().focused).toBe(true);
+  view.editor().setText("Unsaved local draft");
+  await view.settle();
+  await Bun.write(view.path(), "Conflicting disk update");
+  view.refresh();
+  await view.settle();
+  expect(view.editor().plainText).toBe("Unsaved local draft");
+  expect(view.editor().focused).toBe(true);
+  view.mockInput.pressKey("s", { ctrl: true });
+  await view.settle();
+  expect(view.captureCharFrame()).toContain("changed on disk");
+});
 
 test("uses native foreground/background pairs for selection, actions and focused search", async () => {
   const view = await fixture();

@@ -284,8 +284,7 @@ export async function fixture() {
     ),
     Bun.write(
       join(root, "native", "index.js"),
-      // The fixture lives outside the checkout and cannot inherit its node_modules.
-      `import { Plugin } from ${JSON.stringify(import.meta.resolve("@opencode/plugin"))};
+      `import { Plugin } from "@opencode/plugin";
 export default Plugin.define({id:"runtime-fixture",async setup(ctx){
   await ctx.skill.transform(editor => {
     editor.add({id:"host:proof",name:"Host proof",description:"Native registry fixture",path:${JSON.stringify(join(root, "native", "SKILL.md"))},content:"HOST_BODY #chosen"});

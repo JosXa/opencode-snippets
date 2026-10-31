@@ -57,6 +57,20 @@ export function getProjectPaths(projectDir: string) {
   };
 }
 
+export function getSnippetDirectories(projectDir?: string, globalDir?: string) {
+  const project = projectDir ? getProjectPaths(projectDir) : undefined;
+  return [
+    ...(globalDir ? [globalDir] : [PATHS.SNIPPETS_DIR_ALT, PATHS.SNIPPETS_DIR]).map((path) => ({
+      path,
+      source: "global" as const,
+    })),
+    ...(project ? [project.SNIPPETS_DIR_ALT, project.SNIPPETS_DIR] : []).map((path) => ({
+      path,
+      source: "project" as const,
+    })),
+  ];
+}
+
 /**
  * Plugin configuration
  */

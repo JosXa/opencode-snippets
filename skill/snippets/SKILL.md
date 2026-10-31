@@ -52,6 +52,13 @@ reloading snippets. Edit aliases, descriptions, and fields in the source editor.
 Ctrl+G or **Edit snippet fields** in the command palette edits an invocation under
 the composer cursor. Agents can manage the Markdown files directly.
 
+In OpenCode V2, Markdown snippet changes automatically refresh autocomplete and
+open libraries in every running TUI that uses the directory, including changes
+made by agents. Global snippets update across projects; project snippets update
+within their project. Do not request a restart or touch OpenCode configuration to
+refresh snippets. Use the library's **Reload** action for a manual refresh;
+unsaved drafts require confirmation before they are discarded.
+
 ## Sharing snippets
 
 Share to [GitHub Discussions](https://github.com/JosXa/opencode-snippets/discussions/categories/snippets).

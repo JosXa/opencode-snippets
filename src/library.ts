@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { lstat, readdir, readFile, realpath, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { importCjs } from "./cjs-interop.js";
-import { getProjectPaths, PATHS } from "./constants.js";
+import { getSnippetDirectories } from "./constants.js";
 import { getSnippetForm } from "./fields.js";
 import { ensureSnippetsDir, loadSnippets, validateSnippetName } from "./loader.js";
 import type { SnippetInfo, SnippetRegistry } from "./types.js";
@@ -85,19 +85,7 @@ export function validateLibraryFile(file: LibraryFile, registry: SnippetRegistry
 }
 
 export function createLibrary(directory: string, globalDirectory?: string) {
-  const project = getProjectPaths(directory);
-  const roots = [
-    ...(globalDirectory
-      ? [{ path: globalDirectory, source: "global" as const }]
-      : [PATHS.SNIPPETS_DIR_ALT, PATHS.SNIPPETS_DIR].map((path) => ({
-          path,
-          source: "global" as const,
-        }))),
-    ...[project.SNIPPETS_DIR_ALT, project.SNIPPETS_DIR].map((path) => ({
-      path,
-      source: "project" as const,
-    })),
-  ];
+  const roots = getSnippetDirectories(directory, globalDirectory);
   const root = (path: string) => {
     const found = roots.find((item) => resolve(item.path) === resolve(dirname(path)));
     if (!found || !path.endsWith(".md")) throw new Error("File is outside the snippet library.");

@@ -433,6 +433,13 @@ Demo files live at `.opencode/skill/demo-voice/SKILL.md` and `.opencode/snippet/
 
 Open `/snippets` to manage your project and global snippets.
 
+In OpenCode V2, saving, adding, renaming, or deleting a Markdown snippet refreshes
+autocomplete and open libraries in every running TUI that uses that directory.
+This includes changes made by agents and external editors. Global snippets update
+across projects; project snippets update in TUIs opened for that project. Unsaved
+library drafts keep their contents and still require confirmation before reload.
+The library's **Reload** action remains available for a manual refresh.
+
 - **Enter** edits the Markdown source; **Ctrl+S** saves.
 - **Shift+Enter** opens the file in `VISUAL` or `EDITOR` and reloads it on return.
 - **More** or **:** opens actions: new, reload, duplicate, rename, move, delete, copy reference, and form testing.

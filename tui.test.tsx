@@ -29,6 +29,66 @@ afterEach(async () => {
 });
 
 describe("V2 TUI plugin", () => {
+  test("external saves update completion names, aliases and field definitions", async () => {
+    root = await mkdtemp(join(tmpdir(), "snippets-live-tui-"));
+    const globalDirectory = join(root, "snippets");
+    const screen = await createTestRenderer({ width: 90, height: 24 });
+    destroyRenderer = () => screen.renderer.destroy();
+    const editor = new TextareaRenderable(screen.renderer, { id: "prompt", width: 90, height: 3 });
+    editor.traits = { capture: ["tab"], ...{ owner: "opencode", role: "prompt" } };
+    screen.renderer.root.add(editor);
+    let footer: (input: { mode: "normal"; showDetails: boolean }) => JSX.Element = () => null;
+    const forms: boolean[] = [];
+    const dispose = await plugin.setup({
+      location: { directory: root },
+      theme,
+      options: { globalDirectory },
+      renderer: screen.renderer,
+      client: { skill: { list: async () => ({ data: [] }) } },
+      keymap: { mode: { current: () => "base" }, layer() {} },
+      ui: {
+        router: { register: () => () => {}, current: () => ({ type: "home" }) },
+        slot: ({ render }: { render: typeof footer }) => {
+          footer = render;
+          return () => {};
+        },
+        toast: { show() {} },
+        dialog: {
+          set() {
+            forms.push(true);
+          },
+          show() {},
+        },
+      },
+    } as never);
+    try {
+      await render(() => footer({ mode: "normal", showDetails: true }), screen.renderer);
+      editor.focus();
+      editor.insertText("#live");
+      await mkdir(globalDirectory);
+      const file = join(globalDirectory, "live.md");
+      await writeFile(file, "---\naliases: [leaf]\ndescription: First description\n---\nFirst");
+      await Bun.sleep(200);
+      screen.mockInput.pressTab();
+      expect(editor.plainText).toBe("#live ");
+      editor.setText("#leaf");
+      editor.gotoLineEnd();
+      screen.mockInput.pressTab();
+      expect(editor.plainText).toBe("#leaf ");
+      await writeFile(
+        file,
+        "---\naliases: [green]\ndescription: Updated description\nfields:\n  plant: {}\n---\n{{plant}}",
+      );
+      await Bun.sleep(200);
+      editor.setText("#green");
+      editor.gotoLineEnd();
+      await Bun.sleep(50);
+      screen.mockInput.pressTab();
+      expect(forms).toEqual([true]);
+    } finally {
+      dispose?.();
+    }
+  });
   for (const phase of ["confirmation", "reload", "editor"] as const) {
     test(`a different prompt keeps focus during delayed ${phase}`, async () => {
       root = await mkdtemp(join(tmpdir(), "snippets-focus-"));

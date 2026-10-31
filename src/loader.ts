@@ -14,7 +14,7 @@ import { importCjs } from "./cjs-interop.js";
 
 const matter = await importCjs<typeof import("gray-matter")>("gray-matter");
 
-import { CONFIG, getProjectPaths, PATHS } from "./constants.js";
+import { CONFIG, getProjectPaths, getSnippetDirectories, PATHS } from "./constants.js";
 import { logger } from "./logger.js";
 import type { SnippetFrontmatter, SnippetInfo, SnippetRegistry } from "./types.js";
 
@@ -47,17 +47,6 @@ async function resolveSnippetTarget(path: string): Promise<string> {
     if (target === undefined) return path;
     path = await canonicalFile(resolve(dirname(path), target));
   }
-}
-
-function getGlobalSnippetDirs(globalDir?: string): string[] {
-  if (globalDir) return [globalDir];
-
-  return [PATHS.SNIPPETS_DIR_ALT, PATHS.SNIPPETS_DIR];
-}
-
-function getProjectSnippetDirs(projectDir: string): string[] {
-  const paths = getProjectPaths(projectDir);
-  return [paths.SNIPPETS_DIR_ALT, paths.SNIPPETS_DIR];
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -169,17 +158,11 @@ export async function loadSnippets(
 ): Promise<SnippetRegistry> {
   const snippets: SnippetRegistry = new Map();
 
-  // Support both snippet/ and snippets/. Load plural first so existing snippet/ files still win.
-  for (const dir of getGlobalSnippetDirs(globalDir)) {
-    await loadFromDirectory(dir, snippets, "global");
-  }
-
-  // Load from project directory if provided (overrides global)
-  if (projectDir) {
-    for (const dir of getProjectSnippetDirs(projectDir)) {
-      if (!(await assertProjectSnippetDirectory(projectDir, dir))) continue;
-      await loadFromDirectory(dir, snippets, "project");
+  for (const dir of getSnippetDirectories(projectDir, globalDir)) {
+    if (dir.source === "project" && projectDir) {
+      if (!(await assertProjectSnippetDirectory(projectDir, dir.path))) continue;
     }
+    await loadFromDirectory(dir.path, snippets, dir.source);
   }
 
   return snippets;

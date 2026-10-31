@@ -12,6 +12,7 @@ import { type FieldValues, getSnippetForm } from "./src/fields.js";
 import { serializeInvocation } from "./src/invocation.js";
 import { listSnippets, loadSnippets } from "./src/loader.js";
 import { formatSkillLoad } from "./src/skill-invocation.js";
+import { watchSnippets } from "./src/snippet-watcher.js";
 import { ensureSnippetDraft, openExternalEditor, resolveExternalEditor } from "./src/tui-editor.js";
 import { SnippetForm } from "./src/tui-form.js";
 import {
@@ -65,8 +66,9 @@ const plugin = Plugin.define({
         name: skill.id,
         description: skill.description,
       }));
-    let snippets = await loadSnippets(directory, globalDirectory);
+    let snippets: SnippetRegistry = new Map();
     let skills = await loadSkills();
+    const [revision, setRevision] = createSignal(0);
     const drafts = new Set<string>();
     const forms = new Map<string, boolean>();
     const hasForm = (name: string) => {
@@ -83,9 +85,16 @@ const plugin = Plugin.define({
       }
     };
 
-    const reload = async () => {
+    const refresh = async () => {
       snippets = await loadSnippets(directory, globalDirectory);
       forms.clear();
+      setRevision((value) => value + 1);
+    };
+    const stopWatching = watchSnippets(directory, globalDirectory, refresh);
+    await refresh();
+
+    const reload = async () => {
+      await refresh();
       skills = await loadSkills();
     };
 
@@ -106,6 +115,7 @@ const plugin = Plugin.define({
           directory={directory}
           globalDirectory={globalDirectory}
           state={library}
+          revision={revision()}
           reload={reload}
           close={() => context.ui.router.navigate(previous)}
         />
@@ -221,7 +231,7 @@ const plugin = Plugin.define({
             lastKey = "";
             return;
           }
-          const key = `${focused.plainText}\n${cursor}\n${next.map((item) => item.title).join("\n")}`;
+          const key = `${revision()}\n${focused.plainText}\n${cursor}\n${next.map((item) => item.title).join("\n")}`;
           if (key !== lastKey) {
             lastKey = key;
             setOptions(next);
@@ -628,6 +638,7 @@ const plugin = Plugin.define({
     });
 
     return () => {
+      stopWatching();
       dispose();
       commands();
       route();

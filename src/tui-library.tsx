@@ -7,7 +7,16 @@ import {
   TextAttributes,
   type TextareaRenderable,
 } from "@opentui/core";
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+} from "solid-js";
 import { loadCliScroll } from "./config.js";
 import { getSnippetForm } from "./fields.js";
 import { serializeInvocation } from "./invocation.js";
@@ -37,6 +46,7 @@ export function SnippetLibrary(props: {
   directory: string;
   globalDirectory?: string;
   state: LibraryState;
+  revision?: number;
   reload(): Promise<void>;
   close(): void;
 }) {
@@ -123,20 +133,43 @@ export function SnippetLibrary(props: {
     setError("");
     queueMicrotask(() => list?.scrollChildIntoView(`library-file-${files().indexOf(file)}`));
   };
-  const load = async (path = selected()) => {
+  const load = async (path = selected(), refresh = false) => {
     const result = await library.list();
+    if (refresh) {
+      for (const [path, draft] of props.state.drafts) {
+        if (draft.raw === draft.file.raw) props.state.drafts.delete(path);
+      }
+    }
     setFiles(result.files);
     setRegistry(result.registry);
     const file =
       result.files.find((item) => item.filePath === path) ??
       filterSnippets(result.files, "").find((item) => item.active) ??
       result.files[0];
+    if (refresh && file?.filePath === selected()) {
+      if (!dirty()) {
+        setRaw(file.raw);
+        if (editor && editor.plainText !== file.raw) editor.setText(file.raw);
+      }
+      return;
+    }
+    if (refresh && dirty()) return;
     if (file) select(file);
     if (!file) {
       setSelected("");
       setRaw("");
     }
   };
+  createEffect(
+    on(
+      () => props.revision,
+      (revision) => {
+        if (revision === undefined) return;
+        void load(selected(), true).catch((error: unknown) => setError(String(error)));
+      },
+      { defer: true },
+    ),
+  );
   const run = async (action: () => Promise<void>) => {
     if (busy() || modal()) return;
     setBusy(true);
