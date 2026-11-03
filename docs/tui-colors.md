@@ -30,7 +30,7 @@ do not rely on OpenTUI's default focused foreground.
 1. Build the plugin. Stage its distribution in a private temporary directory so
    concurrent builds cannot reload it during inspection. Verify that the isolated
    CLI config registers the directory containing the built entrypoints.
-2. Launch a fresh `opencode2` in a private tmux server with isolated config and
+2. Launch a fresh `opencode` in a private tmux server with isolated config and
    database. Copy the user's theme into that config. Open the native control and
    plugin page in the same process, at the same terminal dimensions.
 3. Capture each state with `tmux -L "$socket" capture-pane -p -e -t "$pane"`.

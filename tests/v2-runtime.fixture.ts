@@ -24,8 +24,8 @@ export function text(message: Message): string {
 }
 
 export async function fixture() {
-  const cli = Bun.which(process.env.OPENCODE2_BIN ?? process.env.OPENCODE_BIN ?? "opencode2");
-  assert.ok(cli, "Install opencode2 or set OPENCODE2_BIN before running test:v2");
+  const cli = Bun.which(process.env.OPENCODE_BIN ?? "opencode");
+  assert.ok(cli, "Install opencode or set OPENCODE_BIN before running test:v2");
   const temporary = join(tmpdir(), "opencode");
   await mkdir(temporary, { recursive: true });
   const root = await mkdtemp(join(temporary, "snippets-v2-runtime-"));

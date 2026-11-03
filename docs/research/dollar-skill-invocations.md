@@ -61,13 +61,13 @@ Field answers already have a separate protection mechanism. Rendered values rema
 When passing a prompt through a shell, dollar syntax may expand before OpenCode receives it:
 
 ```sh
-opencode2 run "$review"
+opencode run "$review"
 ```
 
 In Bash, this expands the `review` variable. Use single quotes for a literal dollar invocation:
 
 ```sh
-opencode2 run '$review'
+opencode run '$review'
 ```
 
 The composer does not have this outer shell expansion. Documentation and automation examples need to distinguish those paths. Bash documents the difference between [double quotes](https://www.gnu.org/software/bash/manual/html_node/Double-Quotes.html) and [single quotes](https://www.gnu.org/software/bash/manual/html_node/Single-Quotes.html).

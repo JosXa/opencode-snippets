@@ -413,7 +413,7 @@ When enabled, the user-visible message shows `↳ Loaded name`, while the model 
 
 Skill tags in XML render before hashtag expansion. Skill loads resolve after recursive hashtag expansion, and shell substitutions run last. Loaded skill bodies also expand snippet hashtags and shell substitutions. Within `<inject>` blocks, only hashtag references expand. Skill-tool results expand XML tags and recursive hashtags using the configured injection flag.
 
-When passing dollar references through a shell, use literal quoting so the shell does not expand them, for example `opencode2 run '$review'` in Bash.
+When passing dollar references through a shell, use literal quoting so the shell does not expand them, for example `opencode run '$review'` in Bash.
 
 Quick project-local demo in this repo:
 
@@ -584,7 +584,7 @@ in `package.json`, then run:
 bun run test:v2
 ```
 
-Set `OPENCODE2_BIN` to test a specific CLI executable. The runtime suite uses
+Set `OPENCODE_BIN` to test a specific CLI executable. The runtime suite uses
 isolated home/config/data directories and a local deterministic model endpoint.
 It verifies saved messages and actual model requests across CLI submissions,
 native attachments, skill-tool calls, queued input, commands, restarts, forks,
