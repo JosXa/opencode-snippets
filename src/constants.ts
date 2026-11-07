@@ -6,7 +6,7 @@ import { join } from "node:path";
  */
 export const PATTERNS = {
   /** Matches hashtags like #snippet-name */
-  HASHTAG: /#([a-z0-9\-_]+)/gi,
+  HASHTAG: /#([\p{L}\p{N}\-_]+)/giu,
 
   /** Matches shell commands like !`command` or !>`command` */
   SHELL_COMMAND: /(!>?)`([^`]+)`/g,
