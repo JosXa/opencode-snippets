@@ -93,9 +93,14 @@ const plugin = Plugin.define({
     const stopWatching = watchSnippets(directory, globalDirectory, refresh);
     await refresh();
 
+    const refreshSkills = async () => {
+      skills = await loadSkills();
+    };
+    const stopSkillUpdates = context.data.on("skill.updated", () => void refreshSkills());
+
     const reload = async () => {
       await refresh();
-      skills = await loadSkills();
+      await refreshSkills();
     };
 
     const library: LibraryState = { drafts: new Map() };
@@ -639,6 +644,7 @@ const plugin = Plugin.define({
 
     return () => {
       stopWatching();
+      stopSkillUpdates();
       dispose();
       commands();
       route();

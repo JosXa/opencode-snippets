@@ -88,6 +88,7 @@ async function setup(
   });
   const dispose = await plugin.setup({
     location: { directory },
+    data: { on: () => () => {} },
     options: { globalDirectory, homeDirectory: directory },
     client: { skill: { list: async () => ({ data: skills }) } },
     renderer: screen.renderer,

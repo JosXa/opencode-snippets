@@ -41,6 +41,7 @@ describe("V2 TUI plugin", () => {
     const forms: boolean[] = [];
     const dispose = await plugin.setup({
       location: { directory: root },
+      data: { on: () => () => {} },
       theme,
       options: { globalDirectory },
       renderer: screen.renderer,
@@ -89,6 +90,55 @@ describe("V2 TUI plugin", () => {
       dispose?.();
     }
   });
+  test("skill updates from the host refresh skill completion", async () => {
+    root = await mkdtemp(join(tmpdir(), "snippets-skill-updates-"));
+    const screen = await createTestRenderer({ width: 90, height: 24 });
+    destroyRenderer = () => screen.renderer.destroy();
+    const editor = new TextareaRenderable(screen.renderer, { id: "prompt", width: 90, height: 3 });
+    editor.traits = { capture: ["tab"], ...{ owner: "opencode", role: "prompt" } };
+    screen.renderer.root.add(editor);
+    let footer: (input: { mode: "normal"; showDetails: boolean }) => JSX.Element = () => null;
+    const installed: { id: string; description: string }[] = [];
+    const listeners = new Map<string, () => void>();
+    const unsubscribed: string[] = [];
+    const dispose = await plugin.setup({
+      location: { directory: root },
+      data: {
+        on: (type: string, handler: () => void) => {
+          listeners.set(type, handler);
+          return () => unsubscribed.push(type);
+        },
+      },
+      theme,
+      options: { globalDirectory: join(root, "snippets") },
+      renderer: screen.renderer,
+      client: { skill: { list: async () => ({ data: [...installed] }) } },
+      keymap: { mode: { current: () => "base" }, layer() {} },
+      ui: {
+        router: { register: () => () => {}, current: () => ({ type: "home" }) },
+        slot: ({ render }: { render: typeof footer }) => {
+          footer = render;
+          return () => {};
+        },
+        toast: { show() {} },
+        dialog: { set() {}, show() {} },
+      },
+    } as never);
+    try {
+      await render(() => footer({ mode: "normal", showDetails: true }), screen.renderer);
+      installed.push({ id: "fresh-skill", description: "Installed while running" });
+      listeners.get("skill.updated")?.();
+      await Bun.sleep(50);
+      editor.focus();
+      editor.insertText("$fresh");
+      await Bun.sleep(50);
+      screen.mockInput.pressTab();
+      expect(editor.plainText).toBe("$fresh-skill ");
+    } finally {
+      dispose?.();
+    }
+    expect(unsubscribed).toEqual(["skill.updated"]);
+  });
   for (const phase of ["confirmation", "reload", "editor"] as const) {
     test(`a different prompt keeps focus during delayed ${phase}`, async () => {
       root = await mkdtemp(join(tmpdir(), "snippets-focus-"));
@@ -123,6 +173,7 @@ describe("V2 TUI plugin", () => {
       let footer: (input: { mode: "normal"; showDetails: boolean }) => JSX.Element = () => null;
       const dispose = await plugin.setup({
         location: { directory: root },
+        data: { on: () => () => {} },
         theme,
         options: { globalDirectory },
         renderer: screen.renderer,
@@ -194,6 +245,7 @@ describe("V2 TUI plugin", () => {
 
     const dispose = await plugin.setup({
       location: { directory: project },
+      data: { on: () => () => {} },
       theme,
       options: { globalDirectory, homeDirectory: root },
       client: { skill: { list: async () => ({ data: [] }) } },
@@ -288,6 +340,7 @@ describe("V2 TUI plugin", () => {
 
       const dispose = await plugin.setup({
         location: { directory: project },
+        data: { on: () => () => {} },
         theme,
         options: { globalDirectory, homeDirectory: root },
         client: {
