@@ -212,7 +212,7 @@ fields:
     min: 0
     integer: true
 ---
-{{#if (gt count 0)}}give me {{count}} {{plural count "option" "options"}} to choose from{{/if}}
+{{#if (gt count 0)}}Offer {{count}} {{plural count "option" "options"}}.{{/if}}
 ```
 
 Accept a completion, or type a space after a snippet name, to fill its form. Autocomplete marks these snippets with `☷`. Confirming writes a readable reference such as `#options(count=3)` into the composer, and sending the message expands it. <kbd>Ctrl</kbd>+<kbd>G</kbd> edits the fields of the reference under the cursor.
@@ -265,8 +265,8 @@ aliases: jira-mcp
 Jira MCP server
 <append>
 ## Jira MCP usage
-- customfield_16570 => Acceptance Criteria
-- customfield_11401 => Team
+- field_16570 => Acceptance Criteria
+- field_11401 => Team
 </append>
 ```
 
@@ -283,8 +283,8 @@ Create a bug ticket in Jira MCP server
 about the memory leak
 
 ## Jira MCP usage
-- customfield_16570 => Acceptance Criteria
-- customfield_11401 => Team
+- field_16570 => Acceptance Criteria
+- field_11401 => Team
 ```
 
 </td>
@@ -412,7 +412,7 @@ aliases: ctx
 ---
 Project: !`basename $(pwd)`
 Branch: !`git branch --show-current`
-Recent changes: !`git diff --stat HEAD~3 | tail -5`
+Changes: !`git diff --stat HEAD~3`
 ```
 
 </td>
@@ -457,7 +457,6 @@ The plugin creates `~/.config/opencode/snippet/config.jsonc` on first run. A pro
 
 ```jsonc
 {
-  "$schema": "https://raw.githubusercontent.com/JosXa/opencode-snippets/v3.4.0/schema/config.schema.json",
   "logging": {
     "debug": false // logs: $XDG_DATA_HOME/opencode/log/snippets/daily/
   },
@@ -469,6 +468,8 @@ The plugin creates `~/.config/opencode/snippet/config.jsonc` on first run. A pro
   "injectRecencyMessages": 5 // distance of injected context from the bottom
 }
 ```
+
+For editor completion, set `"$schema"` to the [config schema](https://raw.githubusercontent.com/JosXa/opencode-snippets/v3.4.0/schema/config.schema.json).
 
 Boolean settings also accept `"enabled"` and `"disabled"`.
 
