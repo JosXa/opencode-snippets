@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="300" viewBox="0 0 760 300" role="img" aria-label="Typing 'Review my diff #careful #ctx' expands into step-by-step instructions plus live project and branch information">
+  <style>
+    .card { fill: #ffffff; stroke: #d0d7de; }
+    .box { fill: #f6f8fa; stroke: #d0d7de; }
+    .text { fill: #1f2328; }
+    .muted { fill: #59636e; }
+    .amber { fill: #0A7E82; }
+    .coral { fill: #1D3B53; }
+    .amber-pill { fill: #D5F5EE; }
+    .coral-pill { fill: #E2E8F0; }
+    .amber-bar { fill: #0C969B; }
+    .coral-bar { fill: #1D3B53; }
+    @media (prefers-color-scheme: dark) {
+      .card { fill: #0d1117; stroke: #30363d; }
+      .box { fill: #161b22; stroke: #30363d; }
+      .text { fill: #e6edf3; }
+      .muted { fill: #9198a1; }
+      .amber { fill: #7FDBCA; }
+      .coral { fill: #D6DEEB; }
+      .amber-pill { fill: #0B2E2C; }
+      .coral-pill { fill: #1D3B53; }
+    }
+    text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 15px; }
+    .label { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; }
+    .pop { animation: pop 7s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+    .reveal { animation: reveal 7s ease-out infinite both; }
+    .l1 { animation-delay: 0s; }
+    .l2 { animation-delay: 0.25s; }
+    .l3 { animation-delay: 0.5s; }
+    .l4 { animation-delay: 0.75s; }
+    .cursor { animation: blink 1s steps(1) infinite; }
+    @keyframes pop { 0%, 12% { transform: scale(1); } 17% { transform: scale(1.12); } 22%, 100% { transform: scale(1); } }
+    @keyframes reveal { 0%, 22% { opacity: 0; transform: translateY(6px); } 30%, 88% { opacity: 1; transform: translateY(0); } 96%, 100% { opacity: 0; } }
+    @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } }
+  </style>
+  <rect class="card" x="0.5" y="0.5" width="759" height="299" rx="14"/>
+  <text class="label muted" x="32" y="38">YOU TYPE</text>
+  <rect class="box" x="24" y="50" width="712" height="48" rx="10"/>
+  <text class="text" x="44" y="80">Review my diff</text>
+  <g class="pop"><rect class="amber-pill" x="183" y="62" width="88" height="25" rx="6"/><text class="amber" x="191" y="80">#careful</text></g>
+  <g class="pop"><rect class="coral-pill" x="281" y="62" width="50" height="25" rx="6"/><text class="coral" x="289" y="80">#ctx</text></g>
+  <rect class="cursor amber-bar" x="340" y="64" width="2" height="21"/>
+  <text class="label muted" x="32" y="136">AGENT RECEIVES</text>
+  <rect class="box" x="24" y="148" width="712" height="128" rx="10"/>
+  <g class="reveal l1"><text class="text" x="44" y="178">Review my diff</text></g>
+  <g class="reveal l2"><rect class="amber-bar" x="36" y="190" width="3" height="40" rx="1.5"/><text class="amber" x="44" y="205">Think step by step. Double-check your work before committing.</text><text class="amber" x="44" y="226">Ask clarifying questions if anything is ambiguous.</text></g>
+  <g class="reveal l3"><rect class="coral-bar" x="36" y="238" width="3" height="20" rx="1.5"/><text class="coral" x="44" y="253">Project: opencode-snippets</text><text class="coral" x="300" y="253">Branch: main</text></g>
+  <g class="reveal l4"><text class="muted" x="520" y="253">← live from !`git`</text></g>
+</svg>

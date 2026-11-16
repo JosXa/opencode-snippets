@@ -1,165 +1,191 @@
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/logo.png" width="128" alt="opencode-snippets logo: a hashtag assembled from puzzle pieces">
+
 # opencode-snippets
 
-✨ **Instant inline text expansion for OpenCode** - Type `#snippet` anywhere in your message and watch it transform.
+**Type a `#hashtag` anywhere in an [OpenCode](https://opencode.ai) prompt.<br>It expands into the instructions you would otherwise type again.**
+
+<a href="https://www.npmjs.com/package/opencode-snippets"><img src="https://img.shields.io/npm/v/opencode-snippets?style=flat-square&color=0C969B&labelColor=011627&label=npm" alt="npm version"></a>
+<a href="https://www.npmjs.com/package/opencode-snippets"><img src="https://img.shields.io/npm/dm/opencode-snippets?style=flat-square&color=0C969B&labelColor=011627" alt="npm downloads per month"></a>
+<a href="https://github.com/JosXa/opencode-snippets/stargazers"><img src="https://img.shields.io/github/stars/JosXa/opencode-snippets?style=flat-square&color=0C969B&labelColor=011627" alt="GitHub stars"></a>
+<img src="https://img.shields.io/badge/OpenCode-plugin-0C969B?style=flat-square&labelColor=011627" alt="OpenCode plugin">
+<a href="https://github.com/JosXa/opencode-snippets/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-011627?style=flat-square" alt="MIT license"></a>
+
+[**Install**](#-install) · [Quick start](#-quick-start) · [Features](#-features) · [Library](#-snippet-library) · [Configuration](#-configuration) · [Share snippets](https://github.com/JosXa/opencode-snippets/discussions/categories/snippets)
+
+<br>
+
+<img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/expansion.svg" width="760" alt="Typing 'Review my diff #careful #ctx' expands into step-by-step instructions plus live project and branch information">
+
+</div>
+
+<br>
 
 > [!TIP]
-> **Share Your Snippets!**  
-> Got a snippet that saves you time? Share yours or steal ideas from the community!
-> Browse and contribute in [GitHub Discussions](https://github.com/JosXa/opencode-snippets/discussions/categories/snippets).
+> **Got a snippet that saves you time?** Share it, or borrow ideas from others, in [GitHub Discussions](https://github.com/JosXa/opencode-snippets/discussions/categories/snippets).
 
-## Why Snippets?
+## <img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/icon-lightbulb.svg" width="24" align="absmiddle" alt=""> Why snippets?
 
-As developers, we DRY (Don't Repeat Yourself) our code. We extract functions, create libraries, compose modules. Why should our prompts be any different?
+We extract functions so that we do not repeat code. Prompts deserve the same treatment. Stop pasting (or worse, *typing*) the same instructions into every message.
 
-Stop copy-pasting (or worse, *typing* 🤢) the same instructions into every message. Snippets bring software engineering principles to prompt engineering:
+<table>
+<tr>
+<td width="25%" valign="top"><b>🔄 Write once</b><br>Keep an instruction in one file and use it in every session.</td>
+<td width="25%" valign="top"><b>🧩 Compose</b><br>Build large prompts from small pieces. Snippets can include other snippets.</td>
+<td width="25%" valign="top"><b>🔧 Update once</b><br>Edit the file and the next message uses the new text everywhere.</td>
+<td width="25%" valign="top"><b>🔍 Discover</b><br>Your team's best practices are a <code>#hashtag</code> away, with autocomplete.</td>
+</tr>
+</table>
 
-- 🔄 **DRY** - Write once, reuse everywhere
-- 🧩 **Composability** - Build complex prompts from simple pieces  
-- 🔧 **Maintainability** - Update once, apply everywhere
-- 🔍 **Discoverability** - Your team's best practices, always a `#hashtag` away
+OpenCode's `/slash` commands must come first in a message. Snippets work anywhere, like `@file` mentions:
 
-OpenCode's `/slash` commands must come first. Snippets work anywhere:
-
-```
-# Slash commands (must be first):
-/git-status Please review my changes
-
-# Snippets (anywhere!):
-Please review my changes #git-status and suggest improvements #code-style
+```text
+/git-status Review my changes                   ← command: first word only
+Review my changes #git-status, then #code-style   ← snippets: anywhere
 ```
 
-Snippets work like `@file` mentions - natural, inline, composable.
+| | `/commands` | `#snippets` |
+|---|---|---|
+| Position | First word only | Anywhere |
+| Several per message | No | Yes |
+| Live shell data | Yes | Yes |
+| Best for | Triggering actions and workflows | Context engineering |
 
-### 🎯 Composable by Design
+<details>
+<summary><b>Can't decide?</b> Make a command that forwards to a snippet.</summary>
 
-Snippets compose with each other and with slash commands. Reference `#snippets` anywhere - in your messages, in slash commands, even inside other snippets:
+<br>
 
-**Example: Extending commands with snippets**
+Use slash commands for actions that must happen *now* (`/commit-and-push`, `/add-worktree`, `/pull-rebase`) and snippets for everything else. A command can also forward to a snippet of the same name:
 
-`~/.config/opencode/command/commit-and-push.md`:
 ```markdown
 ---
-description: Create a git commit and push to remote
+description: Forward to the snippet at snippet/pull.md
 ---
-Please create a git commit with the current changes and push to the remote repository.
+#pull
+```
+
+</details>
+
+## <img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/icon-package.svg" width="24" align="absmiddle" alt=""> Install
+
+Add `opencode-snippets` to `plugins` in `opencode.json`. OpenCode loads the terminal parts as well: autocomplete, field forms and the snippet library.
+
+```json
+{
+  "plugins": ["opencode-snippets"]
+}
+```
+
+<details>
+<summary>Local development build</summary>
+
+<br>
+
+Run `bun install` and `bun run build`, then add the built `dist` directory to `plugins` in both `opencode.json` and `cli.json`:
+
+```json
+{
+  "plugins": ["file:///absolute/path/to/opencode-snippets/dist"]
+}
+```
+
+Rebuild after every source change to test the updated server and terminal entry points.
+
+</details>
+
+## <img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/icon-rocket.svg" width="24" align="absmiddle" alt=""> Quick start
+
+1. Run `/snippets`, choose **New**, name it `careful` and select **Global**.
+2. Enter this source and press <kbd>Ctrl</kbd>+<kbd>S</kbd>:
+
+   ```markdown
+   ---
+   aliases: safe
+   ---
+   Think step by step. Double-check your work before committing changes.
+   Ask clarifying questions if anything is ambiguous.
+   ```
+
+3. Type `#careful`, or its alias `#safe`, anywhere in a message.
+
+https://github.com/user-attachments/assets/ebb303b5-d41b-4d87-8f08-eb1d730db5c8
+
+## <img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/icon-puzzle.svg" width="24" align="absmiddle" alt=""> Compose snippets
+
+Snippets work in messages, in slash commands and inside other snippets. Small files combine into layered prompts: `#tdd #careful` for careful test-driven work, `/commit #conventional-commits #project-context` for context-aware commits.
+
+<table>
+<tr>
+<th width="50%">A command that uses snippets</th>
+<th width="50%">Snippets that use snippets</th>
+</tr>
+<tr>
+<td valign="top">
+
+`command/commit-and-push.md`
+
+```markdown
+---
+description: Commit and push
+---
+Create a git commit with the current
+changes and push it.
 #use-conventional-commits
 
-Here is the current git status:
-!`git status`
-
-Here are the staged changes:
-!`git diff --cached`
+Status: !`git status`
+Staged: !`git diff --cached`
 
 #project-context
 ```
 
-You could also make "current git status and staged changes" a shell-enabled snippet of its own.
+</td>
+<td valign="top">
 
-**Example: Snippets composing snippets**
+`snippet/code-standards.md`
 
-`~/.config/opencode/snippet/code-standards.md`:
 ```markdown
 #style-guide
 #error-handling
 #testing-requirements
 ```
 
-https://github.com/user-attachments/assets/76975a9e-e326-431e-8be5-39a9f6572851
+`snippet/full-review.md`
 
-`~/.config/opencode/snippet/full-review.md`:
 ```markdown
 #code-standards
 #security-checklist
 #performance-tips
 ```
 
-Compose base snippets into higher-level ones. Type `#full-review` to inject all standards at once, keeping each concern in its own maintainable file.
+Type `#full-review` to add every standard at once. Each concern keeps its own file.
 
-**The power:** Mix and match. Type `#tdd #careful` for test-driven development with extra caution. 
-Build `/commit #conventional-commits #project-context` for context-aware commits. Create layered prompts from small, reusable pieces.  
-<img width="708" height="185" alt="image" src="https://github.com/user-attachments/assets/2c537c4b-6afe-4bb1-9fb4-484034f9ce8b" />
+</td>
+</tr>
+</table>
 
-## Installation
+https://github.com/user-attachments/assets/76975a9e-e326-431e-8be5-39a9f6572851
 
-Add `"opencode-snippets"` to `plugins` in `opencode.json`. OpenCode loads the
-terminal plugin automatically, including autocomplete, field forms, and the library.
+## <img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/icon-sparkles.svg" width="24" align="absmiddle" alt=""> Features
 
-```json
-{
-  "plugins": [
-    "opencode-snippets"
-  ]
-}
-```
-
-<details>
-<summary>Local Development</summary>
-
-Run `bun install` and `bun run build`. For local testing, add the built `dist`
-directory to `plugins` in both `opencode.json` and `cli.json`:
-
-```json
-{
-  "plugins": [
-    "file:///absolute/path/to/opencode-snippets/dist"
-  ]
-}
-```
-
-Rebuild after source changes to test the updated server and terminal entrypoints.
-
-</details>
-
-## Quick Start
-
-**1. Open `/snippets`, choose New, name it `careful`, and select Global.**
-
-**2. Enter the source below and press Ctrl+S to save:**
-```markdown
----
-aliases: safe
----
-Think step by step. Double-check your work before committing changes.
-Ask clarifying questions if anything is ambiguous.
-```
-
-**3. Use it anywhere:**
-
-Type `#careful` or its alias `#safe` in a message.
-
-https://github.com/user-attachments/assets/ebb303b5-d41b-4d87-8f08-eb1d730db5c8
-
-## Where to Store Snippets
-
-The global config root is `OPENCODE_CONFIG_DIR` when set, otherwise
-`$XDG_CONFIG_HOME/opencode`, otherwise `~/.config/opencode`. The paths below
-show the default root. Snippet files, `snippet/config.jsonc`, and plugin logs
-all follow the selected root. The server and TUI resolve it in their own
-process environment; when attaching to another machine, keep the snippet
-collections in those roots in sync. An explicit `globalDirectory` plugin
-option still overrides the snippet directory.
-
-Snippets can be global (`~/.config/opencode/snippet/*.md` or `~/.config/opencode/snippets/*.md`) or project-specific (`.opencode/snippet/*.md` or `.opencode/snippets/*.md`). Both singular and plural directory names are loaded automatically. Project snippets override global ones with the same name, and `snippet/` wins over `snippets/` within the same scope.
-
-Project snippet directories are resolved against the canonical project root. A symlinked project snippet directory, including one that points outside the project, is rejected rather than loaded or modified.
-
-### Processing state
-
-New submissions read the current snippet files, including nested references and completed drafts. Changes saved in the library or another editor apply to the next submission. Replayed messages retain their original expansion and skill content.
-
-If snippet processing fails, the plugin preserves the original message and logs a warning. Invalid arguments, templates, or old snippet references must not block new conversation turns. Validation completes before shell commands run; a validation failure discards the message's planned expansions and effects. Correct the snippet or its arguments and submit it again to expand it. Snippet failures in skill tool results also preserve the original result.
-
-The plugin records a bounded amount of processing output so rebuilt request history and server restarts cannot repeat shell side effects. State lives under the user's private data directory (`$XDG_DATA_HOME/opencode/opencode-snippets/v2`, or `~/.local/share/opencode/opencode-snippets/v2`) rather than inside a project. Directories use mode `0700` and records use `0600`.
-
-Only hashed project/message identifiers, completion status, timestamps, and output needed for replay are retained; raw input prompts and project paths are not stored. Records older than 30 days are pruned, with additional limits of 100 sessions per project and 1,000 messages per session. Deleting an OpenCode session removes that session's records immediately.
-
-## Features
+<table>
+<tr>
+<td width="25%" valign="top"><b>🏷️ <a href="#aliases">Aliases</a></b><br><code>#cp</code>, <code>#pick</code> and <code>#cherry-pick</code> for one file.</td>
+<td width="25%" valign="top"><b>📝 <a href="#fields-and-forms">Fields and forms</a></b><br>Typed inputs, a form in the terminal and Handlebars output.</td>
+<td width="25%" valign="top"><b>💻 <a href="#shell-substitution">Shell substitution</a></b><br><code>!`git status`</code> in any prompt, with an optional echo of the command.</td>
+<td width="25%" valign="top"><b>🔁 <a href="#recursive-includes">Recursive includes</a></b><br>Snippets include snippets, with loop protection.</td>
+</tr>
+<tr>
+<td valign="top"><b>📎 <a href="#prepend-and-append-blocks">Prepend and append</a></b><br>Long reference text goes to the start or end of the message.</td>
+<td valign="top"><b>💉 <a href="#inject-blocks">Inject blocks</a></b><br>Context the model sees for the whole turn, outside your message.</td>
+<td valign="top"><b>🧠 <a href="#skills">Skills</a></b><br><code>$review</code> loads an OpenCode skill. <code>&lt;skill&gt;</code> inlines one.</td>
+<td valign="top"><b>📚 <a href="#-snippet-library">Library</a></b><br>A Vim-style browser and editor for all snippets.</td>
+</tr>
+</table>
 
 ### Aliases
 
-Define multiple triggers for the same snippet:
-
-`~/.config/opencode/snippet/cherry-pick.md`:
 ```markdown
 ---
 aliases:
@@ -170,34 +196,11 @@ description: "Git cherry-pick helper"
 Always pick parent 1 for merge commits.
 ```
 
-Now `#cherry-pick`, `#cp`, and `#pick` all expand to the same content.
-
-Single alias doesn't need array syntax:
-```markdown
----
-aliases: safe
----
-```
-
-You can also use JSON array style: `aliases: ["cp", "pick"]`
+`#cherry-pick`, `#cp` and `#pick` now expand to the same text. One alias needs no list (`aliases: safe`), and JSON style works too (`aliases: ["cp", "pick"]`).
 
 ### Fields and forms
 
-Snippets declare typed inputs in YAML frontmatter and reference answers with ordinary Handlebars variables:
-
-```markdown
----
-fields:
-  app:
-    label: App name
-    required: true
----
-MyApps (search for {{app}})
-```
-
-Accept a completion or type a space after an exact snippet name to fill its form. Confirming writes a readable reference such as `#myapps(app="Payroll")` into the composer; sending the message expands it. Cancel preserves the original reference. Use **Edit snippet fields** for the invocation under the cursor to change answers.
-
-Autocomplete marks snippets that open forms with `☷` after their name. Forms support text, multiline text, numbers, checkboxes, and single or multiple selection lists, with defaults and validation. The action row contains **OK**, **Cancel**, and **Help**. A short keyboard hint is always visible; Help reveals the full key list. Tab/Shift+Tab move between fields and buttons, arrows select, Space toggles a checkbox or multiselect choice, Ctrl+J inserts a newline, Enter confirms, and Escape cancels. Clicking a multiselect choice toggles it.
+Declare typed inputs in YAML frontmatter and use the answers as Handlebars variables:
 
 ```markdown
 ---
@@ -212,70 +215,48 @@ fields:
 {{#if (gt count 0)}}give me {{count}} {{plural count "option" "options"}} to choose from{{/if}}
 ```
 
-Metadata does not print answers; body variables and conditions control the output. Conditions use typed answers; this example emits nothing for zero and uses singular wording for one. For a preset, put `#options(count=10)` in `ten-options.md`. An explicit outer answer such as `#ten-options(count=2)` overrides that default. Nested snippets share their parent's answers; separate invocations remain independent.
+Accept a completion, or type a space after a snippet name, to fill its form. Autocomplete marks these snippets with `☷`. Confirming writes a readable reference such as `#options(count=3)` into the composer, and sending the message expands it. <kbd>Ctrl</kbd>+<kbd>G</kbd> edits the fields of the reference under the cursor.
 
-The `fields` mapping determines input order and opts the body into Handlebars. Use `fields: {}` to render a body with no inputs of its own. Body references do not declare fields, and legacy snippets without their own mapping or an inline skill helper retain literal placeholders. Select options use YAML arrays, such as `options: [quick, normal, thorough]`.
+<details>
+<summary>Field types, keys, arguments and presets</summary>
 
-Use `type: multiselect` to select several options. Its `default` is an array of selected strings. List every option there to start with all choices selected. Without a default, nothing is selected. `required: true` requires at least one choice. `{{checks}}` prints the selections separated by commas. Use `{{#each checks}}- {{this}}{{/each}}` to render them individually. The [audit-tests example](examples/forms/audit-tests.md) starts with all checks selected.
+<br>
 
-Arguments use named keys, JSON-quoted text, finite numbers, `yes`/`no` booleans, and arrays of JSON-quoted strings, such as `#audit-tests(checks=["No meaningful assertions", "Assertions that cannot fail"])`. An explicit `checks=[]` clears all selections. Answers stay literal even when they contain hashtags, shell commands, or template syntax. Headless invocations use defaults and reject missing required answers before effects run.
+- **Types:** text, multiline text, number, checkbox, select and `multiselect`. Select options are YAML lists such as `options: [quick, normal, thorough]`.
+- **Form keys:** <kbd>Tab</kbd>/<kbd>Shift</kbd>+<kbd>Tab</kbd> move between fields and buttons, arrows select, <kbd>Space</kbd> toggles, <kbd>Ctrl</kbd>+<kbd>J</kbd> inserts a newline, <kbd>Enter</kbd> confirms and <kbd>Esc</kbd> cancels. **Help** shows all keys.
+- **Multiselect:** `default` is a list of selected strings. `required: true` needs at least one choice. `{{checks}}` prints the choices separated by commas, and `{{#each checks}}- {{this}}{{/each}}` prints one per line. See the [audit-tests example](https://github.com/JosXa/opencode-snippets/blob/main/examples/forms/audit-tests.md).
+- **Arguments:** named keys with JSON-quoted text, numbers, `yes`/`no` and lists of strings, for example `#audit-tests(checks=["No meaningful assertions"])`. `checks=[]` clears a selection. Answers stay literal, even when they contain hashtags, shell commands or template syntax.
+- **Presets:** put `#options(count=10)` in `ten-options.md`. An outer answer such as `#ten-options(count=2)` overrides it. Nested snippets share their parent's answers.
+- **Opt-in:** the `fields` mapping turns Handlebars on and sets the order of inputs. Use `fields: {}` for a template without inputs. Snippets without `fields` keep `{{ }}` as literal text.
+- **Headless runs** use defaults and reject missing required answers before any effect runs.
 
-See [field authoring and natural-language examples](skill/snippets/references/fields-and-forms.md) for all field types, constraints, escaping, repeated values, and conditional prose. The [example templates](examples/forms/) include review, reword, and options presets. Review emits no directive for zero reviewers or zero cycles; one reviewer omits parallelism and one cycle omits repetition. Reword and options also omit their requests for zero.
+The [fields and forms reference](https://github.com/JosXa/opencode-snippets/blob/main/skill/snippets/references/fields-and-forms.md) covers constraints, escaping and conditional prose. The [example templates](https://github.com/JosXa/opencode-snippets/tree/main/examples/forms) include review, reword and options presets.
 
-For inline skill content in a snippet, use `{{skill "review"}}`. Existing XML skill tags remain supported. `$review` loads hidden context with a visible marker, and `#skill(review)` remains supported.
+</details>
 
-### Shell Command Substitution
+### Shell substitution
 
-The plugin adds shell substitution to regular OpenCode prompts, not just snippet files. Use ``!`command` `` for output-only injection and ``!>`command` `` when you want the executed command shown too:
+Shell substitution works in every OpenCode prompt, not only in snippet files.
 
-```markdown
-Current branch: !`git branch --show-current`
-Last commit: !`git log -1 --oneline`
-Working directory: !`pwd`
-Debug listing: !>`ls`
-```
+| You write | The model receives |
+|---|---|
+| ``Branch: !`git branch --show-current` `` | `Branch: main` |
+| ``!>`ls` `` | `$ ls`<br>`--> README.md src …` |
 
-> **Default:** ``!`ls` `` injects only command output, matching OpenCode command templates.
->
-> **Verbose form:** ``!>`ls` `` →
-> ```
-> $ ls
-> --> <output>
-> ```
-> LLMs tend to trust the output more when they can see which terminal command just ran. The command gives the output context, which makes it more informative and easier to interpret.
+The `!>` form shows the command with its output. Models trust output more when they can see which command produced it. A failed command keeps its original syntax in the message.
 
-### Recursive Includes
+### Recursive includes
 
-Snippets can include other snippets using `#snippet-name` syntax. This allows building complex, composable snippets from smaller pieces:
+A snippet can reference other snippets with `#name`. Expansion repeats up to 15 times per message, which supports deep nesting. A circular reference (`#a` includes `#b`, which includes `#a`) stops after 15 rounds, leaves the last hashtag as text and logs a warning.
 
-```markdown
-# In base-style.md:
-Use TypeScript strict mode. Always add JSDoc comments.
+### Prepend and append blocks
 
-# In python-style.md:
-Use type hints. Follow PEP 8.
+Reference material that would interrupt your sentence goes into `<append>` (end of the message) or `<prepend>` (start of the message):
 
-# In review.md:
-Review this code carefully:
-#base-style
-#python-style
-#security-checklist
-```
-
-**Loop Protection:** Snippets are expanded up to 15 times per message to support deep nesting. If a circular reference is detected (e.g., `#a` includes `#b` which includes `#a`), expansion stops after 15 iterations and the remaining hashtag is left as-is. A warning is logged to help debug the issue.
-
-**Example of loop protection:**
-```markdown
-# self.md contains: "I reference #self"
-# Expanding #self produces:
-I reference I reference I reference ... (15 times) ... I reference #self
-```
-
-This generous limit supports complex snippet hierarchies while preventing infinite loops.
-
-### Prepend and Append Blocks
-
-For long reference material that would break your writing flow, use `<append>` blocks to place content at the end of your message:
+<table>
+<tr><th width="50%"><code>snippet/jira.md</code></th><th width="50%">Input → output</th></tr>
+<tr>
+<td valign="top">
 
 ```markdown
 ---
@@ -283,41 +264,51 @@ aliases: jira-mcp
 ---
 Jira MCP server
 <append>
-## Jira MCP Usage
-
-Use these custom field mappings when creating issues:
+## Jira MCP usage
 - customfield_16570 => Acceptance Criteria
 - customfield_11401 => Team
 </append>
 ```
 
-**Input:** `Create a bug ticket in #jira-mcp about the memory leak`
+</td>
+<td valign="top">
 
-**Output:**
+```text
+Create a bug ticket in #jira-mcp
+about the memory leak
 ```
-Create a bug ticket in Jira MCP server about the memory leak
 
-## Jira MCP Usage
+```text
+Create a bug ticket in Jira MCP server
+about the memory leak
 
-Use these custom field mappings when creating issues:
+## Jira MCP usage
 - customfield_16570 => Acceptance Criteria
 - customfield_11401 => Team
 ```
 
-Write naturally—reference what you need mid-sentence—and the context follows at the bottom.
+</td>
+</tr>
+</table>
 
-Use `<prepend>` for content that should appear at the top of your message. Multiple blocks of the same type are concatenated in order of appearance.
+<details>
+<summary>Block rules</summary>
 
-**Block behavior:**
-- Content outside `<prepend>`/`<append>` blocks replaces the hashtag inline
-- If a snippet has only blocks (no inline content), the hashtag is simply removed
-- Blocks from nested snippets are collected and assembled in the final message
-- Unclosed tags are handled leniently (rest of content becomes the block)
-- Nested blocks are not allowed—the hashtag is left unchanged
+<br>
 
-### Inject Blocks (Experimental)
+- Text outside the blocks replaces the hashtag. A snippet with only blocks removes the hashtag.
+- Several blocks of one type join in order of appearance, including blocks from nested snippets.
+- An unclosed tag turns the rest of the snippet into the block.
+- Nested blocks are not allowed. The hashtag stays unchanged.
 
-Add persistent context that the LLM sees throughout the entire agentic loop, without cluttering your visible message:
+</details>
+
+### Inject blocks
+
+> [!NOTE]
+> Experimental. Set `"experimental": { "injectBlocks": true }` in the [configuration](#-configuration).
+
+`<inject>` adds context that the model sees for the whole agent turn, without showing it in your message:
 
 ```markdown
 ---
@@ -325,158 +316,96 @@ aliases: safe
 ---
 Think step by step.
 <inject>
-IMPORTANT: Double-check all code for security vulnerabilities.
+IMPORTANT: Check all code for security vulnerabilities.
 Always suggest tests for any implementation.
 </inject>
 ```
 
-**Input:** `Review this code #safe`
+`Review this code #safe` shows `Review this code Think step by step.` in the transcript. The model also receives the inject content as a separate message, placed 5 messages from the bottom (`injectRecencyMessages`) so that it does not read as your latest instruction. The [injection placement notes](https://github.com/JosXa/opencode-snippets/blob/main/docs/injection-placement.md) explain why.
 
-**What happens:**
-- Your message shows: `Review this code Think step by step.`
-- The LLM also receives the inject content as a separate context message
-- This context persists for the entire conversation turn (agentic loop)
+### Skills
 
-Use inject blocks for rules, constraints, or instructions that should influence all LLM responses without appearing inline in your message.
+> [!NOTE]
+> Experimental. Enable `skillLoading` and `skillRendering` under `experimental` in the [configuration](#-configuration).
 
-Injected context is placed **N messages from the bottom** of the conversation (default: 5) to prevent instruction overfitting, where the model fixates on injected content as if it were the user's latest directive. As the conversation grows, the injection floats upward, maintaining a steady distance from the latest turn. Configure the offset with `injectRecencyMessages`. For the full design rationale, see [Injection Placement Strategy](docs/injection-placement.md).
+| Syntax | Effect |
+|---|---|
+| `$review` | Loads the skill. The transcript shows `↳ Loaded review`, and the model receives the skill content after your message. |
+| `#skill("Release Notes")` | The same, for display names and IDs outside the `$` grammar. |
+| `<skill>jira</skill>` or `<skill name="jira" />` | Inlines the skill body, without its frontmatter, into the message. |
+| `{{skill "review"}}` | Inlines a skill inside a snippet template. |
 
-**Enable in config:**
+Autocomplete uses OpenCode's own skill registry: `$` lists skills, `#` lists snippets and skills.
 
-```jsonc
-{
-  "experimental": {
-    "injectBlocks": true
-  }
-}
+Expansion runs in this order:
+
+```mermaid
+---
+config:
+  look: classic
+  themeVariables:
+    edgeLabelBackground: transparent
+---
+flowchart LR
+  classDef step fill:#0C969B1a,stroke:#0C969B,stroke-width:1.5px
+  A["#lt;skill#gt;"]:::step --> B["#hashtags"]:::step --> C["$skill"]:::step --> D["!`shell`"]:::step
 ```
 
-### Skill Rendering (Experimental)
+<details>
+<summary>When does <code>$</code> stay literal?</summary>
 
-Inline OpenCode skills directly into your messages using XML-style tags:
+<br>
 
-```markdown
-Create a Jira ticket. <skill>jira</skill>
-```
+`$id` uses lowercase letters, digits, `-` and `_`, needs at least one letter and can carry `:` namespaces such as `$host:proof`. These stay literal: `$HOME`, prices, `foo$review`, `$review.path`, anything inside code spans, code blocks, shell substitutions, regex literals and `$…$` math, field answers and attachments. Write `\$review` to keep a reference literal. In Bash, quote it: `opencode run '$review'`.
 
-Or use the self-closing format:
+</details>
 
-```markdown
-<skill name="jira" /> Create a ticket for the bug.
-```
+## <img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/icon-keyboard.svg" width="24" align="absmiddle" alt=""> Snippet library
 
-**Enable in config:**
+Run `/snippets` to browse, edit and test project and global snippets. In OpenCode V2, every open terminal picks up saved, added, renamed and deleted snippet files at once, including edits by agents and other editors.
 
-```jsonc
-{
-  "experimental": {
-    "skillRendering": true
-  }
-}
-```
+| Key | Action |
+|---|---|
+| <kbd>Enter</kbd> | Edit the Markdown source. <kbd>Ctrl</kbd>+<kbd>S</kbd> saves. |
+| <kbd>Shift</kbd>+<kbd>Enter</kbd> | Open the file in `$VISUAL` or `$EDITOR`. |
+| <kbd>:</kbd> | Actions: new, reload, duplicate, rename, move, delete, copy reference, test form. |
+| <kbd>/</kbd> | Filter by name, alias or description. |
+| <kbd>Esc</kbd> / <kbd>q</kbd> | Step back / close. Drafts stay open for the next visit. |
+| <kbd>F1</kbd> | Show every key. |
 
-The plugin uses OpenCode's native skill registry for both expansion and autocomplete. This includes skills discovered by OpenCode, configured skill sources, and skills supplied by plugins. Skill IDs and display names are accepted; autocomplete inserts the native ID to distinguish skills with the same display name.
+<details>
+<summary>Vim navigation keys</summary>
 
-When a skill tag is found, it's replaced with the skill's content body (frontmatter stripped). Unknown skills leave the tag unchanged.
-
-### Skill Loading (Experimental)
-
-Load a skill with OpenCode-style wrapper content without showing the full skill body inline:
-
-```markdown
-$caveman
-```
-
-The bare reference loads the skill automatically. `$` completion lists skills, while `#` completion lists snippets and skills. Autocomplete inserts the native skill ID, including qualified IDs such as `$host:proof`.
-
-Dollar IDs use lowercase letters, digits, hyphens and underscores, with optional colon-separated namespaces. They must contain a letter. `$HOME`, prices, embedded variables such as `foo$review`, and partial IDs such as `$review.path` stay literal. A period or colon followed by whitespace or the end of the message is punctuation.
-
-Dollar references inside backtick code spans, fenced or indented code, shell substitutions, slash-delimited regex literals, and paired `$...$` or `$$...$$` math stay literal. Unclosed code spans and fences protect the remaining text. Write `\$review` to keep a reference literal, including its backslash. Field answers and native attachments also stay literal.
-
-The legacy form remains supported, including quoted display names and IDs outside the dollar grammar:
-
-```markdown
-#skill("Release Notes")
-```
-
-**Enable in config:**
-
-```jsonc
-{
-  "experimental": {
-    "skillLoading": true
-  }
-}
-```
-
-When enabled, the user-visible message shows `↳ Loaded name`, while the model receives an injected OpenCode-style `<skill_content>` payload immediately after that message. Dollar and legacy references in one message are injected in their final visible order, including loads introduced by recursive snippets and prepend/append blocks. Each occurrence loads a payload. References inside a loaded skill body do not recursively load more skills.
-
-Skill tags in XML render before hashtag expansion. Skill loads resolve after recursive hashtag expansion, and shell substitutions run last. Loaded skill bodies also expand snippet hashtags and shell substitutions. Within `<inject>` blocks, only hashtag references expand. Skill-tool results expand XML tags and recursive hashtags using the configured injection flag.
-
-When passing dollar references through a shell, use literal quoting so the shell does not expand them, for example `opencode run '$review'` in Bash.
-
-Quick project-local demo in this repo:
-
-```markdown
-Explain closures in two lines. $demo-voice
-```
-
-Or use the included snippet that expands into `$demo-voice`:
-
-```markdown
-#demo-skill Explain closures in two lines.
-```
-
-Demo files live at `.opencode/skill/demo-voice/SKILL.md` and `.opencode/snippet/demo-skill.md`.
-
-## Snippet library
-
-Open `/snippets` to manage your project and global snippets.
-
-In OpenCode V2, saving, adding, renaming, or deleting a Markdown snippet refreshes
-autocomplete and open libraries in every running TUI that uses that directory.
-This includes changes made by agents and external editors. Global snippets update
-across projects; project snippets update in TUIs opened for that project. Unsaved
-library drafts keep their contents and still require confirmation before reload.
-The library's **Reload** action remains available for a manual refresh.
-
-- **Enter** edits the Markdown source; **Ctrl+S** saves.
-- **Shift+Enter** opens the file in `VISUAL` or `EDITOR` and reloads it on return.
-- **More** or **:** opens actions: new, reload, duplicate, rename, move, delete, copy reference, and form testing.
-- **Escape** steps back; **q** closes from navigation and keeps drafts for reopening.
-
-The list and preview use Vim navigation. **F1** shows the key list.
+<br>
 
 | Keys | Navigation |
-|------|------------|
-| `j` / `k`, arrows, `Ctrl+N` / `Ctrl+P` | Next / previous row; stop at the ends |
-| `gg` / `G`, Home / End | First / last row or preview line |
-| `3j`, `5G`, `5gg` | Repeat a motion or go to a numbered row or line |
-| `H` / `M` / `L` | Select the top / middle / bottom visible list row |
-| `Ctrl+D` / `Ctrl+U` | Half page down / up |
-| `Ctrl+F` / `Ctrl+B`, PageDown / PageUp | Full page down / up |
-| `Ctrl+E` / `Ctrl+Y` | Scroll down / up one line |
-| `zt` / `zz` / `zb` | Align the selected list row at the top / middle / bottom, where content permits |
-| `h` / `l`, Left / Right | Focus the list / preview |
-| `Ctrl+W`, then `h` / `k` or `l` / `j` | Focus the list or the detail pane |
-| `Ctrl+W`, then `w` | Switch panes |
-| `/` / `?`, then text and Enter | Filter forward / backward by name, alias, or description |
-| `n` / `N` | Next / previous filtered match, following / reversing the search direction; wraps |
-| `Ctrl+O` / `Ctrl+I` | Back / forward through reference, search, and boundary jumps; clears filters |
-| `Tab` / `Shift+Tab` | Visit every control; `j` / `k` also move between actions |
-| `i` / Enter | Open the selected source editor |
+|---|---|
+| <kbd>j</kbd> / <kbd>k</kbd>, arrows, <kbd>Ctrl</kbd>+<kbd>N</kbd> / <kbd>Ctrl</kbd>+<kbd>P</kbd> | Next / previous row |
+| <kbd>gg</kbd> / <kbd>G</kbd>, <kbd>Home</kbd> / <kbd>End</kbd> | First / last row or preview line |
+| <kbd>3j</kbd>, <kbd>5G</kbd>, <kbd>5gg</kbd> | Repeat a motion, or go to a numbered row or line |
+| <kbd>H</kbd> / <kbd>M</kbd> / <kbd>L</kbd> | Top / middle / bottom visible row |
+| <kbd>Ctrl</kbd>+<kbd>D</kbd> / <kbd>Ctrl</kbd>+<kbd>U</kbd> | Half page down / up |
+| <kbd>Ctrl</kbd>+<kbd>F</kbd> / <kbd>Ctrl</kbd>+<kbd>B</kbd> | Full page down / up |
+| <kbd>Ctrl</kbd>+<kbd>E</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Scroll one line |
+| <kbd>zt</kbd> / <kbd>zz</kbd> / <kbd>zb</kbd> | Align the selected row at the top / middle / bottom |
+| <kbd>h</kbd> / <kbd>l</kbd> | Focus the list / preview |
+| <kbd>Ctrl</kbd>+<kbd>W</kbd> then <kbd>w</kbd> | Switch panes |
+| <kbd>/</kbd> / <kbd>?</kbd>, then <kbd>n</kbd> / <kbd>N</kbd> | Filter forward / backward, next / previous match |
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> / <kbd>Ctrl</kbd>+<kbd>I</kbd> | Back / forward through jumps |
+| <kbd>i</kbd> | Open the source editor |
 
-Counts and incomplete key sequences appear in the footer; Escape cancels them.
-Navigation shortcuts apply while the list, preview, or an action has focus.
-Search fields accept ordinary text, and the source editor keeps its own keys.
-The detail pane contains the editor while editing. Terminals that encode Ctrl+I
-as Tab use it for focus traversal. Distinct Ctrl+I requires extended keyboard support.
+Counts and unfinished key sequences show in the footer. <kbd>Esc</kbd> cancels them.
 
-In the composer, **Ctrl+G** edits the fields of the invocation under the cursor.
+</details>
 
-## Example Snippets
+## <img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/icon-file-code.svg" width="24" align="absmiddle" alt=""> Example snippets
 
-### `~/.config/opencode/snippet/context.md`
+<table>
+<tr>
+<td width="50%" valign="top">
+
+`snippet/context.md`
+
 ```markdown
 ---
 aliases: ctx
@@ -486,119 +415,88 @@ Branch: !`git branch --show-current`
 Recent changes: !`git diff --stat HEAD~3 | tail -5`
 ```
 
-### `~/.config/opencode/snippet/minimal.md`
+</td>
+<td width="50%" valign="top">
+
+`snippet/minimal.md`
+
 ```markdown
 ---
 aliases:
   - min
   - terse
 ---
-Be extremely concise. No explanations unless asked.
+Be extremely concise.
+No explanations unless asked.
 ```
 
-## Snippets vs Slash Commands
+</td>
+</tr>
+</table>
 
-| Feature | `/commands` | `#snippets` |
-|---------|-------------|-------------|
-| Position | Must come first 🏁 | Anywhere 📍 |
-| Multiple per message | No ❌ | Yes ✅ |
-| Live shell data | Yes 💻 | Yes 💻 |
-| Best for | Triggering actions & workflows ⚡ | Context injection 📝 |
+## <img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/icon-layers.svg" width="24" align="absmiddle" alt=""> Where snippets live
 
-> [!TIP]
-> #### My recommendation:
-> 
-> Use /slash commands for **triggering actions and workflows** imperatively - anything that needs to happen _right now_: `/commit-and-push`, `/add-worktree`, or `/pull-rebase`.  
-> Use #snippets for **all other context engineering**.
->
-> If you can't decide, get the best of both worlds and just have your command proxy through to the snippet:
->
-> `~/.config/opencode/command/pull.md`:
-> ```markdown
-> ---
-> description: Proxy through to the snippet at snippet/pull.md
-> ---
-> #pull
-> ```
+Project snippets in `.opencode/snippet/` win over global snippets with the same name in `~/.config/opencode/snippet/`. Both scopes also read a `snippets/` directory, and `snippet/` wins over it. The global root follows `OPENCODE_CONFIG_DIR`, then `$XDG_CONFIG_HOME/opencode`, then `~/.config/opencode`. The `globalDirectory` plugin option overrides it. Symlinked project snippet directories are rejected.
 
-## Configuration
+<details>
+<summary>What happens when a message is processed</summary>
 
-The plugin can be configured via `config.jsonc` files:
+<br>
 
-- **Global**: `~/.config/opencode/snippet/config.jsonc`
-- **Project**: `.opencode/snippet/config.jsonc` (overrides global settings)
+Each new message reads the current snippet files, so saved edits apply to the next message. Replayed messages keep their original expansion.
 
-Snippet markdown files are loaded from both `snippet/` and `snippets/`, but config files stay in `snippet/config.jsonc`.
+If processing fails, the original message goes through unchanged and a warning is logged. Validation finishes before any shell command runs.
 
-A default config file is created automatically on first run.
+The plugin stores a small record of processing output so that rebuilt history and server restarts never repeat shell side effects. Records live in `$XDG_DATA_HOME/opencode/opencode-snippets/v2` (default `~/.local/share/opencode/opencode-snippets/v2`), with mode `0700` for directories and `0600` for files. They contain hashed IDs, status, timestamps and replay output, but no prompts or project paths. Records expire after 30 days, with at most 100 sessions per project and 1,000 messages per session. Deleting a session deletes its records.
 
-### Full Configuration Example
+</details>
+
+## <img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/icon-settings-2.svg" width="24" align="absmiddle" alt=""> Configuration
+
+The plugin creates `~/.config/opencode/snippet/config.jsonc` on first run. A project file at `.opencode/snippet/config.jsonc` overrides it.
 
 ```jsonc
 {
   "$schema": "https://raw.githubusercontent.com/JosXa/opencode-snippets/v3.4.0/schema/config.schema.json",
   "logging": {
-    "debug": false // Enable debug logging (logs: $XDG_DATA_HOME/opencode/log/snippets/daily/)
+    "debug": false // logs: $XDG_DATA_HOME/opencode/log/snippets/daily/
   },
   "experimental": {
-    "injectBlocks": false, // Enable <inject>...</inject> blocks for persistent context
-    "skillRendering": false, // Enable <skill>name</skill> tag expansion
-    "skillLoading": false // Enable $id and #skill(name) OpenCode-style loading
+    "injectBlocks": false,   // <inject>…</inject>
+    "skillRendering": false, // <skill>name</skill>
+    "skillLoading": false    // $id and #skill(name)
   },
-  "injectRecencyMessages": 5 // How many messages from the bottom to place injected context
+  "injectRecencyMessages": 5 // distance of injected context from the bottom
 }
 ```
 
-All boolean settings accept: `true`, `false`, `"enabled"`, `"disabled"`
+Boolean settings also accept `"enabled"` and `"disabled"`.
 
-### Debug Logging
+## <img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/icon-life-buoy.svg" width="24" align="absmiddle" alt=""> Behavior notes
 
-Logs are written to `$XDG_DATA_HOME/opencode/log/snippets/daily/` (or
-`~/.local/share/opencode/log/snippets/daily/` when `XDG_DATA_HOME` is unset).
-Info, warning, and error messages are always written; `logging.debug` also
-enables debug messages. Keeping logs outside the OpenCode configuration
-directory prevents each append from reloading config and rebuilding skill watches.
+- Snippets expand in chat messages, question answers, skills and slash commands. Assistant messages are never processed.
+- Hashtags are case-insensitive (`#Hello` = `#hello`). Unknown hashtags stay unchanged.
+- Frontmatter is removed from expanded text.
+- Logs go to `$XDG_DATA_HOME/opencode/log/snippets/daily/`. Info, warnings and errors are always written; `logging.debug` adds debug lines.
 
-## Behavior Notes
+## <img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/icon-users.svg" width="24" align="absmiddle" alt=""> Contributing
 
-- Snippets expand everywhere: regular chat, question responses, skills, and slash commands
-- Injected snippet context is placed N messages from the bottom (configured by `injectRecencyMessages`) and shows a `↳ Injected #name` indicator when first registered
-- `$id` and `#skill(name)` load skill context immediately after the visible user message and show a compact marker in the transcript
-- Snippets are loaded once at plugin startup
-- Hashtag matching is **case-insensitive** (`#Hello` = `#hello`)
-- Unknown hashtags are left unchanged
-- ``!`cmd` `` injects output only, while ``!>`cmd` `` injects `$ cmd` plus output
-- Failed shell commands preserve the original syntax in output
-- Frontmatter is stripped from expanded content
-- Only user messages are processed (not assistant responses)
+Issues and pull requests are welcome. Questions go to the [Discord forum](https://discord.com/channels/1391832426048651334/1463378026833379409).
 
-## Contributing
-
-### Runtime tests for OpenCode 2
-
-Run the unit and renderer tests with `bun test`. To exercise the built plugin in
-real OpenCode 2 processes, install the CLI version matching `@opencode/plugin`
-in `package.json`, then run:
-
-```bash
-bun run test:v2
+```sh
+bun test          # unit and renderer tests
+bun run test:v2   # the built plugin in real OpenCode 2 processes
 ```
 
-Set `OPENCODE_BIN` to test a specific CLI executable. The runtime suite uses
-isolated home/config/data directories and a local deterministic model endpoint.
-It verifies saved messages and actual model requests across CLI submissions,
-native attachments, skill-tool calls, queued input, commands, restarts, forks,
-and project boundaries. Failed tests retain their temporary directory and print
-its path, including provider requests, session exports, and process logs.
+<details>
+<summary>About the OpenCode 2 runtime tests</summary>
 
-The CLI and native prompt API have separate coverage because `run` serializes
-multiword arguments with quotes and inlines text supplied by `--file`; native
-API files remain attachments. Update these explicit CLI compatibility assertions
-when the host changes that behavior.
+<br>
 
-Contributions welcome! Please open an issue or PR on GitHub.
-👥 [Discord Forum](https://discord.com/channels/1391832426048651334/1463378026833379409)
+Install the CLI version that matches `@opencode/plugin` in `package.json`, or point `OPENCODE_BIN` at a specific executable. The suite uses isolated home, config and data directories and a local deterministic model endpoint. It checks saved messages and real model requests across CLI submissions, attachments, skill tool calls, queued input, commands, restarts, forks and project boundaries. A failed test keeps its temporary directory and prints the path.
 
-## License
+</details>
 
-MIT
+## <img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/icon-scale.svg" width="24" align="absmiddle" alt=""> License
+
+[MIT](https://github.com/JosXa/opencode-snippets/blob/main/LICENSE) © JosXa
