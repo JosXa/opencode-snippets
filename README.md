@@ -12,7 +12,7 @@
 <img src="https://img.shields.io/badge/OpenCode-plugin-0C969B?style=flat-square&labelColor=011627" alt="OpenCode plugin">
 <a href="https://github.com/JosXa/opencode-snippets/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-011627?style=flat-square" alt="MIT license"></a>
 
-[**Install**](#-install) · [Quick start](#-quick-start) · [Features](#-features) · [Library](#-snippet-library) · [Configuration](#-configuration) · [Share snippets](https://github.com/JosXa/opencode-snippets/discussions/categories/snippets)
+[**Install**](#-install)&nbsp;&nbsp;&nbsp;[Quick start](#-quick-start)&nbsp;&nbsp;&nbsp;[Features](#-features)&nbsp;&nbsp;&nbsp;[Library](#-snippet-library)&nbsp;&nbsp;&nbsp;[Configuration](#-configuration)&nbsp;&nbsp;&nbsp;[Share snippets](https://github.com/JosXa/opencode-snippets/discussions/categories/snippets)
 
 <br>
 
@@ -27,14 +27,14 @@
 
 ## <img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/icon-lightbulb.svg" width="24" align="absmiddle" alt=""> Why snippets?
 
-We extract functions so that we do not repeat code. Prompts deserve the same treatment. Stop pasting (or worse, *typing*) the same instructions into every message.
+A snippet is a Markdown file with an instruction you use often. Write it once, then add it to any message with its `#name` instead of pasting or typing it again.
 
 <table>
 <tr>
 <td width="25%" valign="top"><b>🔄 Write once</b><br>Keep an instruction in one file and use it in every session.</td>
 <td width="25%" valign="top"><b>🧩 Compose</b><br>Build large prompts from small pieces. Snippets can include other snippets.</td>
 <td width="25%" valign="top"><b>🔧 Update once</b><br>Edit the file and the next message uses the new text everywhere.</td>
-<td width="25%" valign="top"><b>🔍 Discover</b><br>Your team's best practices are a <code>#hashtag</code> away, with autocomplete.</td>
+<td width="25%" valign="top"><b>🔍 Discover</b><br>Type <code>#</code> to list every snippet and pick one with autocomplete.</td>
 </tr>
 </table>
 
@@ -178,7 +178,7 @@ https://github.com/user-attachments/assets/76975a9e-e326-431e-8be5-39a9f6572851
 </tr>
 <tr>
 <td valign="top"><b>📎 <a href="#prepend-and-append-blocks">Prepend and append</a></b><br>Long reference text goes to the start or end of the message.</td>
-<td valign="top"><b>💉 <a href="#inject-blocks">Inject blocks</a></b><br>Context the model sees for the whole turn, outside your message.</td>
+<td valign="top"><b>💉 <a href="#inject-blocks">Inject blocks</a></b><br>Context that the model receives for the whole turn, outside your message.</td>
 <td valign="top"><b>🧠 <a href="#skills">Skills</a></b><br><code>$review</code> loads an OpenCode skill. <code>&lt;skill&gt;</code> inlines one.</td>
 <td valign="top"><b>📚 <a href="#-snippet-library">Library</a></b><br>A Vim-style browser and editor for all snippets.</td>
 </tr>
@@ -236,14 +236,14 @@ The [fields and forms reference](https://github.com/JosXa/opencode-snippets/blob
 
 ### Shell substitution
 
-Shell substitution works in every OpenCode prompt, not only in snippet files.
+Shell substitution works in snippet files and in every message you type in OpenCode.
 
 | You write | The model receives |
 |---|---|
 | ``Branch: !`git branch --show-current` `` | `Branch: main` |
 | ``!>`ls` `` | `$ ls`<br>`--> README.md src …` |
 
-The `!>` form shows the command with its output. Models trust output more when they can see which command produced it. A failed command keeps its original syntax in the message.
+The `!>` form adds the command line above its output, so the model can tell which command produced the text. A failed command keeps its original syntax in the message.
 
 ### Recursive includes
 
@@ -254,7 +254,7 @@ A snippet can reference other snippets with `#name`. Expansion repeats up to 15 
 Reference material that would interrupt your sentence goes into `<append>` (end of the message) or `<prepend>` (start of the message):
 
 <table>
-<tr><th width="50%"><code>snippet/jira.md</code></th><th width="50%">Input → output</th></tr>
+<tr><th width="50%"><code>snippet/jira.md</code></th><th width="50%">Input and expanded message</th></tr>
 <tr>
 <td valign="top">
 
@@ -308,7 +308,7 @@ about the memory leak
 > [!NOTE]
 > Experimental. Set `"experimental": { "injectBlocks": true }` in the [configuration](#-configuration).
 
-`<inject>` adds context that the model sees for the whole agent turn, without showing it in your message:
+`<inject>` sends context to the model for the whole agent turn, without showing it in your message:
 
 ```markdown
 ---
@@ -478,7 +478,7 @@ Boolean settings also accept `"enabled"` and `"disabled"`.
 - Snippets expand in chat messages, question answers, skills and slash commands. Assistant messages are never processed.
 - Hashtags are case-insensitive (`#Hello` = `#hello`). Unknown hashtags stay unchanged.
 - Frontmatter is removed from expanded text.
-- Logs go to `$XDG_DATA_HOME/opencode/log/snippets/daily/`. Info, warnings and errors are always written; `logging.debug` adds debug lines.
+- Logs go to `$XDG_DATA_HOME/opencode/log/snippets/daily/`. Info, warnings and errors are always written, and `logging.debug` adds debug lines.
 
 ## <img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/icon-users.svg" width="24" align="absmiddle" alt=""> Contributing
 
