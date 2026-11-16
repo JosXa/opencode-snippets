@@ -1,5 +1,5 @@
-import { type FSWatcher, statSync, watch } from "node:fs";
-import { basename, dirname, relative, resolve, sep } from "node:path";
+import { type Stats, statSync, unwatchFile, watch, watchFile } from "node:fs";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { getSnippetDirectories } from "./constants.js";
 import { logger } from "./logger.js";
 
@@ -9,7 +9,7 @@ export function watchSnippets(
   changed: () => Promise<void>,
 ): () => void {
   const directories = getSnippetDirectories(projectDir, globalDir).map((dir) => resolve(dir.path));
-  const watchers: FSWatcher[] = [];
+  const watchers: { close(): void }[] = [];
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pending = Promise.resolve();
@@ -55,6 +55,15 @@ export function watchSnippets(
       add(dirname(dirname(directory)), basename(dirname(directory)));
     }
     for (const [path, target] of plan) {
+      for (const name of target.names) {
+        if (!name.startsWith(".")) continue;
+        const hiddenEntry = join(path, name);
+        const changedEntry = (current: Stats, previous: Stats) => {
+          if (current.ino !== previous.ino || current.mtimeMs !== previous.mtimeMs) schedule();
+        };
+        watchFile(hiddenEntry, { persistent: false, interval: 250 }, changedEntry);
+        watchers.push({ close: () => unwatchFile(hiddenEntry, changedEntry) });
+      }
       try {
         const watcher = watch(path, { persistent: false }, (_event, file) => {
           if (file === null || target.names.has(file) || target.snippets) schedule();
