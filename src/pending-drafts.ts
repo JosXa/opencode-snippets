@@ -1,7 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { PATHS, PATTERNS } from "./constants.js";
+import { PATHS } from "./constants.js";
 import { logger } from "./logger.js";
+import { SNIPPET_TAG } from "./snippet-name.js";
 import type { SnippetRegistry } from "./types.js";
 
 type PendingDraftState = Record<string, string[]>;
@@ -54,9 +55,7 @@ async function writeState(state: PendingDraftState): Promise<void> {
 
 function usedHashtags(text: string): Set<string> {
   const used = new Set<string>();
-  const pattern = new RegExp(PATTERNS.HASHTAG);
-
-  for (const match of text.matchAll(pattern)) {
+  for (const match of text.matchAll(SNIPPET_TAG)) {
     const token = match[0] || "";
     const name = match[1]?.toLowerCase();
     const index = match.index ?? -1;

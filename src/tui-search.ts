@@ -1,4 +1,5 @@
 import type { SkillInfo } from "./skill-loader.js";
+import { compactSearchText } from "./snippet-name.js";
 import type { SnippetInfo } from "./types.js";
 
 export type SearchableSkill = Pick<SkillInfo, "name" | "description"> &
@@ -7,10 +8,6 @@ export type SearchableSkill = Pick<SkillInfo, "name" | "description"> &
 export interface HighlightPart {
   text: string;
   match: boolean;
-}
-
-function normalizeSearchText(input: string): string {
-  return input.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function scoreSubsequence(input: string, query: string): number {
@@ -38,8 +35,8 @@ function scoreSubsequence(input: string, query: string): number {
 function scoreText(input: string, query: string): number {
   const raw = input.toLowerCase();
   const needle = query.toLowerCase();
-  const compact = normalizeSearchText(input);
-  const compactNeedle = normalizeSearchText(query);
+  const compact = compactSearchText(input);
+  const compactNeedle = compactSearchText(query);
 
   if (raw === needle) return 0;
   if (compactNeedle && compact === compactNeedle) return 1;

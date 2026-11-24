@@ -15,6 +15,7 @@ import { executeShellCommands } from "./shell.js";
 import { loadFromDirectory, type SkillRegistry } from "./skill-loader.js";
 import { expandSkillLoads } from "./skill-loading.js";
 import { expandSkillTags } from "./skill-renderer.js";
+import { SNIPPET_TAG } from "./snippet-name.js";
 import type { SnippetRegistry } from "./types.js";
 import { nativeSkillRegistry } from "./v2-skills.js";
 import { type Processed as DurableProcessed, DurableStore, type TextPatch } from "./v2-state.js";
@@ -584,7 +585,7 @@ function renderDirectSkillTags(
   const literals = new LiteralStore();
   let end = 0;
   let masked = "";
-  for (const match of text.matchAll(/#([a-z0-9][a-z0-9_-]*)/gi)) {
+  for (const match of text.matchAll(SNIPPET_TAG)) {
     if (
       match.index < end ||
       !snippets.has(match[1].toLowerCase()) ||

@@ -1,8 +1,8 @@
-import { PATTERNS } from "./constants.js";
 import { type FieldValues, getSnippetForm, renderSnippet, validateFields } from "./fields.js";
 import { parseInvocation } from "./invocation.js";
 import { LiteralStore } from "./literals.js";
 import { logger } from "./logger.js";
+import { SNIPPET_TAG } from "./snippet-name.js";
 import type { ExpansionResult, ParsedSnippetContent, SnippetRegistry } from "./types.js";
 
 /**
@@ -115,18 +115,13 @@ function expandText(
   options: ExpansionContext,
 ): string {
   const { onInjectBlock } = options;
-  const pattern = new RegExp(PATTERNS.HASHTAG.source, "gi");
   let expanded = "";
   let end = 0;
-  for (const match of text.matchAll(pattern)) {
+  for (const match of text.matchAll(SNIPPET_TAG)) {
     const offset = match.index;
     if (offset < end) continue;
     const name = match[1];
-    if (
-      name.startsWith("_") ||
-      (name.toLowerCase() === "skill" && text[offset + match[0].length] === "(")
-    )
-      continue;
+    if (name.toLowerCase() === "skill" && text[offset + match[0].length] === "(") continue;
     const snippet = registry.get(name.toLowerCase());
     if (!snippet) continue;
     const form = getSnippetForm(name, registry);

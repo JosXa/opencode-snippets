@@ -5,8 +5,14 @@ import {
   validateFields,
 } from "./fields.js";
 import { parseInvocation } from "./invocation.js";
+import { SNIPPET_NAME_CHAR, SNIPPET_NAME_SOURCE } from "./snippet-name.js";
 import { findHashtagTriggerAtCursor, findSkillTriggerAtCursor } from "./tui-trigger.js";
 import type { SnippetRegistry } from "./types.js";
+
+const INVOCATION_TAG = new RegExp(
+  String.raw`#(${SNIPPET_NAME_SOURCE})(?=\(\s*(?:[A-Za-z][A-Za-z0-9_]*\s*=|\)))`,
+  "giu",
+);
 
 export type FormDraft = Record<string, string | boolean | string[]>;
 
@@ -61,9 +67,7 @@ export function formAwareTrigger(text: string, cursor: number, registry: Snippet
   if (match.query.includes("(") && !/^skill\([^)]*$/.test(match.query)) return;
   // Existing invocations are edited through Ctrl+G, including their name and
   // literal hashtags in answers. Completing a name prefix would leave old args.
-  for (const tag of text.matchAll(
-    /#([a-z0-9][a-z0-9_-]*)(?=\(\s*(?:[A-Za-z][A-Za-z0-9_]*\s*=|\)))/gi,
-  )) {
+  for (const tag of text.matchAll(INVOCATION_TAG)) {
     if (tag.index > match.start) break;
     if (!registry.has(tag[1].toLowerCase())) continue;
     try {
@@ -80,13 +84,14 @@ export function formAwareTrigger(text: string, cursor: number, registry: Snippet
 export function exactSnippetTrigger(text: string, cursor: number, registry: SnippetRegistry) {
   const match = formAwareTrigger(text, cursor, registry);
   if (!match || match.token.startsWith("$") || !registry.has(match.query.toLowerCase())) return;
-  if (/[\w(-]/.test(text[match.end] ?? "")) return;
+  const next = text[match.end] ?? "";
+  if (next === "(" || SNIPPET_NAME_CHAR.test(next)) return;
   return match;
 }
 
 /** Parse entire invocations so hashtags inside quoted answers cannot become edit targets. */
 export function findEditableInvocation(text: string, cursor: number, registry: SnippetRegistry) {
-  const tags = /(^|\s)#([a-zA-Z0-9][a-zA-Z0-9_-]*)/g;
+  const tags = new RegExp(String.raw`(^|\s)#(${SNIPPET_NAME_SOURCE})`, "gu");
   for (let tag = tags.exec(text); tag; tag = tags.exec(text)) {
     const start = tag.index + tag[1].length;
     if (start > cursor) return;

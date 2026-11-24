@@ -26,6 +26,7 @@ import { ensureSnippetsDir, listSnippets, loadSnippets } from "./src/loader.js";
 import { addPendingDraft } from "./src/pending-drafts.js";
 import { markSnippetReloadRequested } from "./src/reload-signal.js";
 import { loadSkills, type SkillInfo } from "./src/skill-loader.js";
+import { slugifySnippetName } from "./src/snippet-name.js";
 import {
   filterSkills,
   filterSnippets,
@@ -154,15 +155,6 @@ function renderHighlighted(text: string, query: string, fg: RGBA) {
       </span>
     );
   });
-}
-
-function normalizeSnippetName(input: string): string {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/-{2,}/g, "-")
-    .replace(/^-+|-+$/g, "");
 }
 
 function resolveExternalEditor() {
@@ -564,7 +556,7 @@ function PromptWithSnippetAutocomplete(props: {
 
     return optionsForQuery(next.query.trim());
   });
-  const draftName = createMemo(() => normalizeSnippetName(query()));
+  const draftName = createMemo(() => slugifySnippetName(query()));
 
   const visible = createMemo(() => {
     const next = match();
@@ -730,7 +722,7 @@ function PromptWithSnippetAutocomplete(props: {
 
   const createSnippetDraft = async (rawQuery?: string) => {
     const ref = prompt();
-    const name = normalizeSnippetName(rawQuery ?? query());
+    const name = slugifySnippetName(rawQuery ?? query());
     if (!ref || !name || creating()) return;
     const current = findTrailingHashtagTrigger(ref.current.input);
     const nextInput = current ? `${ref.current.input.slice(0, current.start)}#${name}` : `#${name}`;

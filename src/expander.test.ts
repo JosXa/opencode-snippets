@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { assembleMessage, expandHashtags, parseSnippetBlocks } from "../src/expander.js";
+import { parseInvocation, serializeInvocation } from "../src/invocation.js";
 import type { SnippetInfo, SnippetRegistry } from "../src/types.js";
 
 /** Helper to create a SnippetInfo from just content */
@@ -55,6 +56,25 @@ describe("expandHashtags - Recursive Includes and Loop Detection", () => {
     expect(expandHashtags("#conditional(enabled=yes)", registry).append).toEqual(["tail"]);
   });
   describe("Basic expansion", () => {
+    it("expands snippet names written in any script", () => {
+      const registry = createRegistry([
+        ["提交代码", "COMMIT"],
+        ["नमस्ते", "HELLO"],
+        ["café", "COFFEE"],
+      ]);
+
+      expect(expandHashtags("#提交代码 then #नमस्ते and #CAFÉ.", registry).text).toBe(
+        "COMMIT then HELLO and COFFEE.",
+      );
+      expect(parseInvocation('#提交代码(message="修复")', 0)).toMatchObject({
+        name: "提交代码",
+        values: { message: "修复" },
+      });
+      expect(serializeInvocation("提交代码", { message: "修复" })).toBe(
+        '#提交代码(message="修复")',
+      );
+    });
+
     it("should expand a single hashtag", () => {
       const registry = createRegistry([["greeting", "Hello, World!"]]);
 

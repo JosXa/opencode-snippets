@@ -29,11 +29,14 @@ import {
   snippetReferences,
   validateLibraryFile,
 } from "./library.js";
+import { SNIPPET_NAME_SOURCE } from "./snippet-name.js";
 import { Action, ActionBar } from "./tui-action.js";
 import { openExternalEditor, resolveExternalEditor } from "./tui-editor.js";
 import { SnippetForm } from "./tui-form.js";
 import { filterSnippets } from "./tui-search.js";
 import type { SnippetRegistry } from "./types.js";
+
+const SNIPPET_TAG_SPLIT = new RegExp(`(#${SNIPPET_NAME_SOURCE})`, "u");
 
 type Context = ReturnType<typeof usePlugin>;
 export interface LibraryState {
@@ -1038,11 +1041,10 @@ export function SnippetLibrary(props: {
                   <For each={(current()?.content ?? "").split("\n")}>
                     {(line) => (
                       <box flexDirection="row" flexWrap="wrap" flexShrink={0} minHeight={1}>
-                        <For each={line.split(/(#[a-z0-9][a-z0-9_-]*)/gi)}>
+                        <For each={line.split(SNIPPET_TAG_SPLIT)}>
                           {(part) => {
                             const reference =
-                              /^#[a-z0-9]/i.test(part) &&
-                              registry().has(part.slice(1).toLowerCase());
+                              part.startsWith("#") && registry().has(part.slice(1).toLowerCase());
                             return (
                               // biome-ignore lint/a11y/noStaticElementInteractions: Includes above supply the same navigation with keyboard-focusable controls.
                               <text

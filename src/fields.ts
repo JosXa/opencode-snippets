@@ -1,6 +1,7 @@
 import { importCjs } from "./cjs-interop.js";
 import { parseInvocation, validFieldName } from "./invocation.js";
 import type { LiteralStore } from "./literals.js";
+import { SNIPPET_TAG } from "./snippet-name.js";
 import type { SnippetInfo, SnippetRegistry } from "./types.js";
 
 const Handlebars = await importCjs<typeof import("handlebars")>("handlebars");
@@ -244,9 +245,8 @@ export function getSnippetForm(
     }
     const tree = ast(snippet);
     const references = (text: string) => {
-      const pattern = /#([a-z0-9][a-z0-9_-]*)/gi;
       let end = 0;
-      for (const match of text.matchAll(pattern)) {
+      for (const match of text.matchAll(SNIPPET_TAG)) {
         if (match.index < end || match[1].toLowerCase() === "skill") continue;
         const child = registry.get(match[1].toLowerCase());
         if (!child) continue;

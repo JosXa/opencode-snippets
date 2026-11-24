@@ -358,6 +358,20 @@ describe("V2 autocomplete choices", () => {
   test("normalizes an unmatched trigger into a creatable snippet name", () => {
     expect(normalizeUnmatchedTrigger(" New Review! ")).toBe("new-review");
     expect(normalizeUnmatchedTrigger("!!!")).toBeUndefined();
+    expect(normalizeUnmatchedTrigger("提交 代码")).toBe("提交-代码");
+  });
+
+  test("completes snippet names written in non-Latin scripts", () => {
+    const options = buildTuiCompletionOptions(
+      [
+        { name: "review", content: "Review", aliases: [], filePath: "", source: "global" },
+        { name: "提交代码", content: "Commit", aliases: [], filePath: "", source: "global" },
+      ],
+      [],
+      "提交",
+    );
+
+    expect(options.map((option) => option.title)).toEqual(["#提交代码"]);
   });
 });
 

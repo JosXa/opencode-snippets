@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { PATHS } from "../src/constants.js";
 import { expandHashtags } from "../src/expander.js";
 import { getSnippetForm } from "../src/fields.js";
-import { createSnippet, deleteSnippet, ensureSnippetsDir, loadSnippets } from "../src/loader.js";
+import {
+  createSnippet,
+  deleteSnippet,
+  ensureSnippetsDir,
+  loadSnippets,
+  validateSnippetName,
+} from "../src/loader.js";
 
 describe("loadSnippets - Dual Path Support", () => {
   let tempDir: string;
@@ -516,6 +522,14 @@ Hello there!`,
       );
 
       expect(filePath).toBe(join(projectSnippetsDir, "plural-project.md"));
+    });
+
+    it("creates snippets named in non-Latin scripts", async () => {
+      const filePath = await createSnippet("提交代码", "Commit content");
+
+      expect(filePath).toBe(join(globalSnippetDir, "提交代码.md"));
+      expect(() => validateSnippetName("नमस्ते")).not.toThrow();
+      expect(() => validateSnippetName("-提交")).toThrow();
     });
 
     it("defaults to snippet directory when creating a new one", async () => {

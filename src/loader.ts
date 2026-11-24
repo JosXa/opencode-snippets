@@ -21,6 +21,7 @@ import {
   resolveSnippetDir,
 } from "./constants.js";
 import { logger } from "./logger.js";
+import { SNIPPET_NAME } from "./snippet-name.js";
 import type { SnippetFrontmatter, SnippetInfo, SnippetRegistry } from "./types.js";
 
 // New directories may not exist yet; resolve their nearest existing ancestor.
@@ -59,8 +60,6 @@ function resolveWritableSnippetDir(projectDir?: string, globalDir?: string): str
   const paths = projectDir ? getProjectPaths(projectDir) : PATHS;
   return resolveSnippetDir(paths.SNIPPETS_DIR, paths.SNIPPETS_DIR_ALT);
 }
-
-const SNIPPET_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 
 export function validateSnippetName(name: string): void {
   if (!SNIPPET_NAME.test(name)) {

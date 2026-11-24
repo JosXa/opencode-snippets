@@ -1,4 +1,7 @@
 import type { FieldValues } from "./fields.js";
+import { SNIPPET_NAME, SNIPPET_NAME_SOURCE } from "./snippet-name.js";
+
+const LEADING_SNIPPET_TAG = new RegExp(`^#(${SNIPPET_NAME_SOURCE})`, "u");
 
 export const validFieldName = (name: string): boolean =>
   /^[A-Za-z][A-Za-z0-9_]*$/.test(name) &&
@@ -15,7 +18,7 @@ export interface Invocation {
 
 /** Parse one complete invocation. Offsets refer to JavaScript UTF-16 strings. */
 export function parseInvocation(text: string, start: number): Invocation | undefined {
-  const match = /^#([a-z0-9][a-z0-9_-]*)/i.exec(text.slice(start));
+  const match = LEADING_SNIPPET_TAG.exec(text.slice(start));
   if (!match) return;
   const name = match[1];
   let end = start + match[0].length;
@@ -90,7 +93,7 @@ export function parseInvocation(text: string, start: number): Invocation | undef
 }
 
 export function serializeInvocation(name: string, values: FieldValues): string {
-  if (!/^[a-z0-9][a-z0-9_-]*$/i.test(name)) throw new Error("Invalid snippet name");
+  if (!SNIPPET_NAME.test(name)) throw new Error("Invalid snippet name");
   const args = Object.entries(values).map(([key, value]) => {
     if (!validFieldName(key) || (typeof value === "number" && !Number.isFinite(value)))
       throw new Error(`Invalid field '${key}'`);
