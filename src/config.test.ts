@@ -7,12 +7,15 @@ import { PATHS } from "./constants.js";
 // Use temp directories for testing to avoid affecting real config
 const TEST_TEMP_DIR = join(import.meta.dirname ?? ".", ".test-temp-config");
 const TEST_GLOBAL_SNIPPETS_DIR = join(TEST_TEMP_DIR, "global", "snippet");
+const TEST_GLOBAL_SNIPPETS_DIR_ALT = join(TEST_TEMP_DIR, "global", "snippets");
+const TEST_GLOBAL_CONFIG_FILE = join(TEST_GLOBAL_SNIPPETS_DIR, "config.jsonc");
 const TEST_PROJECT_DIR = join(TEST_TEMP_DIR, "project");
 const TEST_PROJECT_SNIPPETS_DIR = join(TEST_PROJECT_DIR, ".opencode", "snippet");
+const TEST_PROJECT_SNIPPETS_DIR_ALT = join(TEST_PROJECT_DIR, ".opencode", "snippets");
 
 // Store original PATHS values to restore after tests
 const originalSnippetsDir = PATHS.SNIPPETS_DIR;
-const originalConfigFileGlobal = (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL;
+const originalSnippetsDirAlt = PATHS.SNIPPETS_DIR_ALT;
 
 describe("config", () => {
   beforeEach(() => {
@@ -31,8 +34,8 @@ describe("config", () => {
       writable: true,
       configurable: true,
     });
-    Object.defineProperty(PATHS, "CONFIG_FILE_GLOBAL", {
-      value: join(TEST_GLOBAL_SNIPPETS_DIR, "config.jsonc"),
+    Object.defineProperty(PATHS, "SNIPPETS_DIR_ALT", {
+      value: TEST_GLOBAL_SNIPPETS_DIR_ALT,
       writable: true,
       configurable: true,
     });
@@ -45,8 +48,8 @@ describe("config", () => {
       writable: true,
       configurable: true,
     });
-    Object.defineProperty(PATHS, "CONFIG_FILE_GLOBAL", {
-      value: originalConfigFileGlobal,
+    Object.defineProperty(PATHS, "SNIPPETS_DIR_ALT", {
+      value: originalSnippetsDirAlt,
       writable: true,
       configurable: true,
     });
@@ -70,20 +73,16 @@ describe("config", () => {
 
     it("should auto-create global config file when it doesn't exist", () => {
       // Config file should not exist initially
-      expect(existsSync((PATHS as Record<string, string>).CONFIG_FILE_GLOBAL)).toBe(false);
+      expect(existsSync(TEST_GLOBAL_CONFIG_FILE)).toBe(false);
 
       loadConfig();
 
       // Config file should be created
-      expect(existsSync((PATHS as Record<string, string>).CONFIG_FILE_GLOBAL)).toBe(true);
+      expect(existsSync(TEST_GLOBAL_CONFIG_FILE)).toBe(true);
     });
 
     it("should load global config file", () => {
-      writeFileSync(
-        (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL,
-        JSON.stringify({ logging: { debug: true } }),
-        "utf-8",
-      );
+      writeFileSync(TEST_GLOBAL_CONFIG_FILE, JSON.stringify({ logging: { debug: true } }), "utf-8");
 
       const config = loadConfig();
 
@@ -98,7 +97,7 @@ describe("config", () => {
           "debug": true
         }
       }`;
-      writeFileSync((PATHS as Record<string, string>).CONFIG_FILE_GLOBAL, jsoncContent, "utf-8");
+      writeFileSync(TEST_GLOBAL_CONFIG_FILE, jsoncContent, "utf-8");
 
       const config = loadConfig();
 
@@ -107,7 +106,7 @@ describe("config", () => {
 
     it("should accept 'enabled' string for debug", () => {
       writeFileSync(
-        (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL,
+        TEST_GLOBAL_CONFIG_FILE,
         JSON.stringify({ logging: { debug: "enabled" } }),
         "utf-8",
       );
@@ -119,7 +118,7 @@ describe("config", () => {
 
     it("should accept 'disabled' string for debug", () => {
       writeFileSync(
-        (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL,
+        TEST_GLOBAL_CONFIG_FILE,
         JSON.stringify({ logging: { debug: "disabled" } }),
         "utf-8",
       );
@@ -131,11 +130,7 @@ describe("config", () => {
 
     it("should merge partial config with defaults", () => {
       // Only set debug, other options should use default
-      writeFileSync(
-        (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL,
-        JSON.stringify({ logging: { debug: true } }),
-        "utf-8",
-      );
+      writeFileSync(TEST_GLOBAL_CONFIG_FILE, JSON.stringify({ logging: { debug: true } }), "utf-8");
 
       const config = loadConfig();
 
@@ -145,11 +140,7 @@ describe("config", () => {
 
     it("should merge project config with global config (project has priority)", () => {
       // Global config
-      writeFileSync(
-        (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL,
-        JSON.stringify({ logging: { debug: true } }),
-        "utf-8",
-      );
+      writeFileSync(TEST_GLOBAL_CONFIG_FILE, JSON.stringify({ logging: { debug: true } }), "utf-8");
 
       // Project config (overrides global)
       const projectConfigPath = join(TEST_PROJECT_SNIPPETS_DIR, "config.jsonc");
@@ -161,11 +152,7 @@ describe("config", () => {
     });
 
     it("should handle malformed JSONC gracefully", () => {
-      writeFileSync(
-        (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL,
-        "{ invalid json }",
-        "utf-8",
-      );
+      writeFileSync(TEST_GLOBAL_CONFIG_FILE, "{ invalid json }", "utf-8");
 
       const config = loadConfig();
 
@@ -179,7 +166,7 @@ describe("config", () => {
 
     it("should load experimental skill loading config", () => {
       writeFileSync(
-        (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL,
+        TEST_GLOBAL_CONFIG_FILE,
         JSON.stringify({ experimental: { skillLoading: true } }),
         "utf-8",
       );
@@ -191,7 +178,7 @@ describe("config", () => {
 
     it("should ignore invalid config value types", () => {
       writeFileSync(
-        (PATHS as Record<string, string>).CONFIG_FILE_GLOBAL,
+        TEST_GLOBAL_CONFIG_FILE,
         JSON.stringify({ logging: { debug: "yes" } }),
         "utf-8",
       );
@@ -203,17 +190,37 @@ describe("config", () => {
     });
   });
 
-  describe("getGlobalConfigPath", () => {
-    it("should return the global config path", () => {
-      const path = getGlobalConfigPath();
-      expect(path).toBe((PATHS as Record<string, string>).CONFIG_FILE_GLOBAL);
-    });
-  });
+  describe("plural snippets directories", () => {
+    it("creates the global config inside an existing snippets/ without creating snippet/", () => {
+      rmSync(TEST_GLOBAL_SNIPPETS_DIR, { recursive: true });
+      mkdirSync(TEST_GLOBAL_SNIPPETS_DIR_ALT, { recursive: true });
 
-  describe("getProjectConfigPath", () => {
-    it("should return the project config path", () => {
-      const path = getProjectConfigPath("/some/project");
-      expect(path).toBe(join("/some/project", ".opencode", "snippet", "config.jsonc"));
+      loadConfig();
+
+      expect(getGlobalConfigPath()).toBe(join(TEST_GLOBAL_SNIPPETS_DIR_ALT, "config.jsonc"));
+      expect(existsSync(join(TEST_GLOBAL_SNIPPETS_DIR_ALT, "config.jsonc"))).toBe(true);
+      expect(existsSync(TEST_GLOBAL_SNIPPETS_DIR)).toBe(false);
+    });
+
+    it("reads the project config from an existing .opencode/snippets/", () => {
+      rmSync(TEST_PROJECT_SNIPPETS_DIR, { recursive: true });
+      mkdirSync(TEST_PROJECT_SNIPPETS_DIR_ALT, { recursive: true });
+      writeFileSync(
+        join(TEST_PROJECT_SNIPPETS_DIR_ALT, "config.jsonc"),
+        JSON.stringify({ logging: { debug: true } }),
+        "utf-8",
+      );
+
+      expect(getProjectConfigPath(TEST_PROJECT_DIR)).toBe(
+        join(TEST_PROJECT_SNIPPETS_DIR_ALT, "config.jsonc"),
+      );
+      expect(loadConfig(TEST_PROJECT_DIR).logging.debug).toBe(true);
+    });
+
+    it("keeps snippet/ when both directories exist", () => {
+      mkdirSync(TEST_GLOBAL_SNIPPETS_DIR_ALT, { recursive: true });
+
+      expect(getGlobalConfigPath()).toBe(TEST_GLOBAL_CONFIG_FILE);
     });
   });
 });

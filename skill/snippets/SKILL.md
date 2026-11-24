@@ -12,8 +12,8 @@ as the source of truth for installation, configuration, and supported syntax.
 ## Locations and configuration
 
 Check only the documented global and project snippet directories. Snippet
-configuration is always `snippet/config.jsonc`; plural `snippets/` supports
-Markdown snippets only.
+configuration lives in `snippet/config.jsonc`, or in `snippets/config.jsonc`
+when only the plural directory exists.
 
 When modifying configuration:
 

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { importCjs } from "./cjs-interop.js";
-import { getProjectPaths, PATHS } from "./constants.js";
+import { getProjectPaths, PATHS, resolveSnippetDir } from "./constants.js";
 import { logger } from "./logger.js";
 
 const { parse: parseJsonc } = await importCjs<typeof import("jsonc-parser")>("jsonc-parser");
@@ -206,8 +206,8 @@ function ensureGlobalConfigExists(globalConfigFile: string): void {
  * Load and merge configuration from global and project-specific config files
  *
  * Configuration priority (highest to lowest):
- * 1. Project-specific config (.opencode/snippet/config.jsonc)
- * 2. Global config (~/.config/opencode/snippet/config.jsonc)
+ * 1. Project-specific config (.opencode/snippet/config.jsonc or .opencode/snippets/config.jsonc)
+ * 2. Global config (~/.config/opencode/snippet/config.jsonc or ~/.config/opencode/snippets/config.jsonc)
  * 3. Default values
  *
  * @param projectDir - Optional project directory to check for project-specific config
@@ -215,7 +215,7 @@ function ensureGlobalConfigExists(globalConfigFile: string): void {
  */
 export function loadConfig(
   projectDir?: string,
-  globalConfigFile = PATHS.CONFIG_FILE_GLOBAL,
+  globalConfigFile = getGlobalConfigPath(),
 ): SnippetsConfig {
   // Ensure global directory and config file exist
   ensureGlobalConfigExists(globalConfigFile);
@@ -281,7 +281,7 @@ function mergeConfig(base: SnippetsConfig, raw: RawConfig): SnippetsConfig {
  * Get the path to the global config file
  */
 export function getGlobalConfigPath(): string {
-  return PATHS.CONFIG_FILE_GLOBAL;
+  return join(resolveSnippetDir(PATHS.SNIPPETS_DIR, PATHS.SNIPPETS_DIR_ALT), "config.jsonc");
 }
 
 /**
