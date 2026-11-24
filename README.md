@@ -469,7 +469,7 @@ The plugin creates `~/.config/opencode/snippet/config.jsonc` on first run, or `~
 }
 ```
 
-For editor completion, set `"$schema"` to the [config schema](https://raw.githubusercontent.com/JosXa/opencode-snippets/v3.4.0/schema/config.schema.json).
+For editor completion, set `"$schema"` to the [config schema](https://raw.githubusercontent.com/JosXa/opencode-snippets/v3.5.0/schema/config.schema.json).
 
 Boolean settings also accept `"enabled"` and `"disabled"`.
 
