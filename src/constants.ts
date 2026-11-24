@@ -6,9 +6,6 @@ import { join } from "node:path";
  * Regular expression patterns used throughout the plugin
  */
 export const PATTERNS = {
-  /** Matches hashtags like #snippet-name */
-  HASHTAG: /#([a-z0-9\-_]+)/gi,
-
   /** Matches shell commands like !`command` or !>`command` */
   SHELL_COMMAND: /(!>?)`([^`]+)`/g,
 

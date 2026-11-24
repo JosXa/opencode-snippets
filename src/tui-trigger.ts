@@ -1,4 +1,5 @@
 import { findDollarSkillLoads, formatSkillLoad } from "./skill-invocation.js";
+import { compactSearchText, slugifySnippetName } from "./snippet-name.js";
 import { filterSkills, filterSnippets, type SearchableSkill } from "./tui-search.js";
 import type { SnippetInfo } from "./types.js";
 
@@ -23,10 +24,6 @@ export function resolveCompletionCursor(text: string, cursorOffset: number): num
 }
 
 const HASHTAG_TRIGGER = /(^|\s)#([^\s#]*)$/;
-
-function compactTagText(input: string): string {
-  return input.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
 
 export function findTrailingHashtagTrigger(input: string): CompletionTrigger | undefined {
   const hit = input.match(HASHTAG_TRIGGER);
@@ -107,12 +104,7 @@ export function buildTuiCompletionOptions(
 }
 
 export function normalizeUnmatchedTrigger(query: string): string | undefined {
-  const name = query
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return name || undefined;
+  return slugifySnippetName(query) || undefined;
 }
 
 export function replaceTrailingHashtag(input: string, name: string): string | undefined {
@@ -155,10 +147,10 @@ export function preferredSnippetTag(
   const exact = item.aliases.find((alias) => alias === query);
   if (exact) return exact;
 
-  const compact = compactTagText(query);
+  const compact = compactSearchText(query);
   if (!compact) return item.name;
 
-  return item.aliases.find((alias) => compactTagText(alias) === compact) ?? item.name;
+  return item.aliases.find((alias) => compactSearchText(alias) === compact) ?? item.name;
 }
 
 export function insertSnippetTrigger(input: string): string {

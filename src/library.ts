@@ -5,6 +5,7 @@ import { importCjs } from "./cjs-interop.js";
 import { getSnippetDirectories } from "./constants.js";
 import { getSnippetForm } from "./fields.js";
 import { ensureSnippetsDir, loadSnippets, validateSnippetName } from "./loader.js";
+import { SNIPPET_TAG } from "./snippet-name.js";
 import type { SnippetInfo, SnippetRegistry } from "./types.js";
 
 const matter = await importCjs<typeof import("gray-matter")>("gray-matter");
@@ -53,7 +54,7 @@ export function parseLibraryFile(
 export function snippetReferences(content: string): string[] {
   return [
     ...new Set(
-      [...content.matchAll(/#([a-z0-9][a-z0-9_-]*)/gi)]
+      [...content.matchAll(SNIPPET_TAG)]
         .map((match) => match[1])
         .filter((name) => name.toLowerCase() !== "skill"),
     ),
