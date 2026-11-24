@@ -453,7 +453,7 @@ The plugin stores a small record of processing output so that rebuilt history an
 
 ## <img src="https://raw.githubusercontent.com/JosXa/opencode-snippets/main/.github/readme/icon-settings-2.svg" width="24" align="absmiddle" alt=""> Configuration
 
-The plugin creates `~/.config/opencode/snippet/config.jsonc` on first run. A project file at `.opencode/snippet/config.jsonc` overrides it.
+The plugin creates `~/.config/opencode/snippet/config.jsonc` on first run, or `~/.config/opencode/snippets/config.jsonc` when only the plural directory exists. A project file at `.opencode/snippet/config.jsonc` (or `.opencode/snippets/config.jsonc`) overrides it.
 
 ```jsonc
 {

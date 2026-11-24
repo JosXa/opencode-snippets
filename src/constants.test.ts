@@ -1,5 +1,7 @@
-import { expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { resolveSnippetDir } from "./constants.js";
 
 test("config paths respect host overrides, XDG, and the default home in fresh processes", async () => {
   const home = "/tmp/opencode/snippets-path-home";
@@ -35,7 +37,41 @@ test("config paths respect host overrides, XDG, and the default home in fresh pr
       CONFIG_DIR: expected,
       SNIPPETS_DIR: join(expected, "snippet"),
       SNIPPETS_DIR_ALT: join(expected, "snippets"),
-      CONFIG_FILE_GLOBAL: join(expected, "snippet", "config.jsonc"),
     });
   }
+});
+
+describe("resolveSnippetDir", () => {
+  const root = join("/tmp/opencode", "resolve-snippet-dir-test");
+  const preferred = join(root, "snippet");
+  const alt = join(root, "snippets");
+
+  beforeEach(() => {
+    rmSync(root, { recursive: true, force: true });
+    mkdirSync(root, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("returns the preferred directory when neither exists", () => {
+    expect(resolveSnippetDir(preferred, alt)).toBe(preferred);
+  });
+
+  test("returns the alternate directory when only it exists", () => {
+    mkdirSync(alt);
+    expect(resolveSnippetDir(preferred, alt)).toBe(alt);
+  });
+
+  test("returns the preferred directory when only it exists", () => {
+    mkdirSync(preferred);
+    expect(resolveSnippetDir(preferred, alt)).toBe(preferred);
+  });
+
+  test("returns the preferred directory when both exist", () => {
+    mkdirSync(preferred);
+    mkdirSync(alt);
+    expect(resolveSnippetDir(preferred, alt)).toBe(preferred);
+  });
 });

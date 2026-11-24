@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -40,20 +41,26 @@ export const PATHS = {
 
   /** Alternate global snippets directory */
   SNIPPETS_DIR_ALT: join(configDir, "snippets"),
-
-  /** Global config file */
-  CONFIG_FILE_GLOBAL: join(configDir, "snippet", "config.jsonc"),
 } as const;
+
+/**
+ * Pick the directory that holds new snippets and config.jsonc: the alternate
+ * directory when only it exists, otherwise the preferred one.
+ */
+export function resolveSnippetDir(preferred: string, alt: string): string {
+  return existsSync(alt) && !existsSync(preferred) ? alt : preferred;
+}
 
 /**
  * Get project-specific paths based on project directory
  */
 export function getProjectPaths(projectDir: string) {
   const snippetDir = join(projectDir, ".opencode", "snippet");
+  const snippetDirAlt = join(projectDir, ".opencode", "snippets");
   return {
     SNIPPETS_DIR: snippetDir,
-    SNIPPETS_DIR_ALT: join(projectDir, ".opencode", "snippets"),
-    CONFIG_FILE: join(snippetDir, "config.jsonc"),
+    SNIPPETS_DIR_ALT: snippetDirAlt,
+    CONFIG_FILE: join(resolveSnippetDir(snippetDir, snippetDirAlt), "config.jsonc"),
   };
 }
 

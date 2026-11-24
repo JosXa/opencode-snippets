@@ -1,5 +1,4 @@
 import {
-  access,
   lstat,
   mkdir,
   readdir,
@@ -14,7 +13,13 @@ import { importCjs } from "./cjs-interop.js";
 
 const matter = await importCjs<typeof import("gray-matter")>("gray-matter");
 
-import { CONFIG, getProjectPaths, getSnippetDirectories, PATHS } from "./constants.js";
+import {
+  CONFIG,
+  getProjectPaths,
+  getSnippetDirectories,
+  PATHS,
+  resolveSnippetDir,
+} from "./constants.js";
 import { logger } from "./logger.js";
 import type { SnippetFrontmatter, SnippetInfo, SnippetRegistry } from "./types.js";
 
@@ -49,27 +54,10 @@ async function resolveSnippetTarget(path: string): Promise<string> {
   }
 }
 
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function resolveWritableSnippetDir(projectDir?: string, globalDir?: string): Promise<string> {
+function resolveWritableSnippetDir(projectDir?: string, globalDir?: string): string {
   if (!projectDir && globalDir) return globalDir;
-  const paths = projectDir
-    ? getProjectPaths(projectDir)
-    : { SNIPPETS_DIR: PATHS.SNIPPETS_DIR, SNIPPETS_DIR_ALT: PATHS.SNIPPETS_DIR_ALT };
-
-  // Support both snippet/ and snippets/. Reuse an existing directory first, then default to snippet/.
-  for (const dir of [paths.SNIPPETS_DIR, paths.SNIPPETS_DIR_ALT]) {
-    if (await pathExists(dir)) return dir;
-  }
-
-  return paths.SNIPPETS_DIR;
+  const paths = projectDir ? getProjectPaths(projectDir) : PATHS;
+  return resolveSnippetDir(paths.SNIPPETS_DIR, paths.SNIPPETS_DIR_ALT);
 }
 
 const SNIPPET_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
@@ -334,7 +322,7 @@ export function listSnippets(registry: SnippetRegistry): SnippetInfo[] {
  * Ensures the snippets directory exists
  */
 export async function ensureSnippetsDir(projectDir?: string, globalDir?: string): Promise<string> {
-  const dir = await resolveWritableSnippetDir(projectDir, globalDir);
+  const dir = resolveWritableSnippetDir(projectDir, globalDir);
   if (projectDir) await assertProjectSnippetCreationTarget(projectDir, dir);
   await mkdir(dir, { recursive: true });
   if (projectDir) await assertProjectSnippetDirectory(projectDir, dir);
