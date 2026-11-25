@@ -378,7 +378,7 @@ const plugin = Plugin.define({
           // because ASCII compaction could otherwise turn #rev into #中rev.
           // A broken draft from this session stays addressable; reopen it for correction.
           if (snippet && drafts.has(snippet.filePath)) {
-            void createUnmatched();
+            void createUnmatched(snippet.name);
             return;
           }
           const name = snippet?.aliases.find((alias) => alias === match.query) ?? choice.name;
@@ -392,13 +392,13 @@ const plugin = Plugin.define({
           closeMenu();
         };
 
-        const createUnmatched = async () => {
+        const createUnmatched = async (draft?: string) => {
           if (dialogOpen()) return;
           const focused = activePrompt();
           if (!focused) return;
           const match = promptTrigger(focused, snippets);
           if (!match || match.token.startsWith("$")) return;
-          const name = normalizeUnmatchedTrigger(match?.query ?? "");
+          const name = draft ?? normalizeUnmatchedTrigger(match.query);
           if (!name) return;
           const editor = resolveExternalEditor();
           if (!editor) {

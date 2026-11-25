@@ -496,4 +496,109 @@ describe("V2 TUI plugin", () => {
       dispose?.();
     });
   }
+
+  test("accepting an owned broken draft from a partial query reopens that draft and creates no new snippet file", async () => {
+    root = await mkdtemp(join(tmpdir(), "snippets-v2-tui-partial-draft-"));
+    const project = join(root, "project");
+    const globalDirectory = join(root, "isolated-global");
+    await mkdir(project, { recursive: true });
+    await mkdir(globalDirectory, { recursive: true });
+    const script = join(root, "fake editor.mjs");
+    const opened = join(root, "opened.txt");
+    const invalid = "---\naliases: [unterminated\n---\nSaved draft body";
+    // The first editor session leaves the new draft with broken frontmatter.
+    await Bun.write(
+      script,
+      `await Bun.write(${JSON.stringify(opened)}, process.argv[2]); await Bun.write(process.argv[2], ${JSON.stringify(invalid)});`,
+    );
+    process.env.EDITOR = "must-not-run-fallback-editor";
+    process.env.VISUAL = `"${process.execPath}" "${script}"`;
+    const toasts: string[] = [];
+    const titles: string[] = [];
+    const screen = await createTestRenderer({ width: 80, height: 24 });
+    destroyRenderer = () => screen.renderer.destroy();
+    const editor = new TextareaRenderable(screen.renderer, { id: "prompt", width: 80, height: 3 });
+    editor.traits = { capture: ["tab"], ...{ owner: "opencode", role: "prompt" } };
+    let footer: (input: { mode: "normal"; showDetails: boolean }) => JSX.Element = () => null;
+    const dispose = await plugin.setup({
+      location: { directory: project },
+      data: { on: () => () => {} },
+      theme,
+      options: { globalDirectory, homeDirectory: root },
+      client: { skill: { list: async () => ({ data: [] }) } },
+      ui: {
+        router: { register: () => () => {}, current: () => ({ type: "home" }), navigate: () => {} },
+        toast: { show: ({ message }: { message: string }) => toasts.push(message) },
+        slot: ({ render }: { render: typeof footer }) => {
+          footer = render;
+          return () => {};
+        },
+        dialog: {
+          show: () => undefined,
+          set: () => undefined,
+          clear: () => undefined,
+          confirm: async ({ title }: { title: string }) => {
+            titles.push(title);
+            return true;
+          },
+        },
+      },
+      keymap: { mode: { current: () => "base" }, layer: () => {} },
+      renderer: screen.renderer,
+    } as never);
+    // Leave room above the prompt so the completion menu is visible on screen.
+    await render(
+      () => (
+        <box paddingTop={12}>
+          <box>
+            {editor}
+            {footer({ mode: "normal", showDetails: true })}
+          </box>
+        </box>
+      ),
+      screen.renderer,
+    );
+    editor.focus();
+    editor.insertText("#fresh-global");
+    await Bun.sleep(50);
+    // Creating #fresh-global succeeds on disk, but the saved draft cannot be loaded.
+    screen.mockInput.pressTab();
+    for (let attempt = 0; attempt < 100 && !toasts.length; attempt++) await Bun.sleep(10);
+    expect(toasts[0]).toContain("could not be loaded");
+    expect(toasts[0]).toContain("reopen");
+    const draft = join(globalDirectory, "fresh-global.md");
+    expect(await Bun.file(draft).text()).toBe(invalid);
+
+    // The second editor session repairs whatever file it is given.
+    await Bun.write(
+      script,
+      `await Bun.write(${JSON.stringify(opened)}, process.argv[2]); const content = await Bun.file(process.argv[2]).text(); await Bun.write(process.argv[2], content.replace("aliases: [unterminated", "aliases: []"));`,
+    );
+    // The user follows the toast but only types a prefix; completion offers the broken draft.
+    editor.setText("#fresh");
+    editor.gotoLineEnd();
+    await Bun.sleep(400);
+    await screen.renderOnce();
+    const frame = screen.captureCharFrame();
+    expect(frame).toContain("#fresh-global");
+    expect(frame).not.toContain("Add new Snippet");
+    screen.mockInput.pressTab();
+    for (let attempt = 0; attempt < 100; attempt++) {
+      if (editor.plainText === "#fresh-global " || toasts.length > 1) break;
+      await Bun.sleep(10);
+    }
+
+    // The confirmation names the draft the user picked, and the editor opens that same file.
+    expect(titles).toEqual(["Create #fresh-global?", "Create #fresh-global?"]);
+    expect(await Bun.file(opened).text()).toBe(draft);
+    expect(await Bun.file(draft).text()).toBe(
+      invalid.replace("aliases: [unterminated", "aliases: []"),
+    );
+    // Accepting the completion must not leave a stray snippet named after the typed prefix.
+    expect(await Bun.file(join(globalDirectory, "fresh.md")).exists()).toBe(false);
+    // Once repaired, the draft is inserted like any accepted completion.
+    expect(toasts).toHaveLength(1);
+    expect(editor.plainText).toBe("#fresh-global ");
+    dispose?.();
+  });
 });
