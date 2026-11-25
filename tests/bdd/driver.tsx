@@ -8,6 +8,7 @@ import { registerManagedTextareaLayer } from "@opentui/keymap/addons/opentui";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { testRender, useRenderer } from "@opentui/solid";
 import { type Accessor, createSignal, type JSX, Show } from "solid-js";
+import { createLibrary, type Library } from "../../src/library.js";
 import { type LibraryState, SnippetLibrary } from "../../src/tui-library.js";
 
 export interface Seed {
@@ -83,6 +84,19 @@ export async function open(
     clipboard: true,
     dialog: undefined as Dialog | undefined,
   };
+  // A slow disk: when holding, the next save waits until a step releases it, then writes for real.
+  const disk = { holding: false, held: [] as (() => void)[] };
+  const production = createLibrary(directory, globalDirectory);
+  const library: Library = {
+    ...production,
+    async save(file, raw) {
+      if (disk.holding) {
+        disk.holding = false;
+        await new Promise<void>((resolve) => disk.held.push(resolve));
+      }
+      await production.save(file, raw);
+    },
+  };
   const cleanups: (() => void)[] = [];
   const view = await testRender(
     () => {
@@ -138,6 +152,7 @@ export async function open(
             directory={directory}
             globalDirectory={globalDirectory}
             state={state}
+            library={library}
             reload={async () => {
               host.reloads++;
             }}
@@ -290,6 +305,7 @@ export async function open(
   await until(() => assert.ok(!frame().includes("Working…")));
   return {
     host,
+    disk,
     clipboard,
     directory,
     state,

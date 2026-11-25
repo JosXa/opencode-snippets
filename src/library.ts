@@ -84,6 +84,8 @@ export function validateLibraryFile(file: LibraryFile, registry: SnippetRegistry
   getSnippetForm(file.name, libraryRegistry(file, registry));
 }
 
+export type Library = ReturnType<typeof createLibrary>;
+
 export function createLibrary(directory: string, globalDirectory?: string) {
   const roots = getSnippetDirectories(directory, globalDirectory);
   const root = (path: string) => {

@@ -23,6 +23,7 @@ import { serializeInvocation } from "./invocation.js";
 import {
   copyLibrarySource,
   createLibrary,
+  type Library,
   type LibraryFile,
   libraryRegistry,
   parseLibraryFile,
@@ -47,10 +48,11 @@ export function SnippetLibrary(props: {
   globalDirectory?: string;
   state: LibraryState;
   revision?: number;
+  library?: Library;
   reload(): Promise<void>;
   close(): void;
 }) {
-  const library = createLibrary(props.directory, props.globalDirectory);
+  const library = props.library ?? createLibrary(props.directory, props.globalDirectory);
   const scroll = loadCliScroll();
   // Match OpenCode: acceleration takes precedence over a fixed scroll speed.
   const acceleration = () =>
@@ -197,7 +199,13 @@ export function SnippetLibrary(props: {
     const parsed = parseLibraryFile(path, draft.file.source, draft.raw);
     validateLibraryFile(parsed, registry());
     await library.save(draft.file, draft.raw);
+    const latest = props.state.drafts.get(path);
     props.state.drafts.delete(path);
+    if (latest && latest !== draft)
+      props.state.drafts.set(path, {
+        file: { ...parsed, active: draft.file.active },
+        raw: latest.raw,
+      });
     changed();
   };
   const save = () =>

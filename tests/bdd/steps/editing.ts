@@ -13,6 +13,24 @@ Given("I have unsaved drafts in review and base", async function (this: LibraryW
   assert.equal(this.ui.state.drafts.size, 2);
 });
 
+Given("the disk holds the next save", function (this: LibraryWorld) {
+  this.ui.disk.holding = true;
+});
+
+Then("the save should still be in progress", async function (this: LibraryWorld) {
+  await this.ui.until(() => {
+    assert.equal(this.ui.disk.held.length, 1, "Expected a save waiting on the disk");
+    assert.ok(this.ui.frame().includes("Working…"));
+  });
+});
+
+When("the held save finishes", async function (this: LibraryWorld) {
+  const release = this.ui.disk.held.shift();
+  assert.ok(release, "No save is waiting on the disk");
+  release();
+  await this.ui.until(() => assert.ok(!this.ui.frame().includes("Working…")));
+});
+
 When(
   "an external edit replaces {string} in {string} scope with {string}",
   async function (this: LibraryWorld, name: string, scope: string, content: string) {

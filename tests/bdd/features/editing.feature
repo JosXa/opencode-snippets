@@ -26,6 +26,37 @@ Feature: Edit valuable snippets without losing drafts or overwriting files
     And the host should have reloaded the library 1 time
     And the host should have received 0 prompt submissions
 
+  Scenario: Text pasted while a save is in progress stays in the editor as unsaved changes
+    # A slow disk keeps the first save running while the user goes on editing.
+    Given the disk holds the next save
+    When I click "library-action-edit"
+    And I press "Ctrl+End"
+    And I paste:
+      """
+
+      Saved line
+      """
+    And I press "Ctrl+S"
+    Then the save should still be in progress
+    # The user pastes more text before the first save has finished.
+    When I paste:
+      """
+
+      Pasted during save
+      """
+    And the held save finishes
+    Then I should see "Saved. New submissions use this version."
+    # The first save writes the text the user saved; the later paste is not on disk yet.
+    And the file "review" in "project" scope should end with "Saved line"
+    # The pasted text is still in the editor and the snippet is still marked as unsaved.
+    And the source editor should end with "Pasted during save"
+    And I should see "Unsaved"
+    # The next save writes the pasted text without a false disk conflict.
+    When I press "Ctrl+S"
+    Then I should see "Saved. New submissions use this version."
+    And the file "review" in "project" scope should end with "Pasted during save"
+    And I should not see "Unsaved"
+
   Scenario: Find in source preserves the draft even for a missing or cancelled search
     When I click "library-action-edit"
     And I press "Ctrl+End"
