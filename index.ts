@@ -659,6 +659,15 @@ export const SnippetsPlugin: LegacyPlugin = async (ctx) => {
   };
 
   return {
+    event: async ({ event }) => {
+      if (event.type !== "session.deleted") return;
+      const sessionID = event.properties.info.id;
+      skillLoadManager.clearSession(sessionID);
+      injectionManager.clearSession(sessionID);
+      injectionMarkerIdsBySession.delete(sessionID);
+      injectionMarkerRenderQueueBySession.delete(sessionID);
+    },
+
     // Register /snippets commands and skill path
     config: async (opencodeConfig) => {
       // Register skill folder path for automatic discovery

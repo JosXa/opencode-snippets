@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Config, Message, Part, UserMessage } from "@opencode-ai/sdk";
+import type { Config, Message, Part, Session, UserMessage } from "@opencode-ai/sdk";
 import plugin, { SnippetsPlugin, server } from "./index.js";
 import { createSnippet, deleteSnippet } from "./src/loader.js";
 import { resolveCompletionCursor } from "./src/tui-trigger.js";
@@ -914,6 +914,55 @@ describe("SnippetsPlugin - Hook Integration", () => {
       expect(secondSystem.system[0]).toContain('<skill_content name="caveman">');
     });
 
+    it("forgets a session's loaded skills once OpenCode deletes that session", async () => {
+      const ctx = createMockContextWithSnippets();
+      const hooks = await SnippetsPlugin(ctx);
+      const systemPrompt = async (sessionID: string) => {
+        const output = { system: [] as string[] };
+        await hooks["experimental.chat.system.transform"]?.(
+          { sessionID, model: {} as never },
+          output,
+        );
+        return output.system.join("\n");
+      };
+
+      // The user loads a skill in a session, the way OpenCode delivers the turn.
+      const chatOutput = {
+        message: { role: "user", content: "Test" } as unknown as UserMessage,
+        parts: [{ type: "text", text: "Load #skill(caveman)" }] as Part[],
+      };
+      await hooks["chat.message"]?.(
+        { sessionID: "deleted-session", messageID: "message-1" },
+        chatOutput,
+      );
+      await hooks["experimental.chat.messages.transform"]?.(
+        { sessionID: "deleted-session" },
+        {
+          messages: [
+            {
+              info: { id: "message-1", role: "user", sessionID: "deleted-session" } as Message,
+              parts: chatOutput.parts,
+            },
+          ],
+        },
+      );
+
+      // While the session lives, the plugin keeps the skill payload in its system prompt.
+      expect(await systemPrompt("deleted-session")).toContain('<skill_content name="caveman">');
+
+      // OpenCode deletes the session and tells every plugin through the event hook.
+      await hooks.event?.({
+        event: {
+          type: "session.deleted",
+          properties: { info: { id: "deleted-session" } as Session },
+        },
+      });
+
+      // The plugin must release everything it held for that session: nothing of the
+      // deleted session's skill payload is retained or served under its id any more.
+      expect(await systemPrompt("deleted-session")).not.toContain("<skill_content");
+    });
+
     it("should keep plain #skill snippets working alongside #skill(name)", async () => {
       const ctx = createMockContextWithSnippets();
       const hooks = await SnippetsPlugin(ctx);
@@ -1062,6 +1111,50 @@ describe("SnippetsPlugin - Hook Integration", () => {
         text: "↳ Injected autonomous",
         ignored: true,
       });
+    });
+
+    it("forgets a session's injected reminders once OpenCode deletes that session", async () => {
+      const ctx = createMockContextWithSnippets(createMockClient());
+      const hooks = await SnippetsPlugin(ctx);
+      const userMessage = {
+        id: "msg_000000000001zzzzzzzzzzzzzz",
+        role: "user",
+        sessionID: "deleted-session",
+      } as Message;
+      const modelSees = async (parts: Part[]) => {
+        const output = { messages: [{ info: userMessage, parts }] };
+        await hooks["experimental.chat.messages.transform"]?.(
+          { sessionID: "deleted-session" },
+          output,
+        );
+        return output.messages.flatMap((message) => message.parts.map(textOf)).join("\n");
+      };
+
+      // The user sends a snippet with an inject block in a session.
+      const chatOutput = {
+        message: { ...userMessage, content: "Test" } as unknown as UserMessage,
+        parts: [{ type: "text", text: "Say ok. #autonomous" }] as Part[],
+      };
+      await hooks["chat.message"]?.(
+        { sessionID: "deleted-session", messageID: userMessage.id },
+        chatOutput,
+      );
+      await waitForAsyncMarkers();
+
+      // While the session lives, the model receives the hidden reminder.
+      expect(await modelSees(chatOutput.parts)).toContain("Hidden autonomous reminder");
+
+      // OpenCode deletes the session and tells every plugin through the event hook.
+      await hooks.event?.({
+        event: {
+          type: "session.deleted",
+          properties: { info: { id: "deleted-session" } as Session },
+        },
+      });
+
+      // The plugin must release the session's injections: nothing is retained or
+      // served under the deleted session's id any more.
+      expect(await modelSees(chatOutput.parts)).not.toContain("Hidden autonomous reminder");
     });
 
     it("should move the visible injected marker when the configured recency position changes", async () => {
