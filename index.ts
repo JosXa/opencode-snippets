@@ -16,7 +16,7 @@ import type {
   TransformOutput,
 } from "./src/hook-types.js";
 import { InjectionManager } from "./src/injection-manager.js";
-import { loadSnippets } from "./src/loader.js";
+import { loadSnippets, reloadSnippets } from "./src/loader.js";
 import { logger } from "./src/logger.js";
 import { deleteSessionMessage, deleteSessionPart, sendIgnoredMessage } from "./src/notification.js";
 import { refreshPendingDraftsForText } from "./src/pending-drafts.js";
@@ -181,20 +181,11 @@ export const SnippetsPlugin: LegacyPlugin = async (ctx) => {
         // 2. Expand hashtags recursively with loop detection
         const expandStart = performance.now();
         if (await consumeSnippetReloadRequest(ctx.directory)) {
-          const fresh = await loadSnippets(ctx.directory);
-          snippets.clear();
-          for (const [key, value] of fresh) {
-            snippets.set(key, value);
-          }
+          await reloadSnippets(snippets, ctx.directory);
         }
-        await refreshPendingDraftsForText(part.text, snippets, ctx.directory, async () => {
-          await loadSnippets(ctx.directory).then((fresh) => {
-            snippets.clear();
-            for (const [key, value] of fresh) {
-              snippets.set(key, value);
-            }
-          });
-        });
+        await refreshPendingDraftsForText(part.text, snippets, ctx.directory, () =>
+          reloadSnippets(snippets, ctx.directory),
+        );
         const expansionResult = expandHashtags(part.text, snippets, new Map(), expandOptions);
         part.text = assembleMessage(expansionResult);
         expandTimeTotal += performance.now() - expandStart;

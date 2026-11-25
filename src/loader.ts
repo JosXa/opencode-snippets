@@ -428,8 +428,8 @@ export async function reloadSnippets(
   projectDir?: string,
   globalDir?: string,
 ): Promise<void> {
-  registry.clear();
   const fresh = await loadSnippets(projectDir, globalDir);
+  registry.clear();
   for (const [key, value] of fresh) {
     registry.set(key, value);
   }

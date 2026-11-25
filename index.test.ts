@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Config, Message, Part, UserMessage } from "@opencode-ai/sdk";
 import plugin, { SnippetsPlugin, server } from "./index.js";
@@ -1626,6 +1626,49 @@ describe("SnippetsPlugin - Hook Integration", () => {
       expect(textOf(output.parts[0])).toBe("Use fresh now");
 
       await rm(tempDir, { recursive: true, force: true });
+    });
+
+    it("keeps the previously loaded snippets working in every session when a reload fails", async () => {
+      tempDir = join(import.meta.dir, `.test-snippets-failed-reload-${crypto.randomUUID()}`);
+      projectSnippetDir = join(tempDir, "project", ".opencode", "snippet");
+      await mkdir(projectSnippetDir, { recursive: true });
+      await writeFile(join(projectSnippetDir, "greeting.md"), "hello");
+
+      try {
+        const hooks = await SnippetsPlugin(createMockContextWithSnippets());
+        const send = async (sessionID: string, text: string) => {
+          const output = {
+            message: { role: "user", content: text } as unknown as UserMessage,
+            parts: [{ type: "text", text }] as Part[],
+          };
+          await hooks["chat.message"]?.({ sessionID }, output);
+          return textOf(output.parts[0]);
+        };
+
+        // Baseline: the snippet expands before anything goes wrong.
+        expect(await send("first-session", "Say #greeting")).toBe("Say hello");
+
+        // The user moves the project snippets elsewhere and links them back. The plugin
+        // refuses a symlinked project snippet directory, so the next reload cannot succeed.
+        const moved = join(tempDir, "project", "shared-snippets");
+        await rename(projectSnippetDir, moved);
+        await symlink(moved, projectSnippetDir);
+
+        // The user is told the reload failed and why.
+        await expect(
+          hooks["command.execute.before"]?.(
+            { command: "snippets:reload", sessionID: "first-session", arguments: "" },
+            { parts: [] },
+          ),
+        ).rejects.toThrow("must not be a symbolic link");
+
+        // The failed reload must not take away snippets that already worked, neither in the
+        // session that ran the reload nor in any other session served by the same plugin.
+        expect(await send("first-session", "Say #greeting")).toBe("Say hello");
+        expect(await send("second-session", "Say #greeting")).toBe("Say hello");
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
     });
   });
 });
