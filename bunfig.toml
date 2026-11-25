@@ -1,2 +1,2 @@
 [test]
-preload = ["@opentui/solid/preload"]
+preload = ["@opentui/solid/preload", "./tests/isolate-config.ts"]

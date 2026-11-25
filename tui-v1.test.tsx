@@ -177,24 +177,24 @@ test("dismissing the create-snippet confirmation with Escape returns the prompt 
 
   // The user types a hashtag for a snippet that does not exist yet and accepts the
   // "Add new Snippet" row, which asks for confirmation before creating a draft.
-  await ui.mockInput.typeText("#zqxv-draft");
+  await ui.mockInput.typeText("#fresh");
   await ui.settle();
-  expect(ui.captureCharFrame()).toContain("Add new Snippet: #zqxv-draft");
+  expect(ui.captureCharFrame()).toContain("Add new Snippet: #fresh");
   ui.mockInput.pressEnter();
   await ui.settle();
-  expect(ui.captureCharFrame()).toContain("Create snippet #zqxv-draft?");
+  expect(ui.captureCharFrame()).toContain("Create snippet #fresh?");
 
   // The user changes their mind and dismisses the confirmation with Escape, the
   // host's standard way to close a dialog.
   ui.mockInput.pressEscape();
   await ui.settle();
-  expect(ui.captureCharFrame()).not.toContain("Create snippet #zqxv-draft?");
+  expect(ui.captureCharFrame()).not.toContain("Create snippet #fresh?");
 
   // The prompt accepts typing again as it did before the dialog opened.
   await ui.mockInput.typeText("x");
   await ui.settle();
-  expect(ui.input()).toBe("#zqxv-draftx");
+  expect(ui.input()).toBe("#freshx");
 
   // The completion menu follows the edited hashtag again.
-  expect(ui.captureCharFrame()).toContain("Add new Snippet: #zqxv-draftx");
+  expect(ui.captureCharFrame()).toContain("Add new Snippet: #freshx");
 });
