@@ -52,6 +52,7 @@ type LockContender = {
 export interface DurableStoreOptions {
   dataDirectory?: string;
   homeDirectory?: string;
+  lockTimeout?: number;
 }
 
 export type PreparedOperation<T> = {
@@ -63,6 +64,7 @@ export type PreparedOperation<T> = {
 export class DurableStore {
   readonly path: string;
   readonly directory: string;
+  private readonly timeout: number;
 
   constructor(projectDirectory: string, options: DurableStoreOptions) {
     // Explicit user homes must stay isolated from the launching process's XDG
@@ -74,6 +76,7 @@ export class DurableStore {
     const project = createHash("sha256").update(projectDirectory).digest("hex").slice(0, 32);
     this.directory = root;
     this.path = join(root, `${project}.json`);
+    this.timeout = options.lockTimeout ?? LOCK_TIMEOUT_MS;
   }
 
   async process<T>(
@@ -149,7 +152,7 @@ export class DurableStore {
       }
       await replaceContender(contenderPath, { ...owner, choosing: false, ticket });
       while (await hasPredecessor(contenders, owner.token, ticket)) {
-        if (Date.now() - started >= LOCK_TIMEOUT_MS) {
+        if (Date.now() - started >= this.timeout) {
           throw new Error(`Timed out entering durable snippet state lock queue: ${lock}`);
         }
         await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
@@ -160,7 +163,7 @@ export class DurableStore {
         const recovery = await recoverOrphanedLock(lock);
         if (recovery === "recovered") continue;
         if (recovery === "live") {
-          if (Date.now() - started >= LOCK_TIMEOUT_MS) {
+          if (Date.now() - started >= this.timeout) {
             throw new Error(`Timed out acquiring durable snippet state lock: ${lock}`);
           }
           await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
@@ -183,7 +186,7 @@ export class DurableStore {
           break;
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-          if (Date.now() - started >= LOCK_TIMEOUT_MS) {
+          if (Date.now() - started >= this.timeout) {
             throw new Error(`Timed out acquiring durable snippet state lock: ${lock}`);
           }
           await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));

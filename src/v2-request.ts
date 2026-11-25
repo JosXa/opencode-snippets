@@ -17,7 +17,12 @@ import { expandSkillLoads } from "./skill-loading.js";
 import { expandSkillTags } from "./skill-renderer.js";
 import type { SnippetRegistry } from "./types.js";
 import { nativeSkillRegistry } from "./v2-skills.js";
-import { type Processed as DurableProcessed, DurableStore, type TextPatch } from "./v2-state.js";
+import {
+  type Processed as DurableProcessed,
+  DurableStore,
+  type DurableStoreOptions,
+  type TextPatch,
+} from "./v2-state.js";
 
 const PROCESSED = "opencode-snippets:processed";
 const SUBMITTED = "opencode-snippets:submitted";
@@ -73,12 +78,10 @@ type MutableMessage = {
   metadata?: Record<string, unknown>;
 };
 
-export interface V2SetupOptions {
+export interface V2SetupOptions extends DurableStoreOptions {
   directory?: string;
   /** Explicit discovery roots keep tests and embedded runtimes away from the host user's files. */
   globalDirectory?: string;
-  homeDirectory?: string;
-  dataDirectory?: string;
   skillDirectory: string;
 }
 
@@ -216,20 +219,17 @@ export async function setupV2Snippets(
     return restoreProcessed(originalText, durableResult);
   };
 
-  const processText = async (sessionID: string, key: string, originalText: string[]) => {
-    try {
-      return await expandMessage(sessionID, key, originalText);
-    } catch (error) {
+  const processText = (sessionID: string, key: string, originalText: string[]) =>
+    expandMessage(sessionID, key, originalText).catch((error) => {
       // Broken snippets in new prompts or old history must never prevent a turn.
-      // Keep the whole message literal: no partial injections or further shell
-      // execution. The durable store still prevents retrying interrupted effects.
+      // Keep the whole message literal for this turn and record nothing, so a
+      // later turn retries. The durable store prevents repeating interrupted effects.
       logger.warn("Snippet processing failed; preserving original message", {
         sessionID,
         error: error instanceof Error ? error.message : String(error),
       });
-      return { text: originalText, hidden: [], injections: [] } satisfies Processed;
-    }
-  };
+      return undefined;
+    });
 
   const expandContext = async (request: { sessionID: string; messages: unknown[] }) => {
     const config = loadConfig(await directoryFor(request.sessionID), globalConfigFile);
@@ -276,6 +276,7 @@ export async function setupV2Snippets(
         part.type === "text" && typeof part.text === "string" ? [part.text] : [],
       );
       const result = await processText(request.sessionID, key, originalText);
+      if (!result) continue;
       let textIndex = 0;
       for (const part of message.content) {
         if (part.type === "text" && typeof part.text === "string") {
@@ -327,6 +328,7 @@ export async function setupV2Snippets(
         .update(JSON.stringify([submission.messageID, submission.prompt.text]))
         .digest("hex")}`;
       const result = await processText(submission.sessionID, key, [submission.prompt.text]);
+      if (!result) return;
       submission.prompt.text = result.text[0];
       const submitted: Submitted = {
         text: submission.prompt.text,

@@ -6,7 +6,12 @@ import type { Plugin } from "@opencode/plugin";
 import { Effect, Queue, Stream } from "effect";
 import { serializeInvocation } from "./invocation.js";
 import type { SnippetRegistry } from "./types.js";
-import { expandRequestMessages, setupV2Snippets, setupV2SnippetsEffect } from "./v2-request.js";
+import {
+  expandRequestMessages,
+  setupV2Snippets,
+  setupV2SnippetsEffect,
+  type V2SetupOptions,
+} from "./v2-request.js";
 import { DurableStore } from "./v2-state.js";
 
 // macOS exposes /var as a symlink. Use the host's canonical project identity
@@ -51,7 +56,7 @@ function nativeUser(
   };
 }
 
-async function submissionFixture() {
+async function submissionFixture(options: Partial<V2SetupOptions> = {}) {
   const directory = await mkdtemp(join(tmpdir(), "snippets-native-submission-"));
   const snippetDirectory = join(directory, ".opencode", "snippet");
   const skillDirectory = join(directory, "skills");
@@ -111,6 +116,7 @@ async function submissionFixture() {
       globalDirectory: join(directory, "global"),
       homeDirectory: join(directory, "home"),
       dataDirectory: join(directory, "data"),
+      ...options,
     });
   let cleanup = await start();
   return {
@@ -795,6 +801,90 @@ describe("native OC2 submitted messages", () => {
         ).toHaveLength(1);
         expect(await readFile(join(host.directory, "count.txt"), "utf8")).toBe("x");
       }
+    } finally {
+      await host.dispose();
+    }
+  });
+
+  test("a prompt whose expansion could not run because the lock was busy is expanded on a later turn once the lock is free", async () => {
+    // All sessions of one project share one durable lock. A short wait budget
+    // stands in for the production 30 s so a slow shell command can outlast it.
+    const host = await submissionFixture({ lockTimeout: 100 });
+    try {
+      const started = join(host.directory, "slow-started");
+      await Bun.write(
+        join(host.directory, ".opencode", "snippet", "slow.md"),
+        "!`touch slow-started; sleep 1`",
+      );
+      // Session A submits a snippet whose shell command keeps running for a while.
+      const slow = host.invoke("prompt", {
+        sessionID: "session-a",
+        messageID: "slow",
+        prompt: { text: "#slow" },
+      });
+      while (!(await Bun.file(started).exists())) await Bun.sleep(5);
+
+      // Session B, same project, submits a hashtag while A's command still runs.
+      const submission = {
+        sessionID: "session-b",
+        messageID: "busy",
+        prompt: { text: "Please #chosen" },
+      };
+      await host.invoke("prompt", submission);
+      // OpenCode builds B's model context for this turn right away; the lock is
+      // still busy, so what the model sees on this turn is deliberately not asserted.
+      await host.invoke("context", { sessionID: "session-b", messages: [nativeUser(submission)] });
+      await slow;
+
+      // On B's next turn the lock is free. The model must now receive the
+      // expanded snippet for the earlier prompt instead of the raw hashtag.
+      const next = {
+        sessionID: "session-b",
+        messages: [
+          nativeUser(submission),
+          { id: "next", role: "user", content: [{ type: "text", text: "Continue" }] },
+        ],
+      };
+      await host.invoke("context", next);
+      expect(next.messages[0].content[0].text).toBe("Please CHOSEN_TEXT");
+    } finally {
+      await host.dispose();
+    }
+  });
+
+  test("a message whose expansion failed is expanded on the next turn after the user fixes the cause, without a restart", async () => {
+    const host = await submissionFixture();
+    try {
+      // The snippet embeds a skill the user has not installed yet, so expanding it fails.
+      await Bun.write(
+        join(host.directory, ".opencode", "snippet", "review.md"),
+        'Review with {{skill "checklist"}}',
+      );
+      const submission = { sessionID: "fixable", messageID: "review", prompt: { text: "#review" } };
+      await host.invoke("prompt", submission);
+      const first = { sessionID: "fixable", messages: [nativeUser(submission)] };
+      await host.invoke("context", first);
+      // A failed expansion must never block the turn: the model sees the user's literal text.
+      expect(first.messages[0].content[0].text).toBe("#review");
+
+      // The user installs the missing skill while OpenCode keeps running.
+      host.skills.push({
+        ...host.skills[0],
+        id: "checklist",
+        name: "checklist",
+        content: "CHECKLIST_SKILL",
+      });
+
+      // The next turn rebuilds the history, and the earlier message now expands.
+      const next = {
+        sessionID: "fixable",
+        messages: [
+          nativeUser(submission),
+          { id: "next", role: "user", content: [{ type: "text", text: "Continue" }] },
+        ],
+      };
+      await host.invoke("context", next);
+      expect(next.messages[0].content[0].text).toBe("Review with CHECKLIST_SKILL");
     } finally {
       await host.dispose();
     }
