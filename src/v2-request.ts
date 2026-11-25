@@ -21,11 +21,13 @@ import {
   type Processed as DurableProcessed,
   DurableStore,
   type DurableStoreOptions,
+  Interrupted,
   type TextPatch,
 } from "./v2-state.js";
 
 const PROCESSED = "opencode-snippets:processed";
 const SUBMITTED = "opencode-snippets:submitted";
+const RETRY = "opencode-snippets:retry";
 const GENERATED = "opencode-snippets:generated";
 
 type Processed = {
@@ -35,6 +37,8 @@ type Processed = {
 };
 
 type Submitted = Omit<Processed, "text"> & { text: string };
+
+type Retry = { key: string; text: string };
 
 function createTextPatch(original: string, output: string): TextPatch {
   let start = 0;
@@ -222,12 +226,15 @@ export async function setupV2Snippets(
   const processText = (sessionID: string, key: string, originalText: string[]) =>
     expandMessage(sessionID, key, originalText).catch((error) => {
       // Broken snippets in new prompts or old history must never prevent a turn.
-      // Keep the whole message literal for this turn and record nothing, so a
-      // later turn retries. The durable store prevents repeating interrupted effects.
+      // Keep the whole message literal. An interrupted reservation stays literal
+      // for good; any other failure records nothing, so a later turn retries the key.
       logger.warn("Snippet processing failed; preserving original message", {
         sessionID,
         error: error instanceof Error ? error.message : String(error),
       });
+      if (error instanceof Interrupted) {
+        return { text: originalText, hidden: [], injections: [] } satisfies Processed;
+      }
       return undefined;
     });
 
@@ -275,7 +282,16 @@ export async function setupV2Snippets(
       const originalText = message.content.flatMap((part) =>
         part.type === "text" && typeof part.text === "string" ? [part.text] : [],
       );
-      const result = await processText(request.sessionID, key, originalText);
+      const retry = asRetry(message.metadata?.[RETRY]);
+      const result = retry
+        ? await processText(request.sessionID, retry.key, [retry.text]).then(
+            (output) =>
+              output && {
+                ...output,
+                text: originalText.map((text) => (text === retry.text ? output.text[0] : text)),
+              },
+          )
+        : await processText(request.sessionID, key, originalText);
       if (!result) continue;
       let textIndex = 0;
       for (const part of message.content) {
@@ -328,7 +344,11 @@ export async function setupV2Snippets(
         .update(JSON.stringify([submission.messageID, submission.prompt.text]))
         .digest("hex")}`;
       const result = await processText(submission.sessionID, key, [submission.prompt.text]);
-      if (!result) return;
+      if (!result) {
+        const retry: Retry = { key, text: submission.prompt.text };
+        submission.metadata = { ...submission.metadata, [RETRY]: retry };
+        return;
+      }
       submission.prompt.text = result.text[0];
       const submitted: Submitted = {
         text: submission.prompt.text,
@@ -411,6 +431,13 @@ function asSubmitted(value: unknown): Submitted | undefined {
   if (typeof candidate.text !== "string") return;
   if (!asProcessed({ ...candidate, text: [candidate.text] })) return;
   return candidate as Submitted;
+}
+
+function asRetry(value: unknown): Retry | undefined {
+  if (!value || typeof value !== "object") return;
+  const candidate = value as Partial<Retry>;
+  if (typeof candidate.key !== "string" || typeof candidate.text !== "string") return;
+  return candidate as Retry;
 }
 
 function activateInjections(

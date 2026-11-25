@@ -889,6 +889,49 @@ describe("native OC2 submitted messages", () => {
       await host.dispose();
     }
   });
+
+  test("a snippet's shell command runs at most once even when saving its result fails", async () => {
+    const host = await submissionFixture();
+    try {
+      const state = new DurableStore(host.directory, {
+        dataDirectory: join(host.directory, "data"),
+      }).path;
+      // Every run of the user's command appends one "x" to `runs`. It then holds
+      // until the test lets it finish, so the disk can fail while it runs.
+      await Bun.write(
+        join(host.directory, ".opencode", "snippet", "effect.md"),
+        "!`printf x >> runs; touch running; while [ ! -e resume ]; do sleep 0.01; done`",
+      );
+      const submission = { sessionID: "unsaved", messageID: "effect", prompt: { text: "#effect" } };
+      const prompt = host.invoke("prompt", submission);
+      while (!(await Bun.file(join(host.directory, "running")).exists())) await Bun.sleep(5);
+
+      // The disk refuses to store the command's result: the state file is
+      // briefly replaced by a directory, so writing the completed result fails.
+      const saved = await readFile(state, "utf8");
+      await rm(state);
+      await mkdir(state);
+      await Bun.write(join(host.directory, "resume"), "");
+      await prompt;
+      await rm(state, { recursive: true });
+      await writeFile(state, saved);
+
+      // OpenCode then builds the model context for this turn and the next one.
+      for (const text of ["Continue", "And again"]) {
+        await host.invoke("context", {
+          sessionID: "unsaved",
+          messages: [
+            nativeUser(submission),
+            { id: text, role: "user", content: [{ type: "text", text }] },
+          ],
+        });
+      }
+      // The command already ran once; no later turn may run it again.
+      expect(await readFile(join(host.directory, "runs"), "utf8")).toBe("x");
+    } finally {
+      await host.dispose();
+    }
+  });
 });
 
 describe("V2 request expansion", () => {

@@ -55,6 +55,8 @@ export interface DurableStoreOptions {
   lockTimeout?: number;
 }
 
+export class Interrupted extends Error {}
+
 export type PreparedOperation<T> = {
   /** Read and validate only. A failure here must remain safe to retry. */
   prepare: () => Promise<T>;
@@ -91,7 +93,7 @@ export class DurableStore {
       const record = state.sessions[durableSessionID]?.[durableKey];
       if (record?.status === "completed") return record.result;
       if (record?.status === "pending") {
-        throw new Error(
+        throw new Interrupted(
           "Snippet processing was previously reserved but did not complete; refusing to repeat side effects.",
         );
       }
