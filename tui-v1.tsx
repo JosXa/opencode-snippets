@@ -745,50 +745,52 @@ function PromptWithSnippetAutocomplete(props: {
       return;
     }
 
+    const close = () => {
+      setDialogOpen(false);
+      beginDialogHandoff();
+      restorePromptFocus(ref);
+    };
+
     props.api.ui.dialog.setSize("medium");
     setDialogOpen(true);
-    props.api.ui.dialog.replace(() => (
-      <props.api.ui.DialogConfirm
-        title={`Create snippet #${name}?`}
-        message={`This will create the snippet draft and open it in $${editor.env} (${editor.command}).`}
-        onCancel={() => {
-          setDialogOpen(false);
-          beginDialogHandoff();
-          props.api.ui.dialog.clear();
-          restorePromptFocus(ref);
-        }}
-        onConfirm={() => {
-          setDialogOpen(false);
-          beginDialogHandoff();
-          props.api.ui.dialog.clear();
+    props.api.ui.dialog.replace(
+      () => (
+        <props.api.ui.DialogConfirm
+          title={`Create snippet #${name}?`}
+          message={`This will create the snippet draft and open it in $${editor.env} (${editor.command}).`}
+          onCancel={() => props.api.ui.dialog.clear()}
+          onConfirm={() => {
+            props.api.ui.dialog.clear();
 
-          void (async () => {
-            setCreating(true);
+            void (async () => {
+              setCreating(true);
 
-            try {
-              syncPromptInput(ref, nextInput);
+              try {
+                syncPromptInput(ref, nextInput);
 
-              const filePath = await ensureSnippetDraft(name);
-              await addPendingDraft(props.api.state.path.directory, name);
-              setDismissed(dismissedToken);
-              setCreating(false);
-              const opened = await openExternalEditor(props.api, filePath, editor);
-              if (!opened) return;
-            } catch (error) {
-              props.api.ui.toast({
-                variant: "error",
-                message: `Failed to create snippet: ${error instanceof Error ? error.message : String(error)}`,
-              });
-              syncPromptInput(ref, nextInput);
-              setDismissed(undefined);
-            } finally {
-              setCreating(false);
-              restorePromptFocus(ref);
-            }
-          })();
-        }}
-      />
-    ));
+                const filePath = await ensureSnippetDraft(name);
+                await addPendingDraft(props.api.state.path.directory, name);
+                setDismissed(dismissedToken);
+                setCreating(false);
+                const opened = await openExternalEditor(props.api, filePath, editor);
+                if (!opened) return;
+              } catch (error) {
+                props.api.ui.toast({
+                  variant: "error",
+                  message: `Failed to create snippet: ${error instanceof Error ? error.message : String(error)}`,
+                });
+                syncPromptInput(ref, nextInput);
+                setDismissed(undefined);
+              } finally {
+                setCreating(false);
+                restorePromptFocus(ref);
+              }
+            })();
+          }}
+        />
+      ),
+      close,
+    );
   };
 
   const acceptVisibleAutocomplete = () => {
