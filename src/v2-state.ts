@@ -67,6 +67,7 @@ export class DurableStore {
   readonly path: string;
   readonly directory: string;
   private readonly timeout: number;
+  private busy = false;
 
   constructor(projectDirectory: string, options: DurableStoreOptions) {
     // Explicit user homes must stay isolated from the launching process's XDG
@@ -139,6 +140,11 @@ export class DurableStore {
     const lock = `${this.path}.lock`;
     const contenders = `${lock}.contenders`;
     const started = Date.now();
+    const timeout = this.busy ? 0 : this.timeout;
+    const expire = (message: string) => {
+      this.busy = true;
+      return new Error(message);
+    };
     const owner = { pid: process.pid, token: crypto.randomUUID() };
     const ownerPath = `${lock}.${owner.token}.owner`;
     const contenderPath = join(contenders, `${owner.token}.json`);
@@ -154,8 +160,8 @@ export class DurableStore {
       }
       await replaceContender(contenderPath, { ...owner, choosing: false, ticket });
       while (await hasPredecessor(contenders, owner.token, ticket)) {
-        if (Date.now() - started >= this.timeout) {
-          throw new Error(`Timed out entering durable snippet state lock queue: ${lock}`);
+        if (Date.now() - started >= timeout) {
+          throw expire(`Timed out entering durable snippet state lock queue: ${lock}`);
         }
         await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
       }
@@ -165,8 +171,8 @@ export class DurableStore {
         const recovery = await recoverOrphanedLock(lock);
         if (recovery === "recovered") continue;
         if (recovery === "live") {
-          if (Date.now() - started >= this.timeout) {
-            throw new Error(`Timed out acquiring durable snippet state lock: ${lock}`);
+          if (Date.now() - started >= timeout) {
+            throw expire(`Timed out acquiring durable snippet state lock: ${lock}`);
           }
           await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
           continue;
@@ -184,12 +190,13 @@ export class DurableStore {
             continue;
           }
           acquired = true;
+          this.busy = false;
           await unlink(ownerPath);
           break;
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-          if (Date.now() - started >= this.timeout) {
-            throw new Error(`Timed out acquiring durable snippet state lock: ${lock}`);
+          if (Date.now() - started >= timeout) {
+            throw expire(`Timed out acquiring durable snippet state lock: ${lock}`);
           }
           await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
         }

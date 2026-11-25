@@ -932,6 +932,54 @@ describe("native OC2 submitted messages", () => {
       await host.dispose();
     }
   });
+
+  test("while another session holds the snippet lock, a turn waits for the lock at most once", async () => {
+    // A short wait budget stands in for the production 30 s lock wait.
+    const timeout = 300;
+    const host = await submissionFixture({ lockTimeout: timeout });
+    try {
+      await Bun.write(
+        join(host.directory, ".opencode", "snippet", "hold.md"),
+        "!`touch holding; while [ ! -e release ]; do sleep 0.01; done`",
+      );
+      // Session A runs a long command and holds the project's snippet lock meanwhile.
+      const holder = host.invoke("prompt", {
+        sessionID: "session-a",
+        messageID: "hold",
+        prompt: { text: "#hold" },
+      });
+      while (!(await Bun.file(join(host.directory, "holding")).exists())) await Bun.sleep(5);
+
+      // Session B has two earlier messages that are not expanded yet and
+      // submits a new prompt; each turn runs the prompt hook and the context hook.
+      const earlier = ["first", "second"].map((id) => ({
+        id,
+        role: "user",
+        content: [{ type: "text", text: `${id} #chosen` }],
+      }));
+      for (const messageID of ["busy-1", "busy-2"]) {
+        const submission = {
+          sessionID: "session-b",
+          messageID,
+          prompt: { text: "Please #chosen" },
+        };
+        const started = Date.now();
+        await host.invoke("prompt", submission);
+        await host.invoke("context", {
+          sessionID: "session-b",
+          messages: [...structuredClone(earlier), nativeUser(submission)],
+        });
+        // The lock is project-wide: once it is known busy, waiting again for
+        // other messages or hooks in the same turn only delays the reply.
+        expect(Date.now() - started).toBeLessThan(2 * timeout);
+      }
+
+      await Bun.write(join(host.directory, "release"), "");
+      await holder;
+    } finally {
+      await host.dispose();
+    }
+  });
 });
 
 describe("V2 request expansion", () => {
