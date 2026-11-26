@@ -980,6 +980,51 @@ describe("native OC2 submitted messages", () => {
       await host.dispose();
     }
   });
+
+  test("after a long lock holder finishes, briefly overlapping prompts in the same project are both expanded", async () => {
+    // A short wait budget stands in for the production 30 s lock wait.
+    const host = await submissionFixture({ lockTimeout: 300 });
+    try {
+      await Bun.write(
+        join(host.directory, ".opencode", "snippet", "hold.md"),
+        "!`touch holding; while [ ! -e release ]; do sleep 0.01; done`",
+      );
+      // Session A runs a long command and holds the project's snippet lock.
+      const holder = host.invoke("prompt", {
+        sessionID: "session-a",
+        messageID: "hold",
+        prompt: { text: "#hold" },
+      });
+      while (!(await Bun.file(join(host.directory, "holding")).exists())) await Bun.sleep(5);
+      // Session B gives up waiting for A; its prompt stays literal for this turn.
+      await host.invoke("prompt", {
+        sessionID: "session-b",
+        messageID: "late",
+        prompt: { text: "Please #chosen" },
+      });
+      // A's command finishes and the lock is free again.
+      await Bun.write(join(host.directory, "release"), "");
+      await holder;
+
+      // Several sessions of the project (e.g. parallel subagents) then submit
+      // prompts at the same moment. Each only needs the lock briefly, so every
+      // one of them must wait its turn and reach the model expanded.
+      const turns = ["session-c", "session-d", "session-e"].map(async (sessionID) => {
+        const submission = { sessionID, messageID: sessionID, prompt: { text: "Please #chosen" } };
+        await host.invoke("prompt", submission);
+        const turn = { sessionID, messages: [nativeUser(submission)] };
+        await host.invoke("context", turn);
+        return turn.messages[0].content[0].text;
+      });
+      expect(await Promise.all(turns)).toEqual([
+        "Please CHOSEN_TEXT",
+        "Please CHOSEN_TEXT",
+        "Please CHOSEN_TEXT",
+      ]);
+    } finally {
+      await host.dispose();
+    }
+  });
 });
 
 describe("V2 request expansion", () => {

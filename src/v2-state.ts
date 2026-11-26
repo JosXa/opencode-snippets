@@ -67,7 +67,7 @@ export class DurableStore {
   readonly path: string;
   readonly directory: string;
   private readonly timeout: number;
-  private busy = false;
+  private blocker?: string;
 
   constructor(projectDirectory: string, options: DurableStoreOptions) {
     // Explicit user homes must stay isolated from the launching process's XDG
@@ -140,10 +140,12 @@ export class DurableStore {
     const lock = `${this.path}.lock`;
     const contenders = `${lock}.contenders`;
     const started = Date.now();
-    const timeout = this.busy ? 0 : this.timeout;
-    const expire = (message: string) => {
-      this.busy = true;
-      return new Error(message);
+    const wait = async (blocker: string | undefined, message: string) => {
+      if (Date.now() - started >= this.timeout || (blocker && blocker === this.blocker)) {
+        this.blocker = blocker;
+        throw new Error(message);
+      }
+      await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
     };
     const owner = { pid: process.pid, token: crypto.randomUUID() };
     const ownerPath = `${lock}.${owner.token}.owner`;
@@ -159,11 +161,10 @@ export class DurableStore {
         ticket = Math.max(ticket, contender.ticket + 1);
       }
       await replaceContender(contenderPath, { ...owner, choosing: false, ticket });
-      while (await hasPredecessor(contenders, owner.token, ticket)) {
-        if (Date.now() - started >= timeout) {
-          throw expire(`Timed out entering durable snippet state lock queue: ${lock}`);
-        }
-        await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
+      while (true) {
+        const blocker = await predecessor(contenders, owner.token, ticket, this.blocker);
+        if (!blocker) break;
+        await wait(blocker, `Timed out entering durable snippet state lock queue: ${lock}`);
       }
 
       await writeFile(ownerPath, JSON.stringify(owner), { flag: "wx", mode: 0o600 });
@@ -171,10 +172,7 @@ export class DurableStore {
         const recovery = await recoverOrphanedLock(lock);
         if (recovery === "recovered") continue;
         if (recovery === "live") {
-          if (Date.now() - started >= timeout) {
-            throw expire(`Timed out acquiring durable snippet state lock: ${lock}`);
-          }
-          await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
+          await wait(await holder(lock), `Timed out acquiring durable snippet state lock: ${lock}`);
           continue;
         }
         try {
@@ -190,15 +188,12 @@ export class DurableStore {
             continue;
           }
           acquired = true;
-          this.busy = false;
+          this.blocker = undefined;
           await unlink(ownerPath);
           break;
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-          if (Date.now() - started >= timeout) {
-            throw expire(`Timed out acquiring durable snippet state lock: ${lock}`);
-          }
-          await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
+          await wait(await holder(lock), `Timed out acquiring durable snippet state lock: ${lock}`);
         }
       }
       return await operation();
@@ -302,9 +297,15 @@ async function* readContenders(directory: string): AsyncGenerator<LockContender>
   }
 }
 
-async function hasPredecessor(directory: string, token: string, ticket: number): Promise<boolean> {
+async function predecessor(
+  directory: string,
+  token: string,
+  ticket: number,
+  blocker?: string,
+): Promise<string | undefined> {
   // A single predecessor is enough to wait. Scanning every file on every poll
   // makes contending processes delay the lock owner with redundant filesystem IO.
+  let first: string | undefined;
   for await (const contender of readContenders(directory)) {
     if (
       contender.token !== token &&
@@ -312,10 +313,18 @@ async function hasPredecessor(directory: string, token: string, ticket: number):
         contender.ticket < ticket ||
         (contender.ticket === ticket && contender.token < token))
     ) {
-      return true;
+      if (!blocker || contender.token === blocker) return contender.token;
+      first ??= contender.token;
     }
   }
-  return false;
+  return first;
+}
+
+async function holder(path: string): Promise<string | undefined> {
+  const owner = await readFile(path, "utf8")
+    .then((raw) => JSON.parse(raw) as { token?: unknown })
+    .catch(() => undefined);
+  return typeof owner?.token === "string" ? owner.token : undefined;
 }
 
 function processIsAlive(pid: number): boolean {
