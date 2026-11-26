@@ -139,10 +139,11 @@ async function submissionFixture(options: Partial<V2SetupOptions> = {}) {
 
 async function holdLock(host: Awaited<ReturnType<typeof submissionFixture>>) {
   // Another session runs a long snippet command and holds the project's
-  // snippet lock until the returned release is called.
+  // snippet lock until the returned release is called, or until the test
+  // removes the project directory.
   await Bun.write(
     join(host.directory, ".opencode", "snippet", "hold.md"),
-    "!`touch holding; while [ ! -e release ]; do sleep 0.01; done`",
+    "!`touch holding; while [ ! -e release ] && [ -e holding ]; do sleep 0.01; done`",
   );
   const holder = host.invoke("prompt", {
     sessionID: "holder",
@@ -973,20 +974,11 @@ describe("native OC2 submitted messages", () => {
 
   test("while another session holds the snippet lock, a turn waits for the lock at most once", async () => {
     // A short wait budget stands in for the production 30 s lock wait.
-    const timeout = 300;
+    const timeout = 1000;
     const host = await submissionFixture({ lockTimeout: timeout });
     try {
-      await Bun.write(
-        join(host.directory, ".opencode", "snippet", "hold.md"),
-        "!`touch holding; while [ ! -e release ]; do sleep 0.01; done`",
-      );
       // Session A runs a long command and holds the project's snippet lock meanwhile.
-      const holder = host.invoke("prompt", {
-        sessionID: "session-a",
-        messageID: "hold",
-        prompt: { text: "#hold" },
-      });
-      while (!(await Bun.file(join(host.directory, "holding")).exists())) await Bun.sleep(5);
+      const release = await holdLock(host);
 
       // Session B has two earlier messages that are not expanded yet and
       // submits a new prompt; each turn runs the prompt hook and the context hook.
@@ -1012,8 +1004,7 @@ describe("native OC2 submitted messages", () => {
         expect(Date.now() - started).toBeLessThan(2 * timeout);
       }
 
-      await Bun.write(join(host.directory, "release"), "");
-      await holder;
+      await release();
     } finally {
       await host.dispose();
     }
@@ -1021,20 +1012,11 @@ describe("native OC2 submitted messages", () => {
 
   test("with other processes also queued behind one long lock holder, a later turn does not wait for that holder again", async () => {
     // A short wait budget stands in for the production 30 s lock wait.
-    const timeout = 300;
+    const timeout = 1000;
     const host = await submissionFixture({ lockTimeout: timeout });
     try {
-      await Bun.write(
-        join(host.directory, ".opencode", "snippet", "hold.md"),
-        "!`touch holding; while [ ! -e release ]; do sleep 0.01; done`",
-      );
       // Session A runs a long command and holds the project's snippet lock.
-      const holder = host.invoke("prompt", {
-        sessionID: "session-a",
-        messageID: "hold",
-        prompt: { text: "#hold" },
-      });
-      while (!(await Bun.file(join(host.directory, "holding")).exists())) await Bun.sleep(5);
+      const release = await holdLock(host);
 
       // Other OpenCode processes on the same project queue for the lock behind
       // A first. They started waiting earlier and give up a little after B does.
@@ -1074,28 +1056,19 @@ describe("native OC2 submitted messages", () => {
       // next turn must not spend another full wait on the same holder.
       expect(await turn("second")).toBeLessThan(timeout);
 
-      await Bun.write(join(host.directory, "release"), "");
-      await holder;
+      await release();
     } finally {
       await host.dispose();
     }
   });
 
   test("after a long lock holder finishes, briefly overlapping prompts in the same project are both expanded", async () => {
-    // A short wait budget stands in for the production 30 s lock wait.
-    const host = await submissionFixture({ lockTimeout: 300 });
+    // A short wait budget stands in for the production 30 s lock wait. It still
+    // leaves slow CI runners room for three brief overlapping lock holds.
+    const host = await submissionFixture({ lockTimeout: 1000 });
     try {
-      await Bun.write(
-        join(host.directory, ".opencode", "snippet", "hold.md"),
-        "!`touch holding; while [ ! -e release ]; do sleep 0.01; done`",
-      );
       // Session A runs a long command and holds the project's snippet lock.
-      const holder = host.invoke("prompt", {
-        sessionID: "session-a",
-        messageID: "hold",
-        prompt: { text: "#hold" },
-      });
-      while (!(await Bun.file(join(host.directory, "holding")).exists())) await Bun.sleep(5);
+      const release = await holdLock(host);
       // Session B gives up waiting for A; its prompt stays literal for this turn.
       await host.invoke("prompt", {
         sessionID: "session-b",
@@ -1103,8 +1076,7 @@ describe("native OC2 submitted messages", () => {
         prompt: { text: "Please #chosen" },
       });
       // A's command finishes and the lock is free again.
-      await Bun.write(join(host.directory, "release"), "");
-      await holder;
+      await release();
 
       // Several sessions of the project (e.g. parallel subagents) then submit
       // prompts at the same moment. Each only needs the lock briefly, so every

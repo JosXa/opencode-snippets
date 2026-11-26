@@ -61,7 +61,7 @@ export class Interrupted extends Error {}
 export class Rejected extends Error {}
 
 export type PreparedOperation<T> = {
-  /** Read and validate only. A failure here must remain safe to retry. */
+  /** Read and validate only. A failure here is final and surfaces as Rejected. */
   prepare: () => Promise<T>;
   execute: (prepared: T) => Promise<Processed>;
 };
