@@ -123,8 +123,7 @@ export const SnippetsPlugin: LegacyPlugin = async (ctx) => {
 
   const injectionManager = new InjectionManager();
   const skillLoadManager = new SkillLoadManager();
-  const injectionMarkerIdsBySession = new Map<string, Set<string>>();
-  const injectionMarkerRenderQueueBySession = new Map<string, Promise<void>>();
+  const markersBySession = new Map<string, { ids: Set<string>; queue: Promise<void> }>();
 
   /**
    * Processes text parts for snippet expansion, skill rendering, and shell command execution.
@@ -300,10 +299,12 @@ export const SnippetsPlugin: LegacyPlugin = async (ctx) => {
 
   const renderInjectionMarkers = async (
     sessionID: string,
+    markers: { ids: Set<string> },
     messages: TransformOutput["messages"],
     injections: Array<{ targetPosition: number; snippetName: string }>,
   ): Promise<void> => {
-    if (injections.length === 0) return;
+    const live = () => markersBySession.get(sessionID) === markers;
+    if (!live()) return;
 
     const next = new Set<string>();
     const pending: Array<{ id: string; text: string }> = [];
@@ -321,10 +322,7 @@ export const SnippetsPlugin: LegacyPlugin = async (ctx) => {
       .map((message) => message.info.id)
       .filter((id): id is string => !!id);
     const persistedMarkerPartIds = injectionMarkerPartIdsByMessage(messages);
-    const previous = new Set([
-      ...persistedMarkerIds,
-      ...(injectionMarkerIdsBySession.get(sessionID) || []),
-    ]);
+    const previous = new Set([...persistedMarkerIds, ...markers.ids]);
     const kept = new Set<string>();
     const current = new Set<string>();
 
@@ -342,6 +340,7 @@ export const SnippetsPlugin: LegacyPlugin = async (ctx) => {
       if (!next.has(id)) {
         let deleted = true;
         for (const partId of persistedMarkerPartIds.get(id) || []) {
+          if (!live()) return;
           const partDeleted = await deleteSessionPart(
             ctx.client,
             ctx.serverUrl,
@@ -352,6 +351,7 @@ export const SnippetsPlugin: LegacyPlugin = async (ctx) => {
           if (!partDeleted) deleted = false;
         }
 
+        if (!live()) return;
         const messageDeleted = await deleteSessionMessage(ctx.client, ctx.serverUrl, sessionID, id);
         if (!messageDeleted) deleted = false;
         if (!deleted) kept.add(id);
@@ -364,18 +364,19 @@ export const SnippetsPlugin: LegacyPlugin = async (ctx) => {
         keptMarkerIds: [...kept],
         nextMarkerIds: [...next],
       });
-      injectionMarkerIdsBySession.set(sessionID, kept);
+      markers.ids = kept;
       return;
     }
 
     for (const marker of pending) {
       current.add(marker.id);
       if (!previous.has(marker.id)) {
+        if (!live()) return;
         await sendIgnoredMessage(ctx.client, sessionID, marker.text, marker.id);
       }
     }
 
-    injectionMarkerIdsBySession.set(sessionID, current);
+    markers.ids = current;
   };
 
   const scheduleInjectionMarkerRender = (
@@ -383,26 +384,33 @@ export const SnippetsPlugin: LegacyPlugin = async (ctx) => {
     messages: TransformOutput["messages"],
     injections: Array<{ targetPosition: number; snippetName: string }>,
   ): void => {
-    const previous = injectionMarkerRenderQueueBySession.get(sessionID) || Promise.resolve();
-    const next = previous
+    if (injections.length === 0) return;
+
+    const markers = markersBySession.get(sessionID) ?? {
+      ids: new Set<string>(),
+      queue: Promise.resolve(),
+    };
+    markersBySession.set(sessionID, markers);
+    markers.queue = markers.queue
       .catch(() => undefined)
       .then(
         () =>
           new Promise<void>((resolve) => {
             // User requirement: marker maintenance must not block the real prompt.
             setTimeout(() => {
-              renderInjectionMarkers(sessionID, messages, injections).then(resolve, (error) => {
-                logger.debug("Failed to render injection markers", {
-                  sessionID,
-                  error: error instanceof Error ? error.message : String(error),
-                });
-                resolve();
-              });
+              renderInjectionMarkers(sessionID, markers, messages, injections).then(
+                resolve,
+                (error) => {
+                  logger.debug("Failed to render injection markers", {
+                    sessionID,
+                    error: error instanceof Error ? error.message : String(error),
+                  });
+                  resolve();
+                },
+              );
             }, 0);
           }),
       );
-
-    injectionMarkerRenderQueueBySession.set(sessionID, next);
   };
 
   const insertInjectionsIntoMessages = (
@@ -664,8 +672,7 @@ export const SnippetsPlugin: LegacyPlugin = async (ctx) => {
       const sessionID = event.properties.info.id;
       skillLoadManager.clearSession(sessionID);
       injectionManager.clearSession(sessionID);
-      injectionMarkerIdsBySession.delete(sessionID);
-      injectionMarkerRenderQueueBySession.delete(sessionID);
+      markersBySession.delete(sessionID);
     },
 
     // Register /snippets commands and skill path

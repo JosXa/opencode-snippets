@@ -1157,6 +1157,77 @@ describe("SnippetsPlugin - Hook Integration", () => {
       expect(await modelSees(chatOutput.parts)).not.toContain("Hidden autonomous reminder");
     });
 
+    describe("sends no injection markers to a session after OpenCode deletes it", () => {
+      const startMarkerSession = async () => {
+        await writeFile(
+          join(projectSnippetDir, "careful.md"),
+          "carefully\n<inject>\nHidden careful reminder\n</inject>",
+        );
+        const promptCalls: PromptCall[] = [];
+        const duringPrompt: Array<() => Promise<void>> = [];
+        const client = {
+          session: {
+            prompt: async (input: PromptCall) => {
+              promptCalls.push(input);
+              await duringPrompt.shift()?.();
+              return { data: undefined };
+            },
+            messages: async () => ({ data: [] }),
+          },
+        } as unknown as PluginInput["client"];
+        const hooks = await SnippetsPlugin(createMockContextWithSnippets(client));
+        const deleteSession = () =>
+          hooks.event?.({
+            event: {
+              type: "session.deleted",
+              properties: { info: { id: "deleted-session" } as Session },
+            },
+          }) ?? Promise.resolve();
+        // Two inject snippets in one message make the plugin render two visible markers.
+        const sendMessage = () =>
+          hooks["chat.message"]?.(
+            { sessionID: "deleted-session", messageID: "msg_000000000001zzzzzzzzzzzzzz" },
+            {
+              message: {
+                id: "msg_000000000001zzzzzzzzzzzzzz",
+                role: "user",
+                content: "Test",
+              } as unknown as UserMessage,
+              parts: [{ type: "text", text: "Say ok. #autonomous #careful" }] as Part[],
+            },
+          );
+        return { promptCalls, duringPrompt, deleteSession, sendMessage };
+      };
+
+      it("when the deletion arrives before the queued marker render starts", async () => {
+        const session = await startMarkerSession();
+
+        // The marker render runs after the prompt returns; OpenCode deletes the
+        // session in between.
+        await session.sendMessage();
+        await session.deleteSession();
+        await waitForAsyncMarkers();
+
+        // No marker message may be written into the deleted session.
+        expect(session.promptCalls).toEqual([]);
+      });
+
+      it("when the deletion arrives while the marker render is sending", async () => {
+        const session = await startMarkerSession();
+
+        // OpenCode deletes the session while the plugin writes the first marker.
+        session.duringPrompt.push(session.deleteSession);
+        await session.sendMessage();
+        await waitForAsyncMarkers();
+
+        // The in-flight marker was already on its way; the plugin must stop there
+        // and send nothing more to the deleted session.
+        expect(session.promptCalls.map((call) => call.body.parts[0].text)).toEqual([
+          "↳ Injected autonomous",
+        ]);
+      });
+    });
+
     it("should move the visible injected marker when the configured recency position changes", async () => {
       await writeFile(
         join(projectSnippetDir, "config.jsonc"),
