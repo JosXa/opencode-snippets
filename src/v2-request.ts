@@ -283,15 +283,13 @@ export async function setupV2Snippets(
         part.type === "text" && typeof part.text === "string" ? [part.text] : [],
       );
       const retry = asRetry(message.metadata?.[RETRY]);
-      const result = retry
-        ? await processText(request.sessionID, retry.key, [retry.text]).then(
-            (output) =>
-              output && {
-                ...output,
-                text: originalText.map((text) => (text === retry.text ? output.text[0] : text)),
-              },
-          )
-        : await processText(request.sessionID, key, originalText);
+      const prompt = retry ? originalText.indexOf(retry.text) : -1;
+      const result =
+        retry && prompt >= 0
+          ? await processText(request.sessionID, retry.key, [retry.text]).then(
+              (output) => output && { ...output, text: originalText.with(prompt, output.text[0]) },
+            )
+          : await processText(request.sessionID, retry?.key ?? key, originalText);
       if (!result) continue;
       let textIndex = 0;
       for (const part of message.content) {

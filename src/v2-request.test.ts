@@ -1025,6 +1025,52 @@ describe("native OC2 submitted messages", () => {
       await host.dispose();
     }
   });
+
+  test("a prompt that another plugin rewrote after its expansion failed is expanded from the rewritten text on a later turn", async () => {
+    const host = await submissionFixture();
+    try {
+      // The snippet embeds a skill the user has not installed yet, so expanding it fails.
+      await Bun.write(
+        join(host.directory, ".opencode", "snippet", "review.md"),
+        'Review with {{skill "checklist"}}',
+      );
+      const submission = {
+        sessionID: "rewritten",
+        messageID: "review",
+        prompt: { text: "#review" },
+      };
+      await host.invoke("prompt", submission);
+      // Another plugin's prompt hook runs after ours and appends a signature,
+      // so OpenCode stores and sends the rewritten text.
+      submission.prompt.text = `${submission.prompt.text}\n\nSent from mobile`;
+
+      // The user installs the missing skill while OpenCode keeps running.
+      host.skills.push({
+        ...host.skills[0],
+        id: "checklist",
+        name: "checklist",
+        content: "CHECKLIST_SKILL",
+      });
+
+      // On each later turn the model must see the stored message with the
+      // snippet expanded and the other plugin's signature kept.
+      for (const text of ["Continue", "And again"]) {
+        const turn = {
+          sessionID: "rewritten",
+          messages: [
+            nativeUser(submission),
+            { id: text, role: "user", content: [{ type: "text", text }] },
+          ],
+        };
+        await host.invoke("context", turn);
+        expect(turn.messages[0].content[0].text).toBe(
+          "Review with CHECKLIST_SKILL\n\nSent from mobile",
+        );
+      }
+    } finally {
+      await host.dispose();
+    }
+  });
 });
 
 describe("V2 request expansion", () => {
