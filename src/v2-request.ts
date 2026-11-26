@@ -22,6 +22,7 @@ import {
   DurableStore,
   type DurableStoreOptions,
   Interrupted,
+  Rejected,
   type TextPatch,
 } from "./v2-state.js";
 
@@ -234,13 +235,14 @@ export async function setupV2Snippets(
   const processText = (sessionID: string, key: string, originalText: string[]) =>
     expandMessage(sessionID, key, originalText).catch((error) => {
       // Broken snippets in new prompts or old history must never prevent a turn.
-      // Keep the whole message literal. An interrupted reservation stays literal
-      // for good; any other failure records nothing, so a later turn retries the key.
+      // Keep the whole message literal. A snippet the user must fix, or an
+      // interrupted reservation, stays literal for good: the user resubmits to
+      // apply a fix. Any other failure records nothing, so a later turn retries the key.
       logger.warn("Snippet processing failed; preserving original message", {
         sessionID,
         error: error instanceof Error ? error.message : String(error),
       });
-      if (error instanceof Interrupted) {
+      if (error instanceof Interrupted || error instanceof Rejected) {
         return { text: originalText, hidden: [], injections: [] } satisfies Processed;
       }
       return undefined;

@@ -58,6 +58,8 @@ export interface DurableStoreOptions {
 
 export class Interrupted extends Error {}
 
+export class Rejected extends Error {}
+
 export type PreparedOperation<T> = {
   /** Read and validate only. A failure here must remain safe to retry. */
   prepare: () => Promise<T>;
@@ -105,7 +107,14 @@ export class DurableStore {
       const execute =
         typeof operation === "function"
           ? operation
-          : await operation.prepare().then((prepared) => () => operation.execute(prepared));
+          : await operation.prepare().then(
+              (prepared) => () => operation.execute(prepared),
+              (cause) => {
+                throw new Rejected(cause instanceof Error ? cause.message : String(cause), {
+                  cause,
+                });
+              },
+            );
 
       state.sessions[durableSessionID] ??= {};
       state.sessions[durableSessionID][durableKey] = {

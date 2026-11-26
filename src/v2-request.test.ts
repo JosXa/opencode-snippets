@@ -137,6 +137,25 @@ async function submissionFixture(options: Partial<V2SetupOptions> = {}) {
   };
 }
 
+async function holdLock(host: Awaited<ReturnType<typeof submissionFixture>>) {
+  // Another session runs a long snippet command and holds the project's
+  // snippet lock until the returned release is called.
+  await Bun.write(
+    join(host.directory, ".opencode", "snippet", "hold.md"),
+    "!`touch holding; while [ ! -e release ]; do sleep 0.01; done`",
+  );
+  const holder = host.invoke("prompt", {
+    sessionID: "holder",
+    messageID: "hold",
+    prompt: { text: "#hold" },
+  });
+  while (!(await Bun.file(join(host.directory, "holding")).exists())) await Bun.sleep(5);
+  return async () => {
+    await Bun.write(join(host.directory, "release"), "");
+    await holder;
+  };
+}
+
 describe("native OC2 submitted messages", () => {
   test("a broken nested snippet leaves skill tool output intact", async () => {
     const host = await submissionFixture();
@@ -852,20 +871,19 @@ describe("native OC2 submitted messages", () => {
     }
   });
 
-  test("a message whose expansion failed is expanded on the next turn after the user fixes the cause, without a restart", async () => {
+  test("a message whose expansion failed stays literal after the user fixes the cause, also after a restart, while a new submission expands", async () => {
     const host = await submissionFixture();
     try {
-      // The snippet embeds a skill the user has not installed yet, so expanding it fails.
+      // The snippet embeds a skill the user has not installed yet, so expanding
+      // it fails. Each run of its shell command appends one "x" to `runs`.
       await Bun.write(
         join(host.directory, ".opencode", "snippet", "review.md"),
-        'Review with {{skill "checklist"}}',
+        'Review with {{skill "checklist"}} !`printf x >> runs`',
       );
-      const submission = { sessionID: "fixable", messageID: "review", prompt: { text: "#review" } };
-      await host.invoke("prompt", submission);
-      const first = { sessionID: "fixable", messages: [nativeUser(submission)] };
-      await host.invoke("context", first);
+      const failed = { sessionID: "fixable", messageID: "failed", prompt: { text: "#review" } };
+      await host.invoke("prompt", failed);
       // A failed expansion must never block the turn: the model sees the user's literal text.
-      expect(first.messages[0].content[0].text).toBe("#review");
+      expect(failed.prompt.text).toBe("#review");
 
       // The user installs the missing skill while OpenCode keeps running.
       host.skills.push({
@@ -874,17 +892,37 @@ describe("native OC2 submitted messages", () => {
         name: "checklist",
         content: "CHECKLIST_SKILL",
       });
-
-      // The next turn rebuilds the history, and the earlier message now expands.
-      const next = {
+      // The failed message is part of the history the model has already seen.
+      // Later turns, before and after a restart, must not rewrite it or run its command.
+      const history = (text: string) => ({
         sessionID: "fixable",
         messages: [
-          nativeUser(submission),
-          { id: "next", role: "user", content: [{ type: "text", text: "Continue" }] },
+          nativeUser(failed),
+          { id: text, role: "user", content: [{ type: "text", text }] },
         ],
-      };
+      });
+      const next = history("Continue");
       await host.invoke("context", next);
-      expect(next.messages[0].content[0].text).toBe("Review with CHECKLIST_SKILL");
+      expect(next.messages[0].content[0].text).toBe("#review");
+      await host.restart();
+      const restarted = history("And again");
+      await host.invoke("context", restarted);
+      expect(restarted.messages[0].content[0].text).toBe("#review");
+      expect(await Bun.file(join(host.directory, "runs")).exists()).toBe(false);
+
+      // Resubmitting the snippet is how the user applies the fix: the new
+      // message expands and its command runs exactly once.
+      const corrected = {
+        sessionID: "fixable",
+        messageID: "corrected",
+        prompt: { text: "#review" },
+      };
+      await host.invoke("prompt", corrected);
+      expect(corrected.prompt.text).toStartWith("Review with CHECKLIST_SKILL");
+      const turn = { sessionID: "fixable", messages: [nativeUser(failed), nativeUser(corrected)] };
+      await host.invoke("context", turn);
+      expect(turn.messages[0].content[0].text).toBe("#review");
+      expect(await readFile(join(host.directory, "runs"), "utf8")).toBe("x");
     } finally {
       await host.dispose();
     }
@@ -1089,30 +1127,22 @@ describe("native OC2 submitted messages", () => {
   });
 
   test("a prompt that another plugin rewrote after its expansion failed is expanded from the rewritten text on a later turn", async () => {
-    const host = await submissionFixture();
+    // A short wait budget stands in for the production 30 s lock wait.
+    const host = await submissionFixture({ lockTimeout: 100 });
     try {
-      // The snippet embeds a skill the user has not installed yet, so expanding it fails.
-      await Bun.write(
-        join(host.directory, ".opencode", "snippet", "review.md"),
-        'Review with {{skill "checklist"}}',
-      );
+      // Another session holds the project's snippet lock, so this prompt's
+      // expansion cannot run now and is left for a later turn.
+      const release = await holdLock(host);
       const submission = {
         sessionID: "rewritten",
         messageID: "review",
-        prompt: { text: "#review" },
+        prompt: { text: "Please #chosen" },
       };
       await host.invoke("prompt", submission);
       // Another plugin's prompt hook runs after ours and appends a signature,
       // so OpenCode stores and sends the rewritten text.
       submission.prompt.text = `${submission.prompt.text}\n\nSent from mobile`;
-
-      // The user installs the missing skill while OpenCode keeps running.
-      host.skills.push({
-        ...host.skills[0],
-        id: "checklist",
-        name: "checklist",
-        content: "CHECKLIST_SKILL",
-      });
+      await release();
 
       // On each later turn the model must see the stored message with the
       // snippet expanded and the other plugin's signature kept.
@@ -1125,9 +1155,7 @@ describe("native OC2 submitted messages", () => {
           ],
         };
         await host.invoke("context", turn);
-        expect(turn.messages[0].content[0].text).toBe(
-          "Review with CHECKLIST_SKILL\n\nSent from mobile",
-        );
+        expect(turn.messages[0].content[0].text).toBe("Please CHOSEN_TEXT\n\nSent from mobile");
       }
     } finally {
       await host.dispose();
@@ -1135,26 +1163,23 @@ describe("native OC2 submitted messages", () => {
   });
 
   test("an edited message is never patched with the expansion stored for its earlier text", async () => {
-    const host = await submissionFixture();
+    // A short wait budget stands in for the production 30 s lock wait.
+    const host = await submissionFixture({ lockTimeout: 100 });
     try {
-      // The snippet embeds a skill the user has not installed yet, so the
-      // prompt's expansion fails and is left for a later turn.
-      await Bun.write(
-        join(host.directory, ".opencode", "snippet", "review.md"),
-        'Review with {{skill "checklist"}}',
-      );
-      const submission = { sessionID: "edited", messageID: "review", prompt: { text: "#review" } };
+      // Another session holds the project's snippet lock, so the prompt's
+      // expansion cannot run now and is left for a later turn.
+      const release = await holdLock(host);
+      const submission = {
+        sessionID: "edited",
+        messageID: "review",
+        prompt: { text: "Please #chosen" },
+      };
       await host.invoke("prompt", submission);
-      host.skills.push({
-        ...host.skills[0],
-        id: "checklist",
-        name: "checklist",
-        content: "CHECKLIST_SKILL",
-      });
-      // Once the skill exists, the next turn expands and stores the message.
+      await release();
+      // Once the lock is free, the next turn expands and stores the message.
       const first = { sessionID: "edited", messages: [nativeUser(submission)] };
       await host.invoke("context", first);
-      expect(first.messages[0].content[0].text).toBe("Review with CHECKLIST_SKILL");
+      expect(first.messages[0].content[0].text).toBe("Please CHOSEN_TEXT");
 
       // The user then edits the message; OpenCode keeps its metadata.
       submission.prompt.text = "Please summarize #chosen";
@@ -1166,7 +1191,7 @@ describe("native OC2 submitted messages", () => {
         ],
       };
       await host.invoke("context", next);
-      // The stored expansion belongs to "#review" and must not be spliced into
+      // The stored expansion belongs to "Please #chosen" and must not be spliced into
       // the new text. Expanding again under the same submission could repeat
       // its effects, so the edited text reaches the model as written.
       expect(next.messages[0].content[0].text).toBe("Please summarize #chosen");
