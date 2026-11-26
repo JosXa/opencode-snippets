@@ -1133,6 +1133,47 @@ describe("native OC2 submitted messages", () => {
       await host.dispose();
     }
   });
+
+  test("an edited message is never patched with the expansion stored for its earlier text", async () => {
+    const host = await submissionFixture();
+    try {
+      // The snippet embeds a skill the user has not installed yet, so the
+      // prompt's expansion fails and is left for a later turn.
+      await Bun.write(
+        join(host.directory, ".opencode", "snippet", "review.md"),
+        'Review with {{skill "checklist"}}',
+      );
+      const submission = { sessionID: "edited", messageID: "review", prompt: { text: "#review" } };
+      await host.invoke("prompt", submission);
+      host.skills.push({
+        ...host.skills[0],
+        id: "checklist",
+        name: "checklist",
+        content: "CHECKLIST_SKILL",
+      });
+      // Once the skill exists, the next turn expands and stores the message.
+      const first = { sessionID: "edited", messages: [nativeUser(submission)] };
+      await host.invoke("context", first);
+      expect(first.messages[0].content[0].text).toBe("Review with CHECKLIST_SKILL");
+
+      // The user then edits the message; OpenCode keeps its metadata.
+      submission.prompt.text = "Please summarize #chosen";
+      const next = {
+        sessionID: "edited",
+        messages: [
+          nativeUser(submission),
+          { id: "next", role: "user", content: [{ type: "text", text: "Continue" }] },
+        ],
+      };
+      await host.invoke("context", next);
+      // The stored expansion belongs to "#review" and must not be spliced into
+      // the new text. Expanding again under the same submission could repeat
+      // its effects, so the edited text reaches the model as written.
+      expect(next.messages[0].content[0].text).toBe("Please summarize #chosen");
+    } finally {
+      await host.dispose();
+    }
+  });
 });
 
 describe("V2 request expansion", () => {

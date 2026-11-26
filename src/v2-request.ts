@@ -53,8 +53,13 @@ function createTextPatch(original: string, output: string): TextPatch {
   return { start, end, replacement: output.slice(start, outputEnd) };
 }
 
+function digest(original: string[]): string {
+  return createHash("sha256").update(JSON.stringify(original)).digest("hex");
+}
+
 function minimizeProcessed(original: string[], result: Processed): DurableProcessed {
   return {
+    input: digest(original),
     patches: result.text.map((text, index) => createTextPatch(original[index] ?? "", text)),
     hidden: result.hidden,
     injections: result.injections,
@@ -62,6 +67,9 @@ function minimizeProcessed(original: string[], result: Processed): DurableProces
 }
 
 function restoreProcessed(original: string[], result: DurableProcessed): Processed {
+  if (result.input && result.input !== digest(original)) {
+    return { text: original, hidden: [], injections: [] };
+  }
   return {
     text: result.patches.map((patch, index) => {
       const text = original[index] ?? "";

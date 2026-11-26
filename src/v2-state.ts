@@ -28,6 +28,7 @@ export type TextPatch = {
 };
 
 export type Processed = {
+  input?: string;
   patches: TextPatch[];
   hidden: string[];
   injections: Array<{ name: string; content: string }>;
