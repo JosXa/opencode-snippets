@@ -981,6 +981,68 @@ describe("native OC2 submitted messages", () => {
     }
   });
 
+  test("with other processes also queued behind one long lock holder, a later turn does not wait for that holder again", async () => {
+    // A short wait budget stands in for the production 30 s lock wait.
+    const timeout = 300;
+    const host = await submissionFixture({ lockTimeout: timeout });
+    try {
+      await Bun.write(
+        join(host.directory, ".opencode", "snippet", "hold.md"),
+        "!`touch holding; while [ ! -e release ]; do sleep 0.01; done`",
+      );
+      // Session A runs a long command and holds the project's snippet lock.
+      const holder = host.invoke("prompt", {
+        sessionID: "session-a",
+        messageID: "hold",
+        prompt: { text: "#hold" },
+      });
+      while (!(await Bun.file(join(host.directory, "holding")).exists())) await Bun.sleep(5);
+
+      // Other OpenCode processes on the same project queue for the lock behind
+      // A first. They started waiting earlier and give up a little after B does.
+      const others = ["c", "d", "e", "f"].map((session) =>
+        new DurableStore(host.directory, {
+          dataDirectory: join(host.directory, "data"),
+          lockTimeout: timeout + 150,
+        })
+          .process(`session-${session}`, "waiting", async () => ({
+            patches: [],
+            hidden: [],
+            injections: [],
+          }))
+          .catch(() => undefined),
+      );
+      await Bun.sleep(50);
+
+      // Session B's first turn waits for A once and gives up.
+      const turn = async (messageID: string) => {
+        const submission = {
+          sessionID: "session-b",
+          messageID,
+          prompt: { text: "Please #chosen" },
+        };
+        const started = Date.now();
+        await host.invoke("prompt", submission);
+        await host.invoke("context", {
+          sessionID: "session-b",
+          messages: [nativeUser(submission)],
+        });
+        return Date.now() - started;
+      };
+      await turn("first");
+      await Promise.all(others);
+
+      // The other processes have given up, but A still holds the lock. B's
+      // next turn must not spend another full wait on the same holder.
+      expect(await turn("second")).toBeLessThan(timeout);
+
+      await Bun.write(join(host.directory, "release"), "");
+      await holder;
+    } finally {
+      await host.dispose();
+    }
+  });
+
   test("after a long lock holder finishes, briefly overlapping prompts in the same project are both expanded", async () => {
     // A short wait budget stands in for the production 30 s lock wait.
     const host = await submissionFixture({ lockTimeout: 300 });

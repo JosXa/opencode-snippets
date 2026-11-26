@@ -141,8 +141,9 @@ export class DurableStore {
     const contenders = `${lock}.contenders`;
     const started = Date.now();
     const wait = async (blocker: string | undefined, message: string) => {
-      if (Date.now() - started >= this.timeout || (blocker && blocker === this.blocker)) {
-        this.blocker = blocker;
+      if (blocker && blocker === this.blocker) throw new Error(message);
+      if (Date.now() - started >= this.timeout) {
+        this.blocker = (await holder(lock)) ?? blocker ?? this.blocker;
         throw new Error(message);
       }
       await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
